@@ -1,4 +1,4 @@
-const API_BASE_URL = 'ENV_PUBLIC_API_BASE_URL' || 'http://localhost:8000';
+const API_BASE_URL = 'https://your-app.up.railway.app';
 const ENDPOINT_VALIDATE = '/validate-key';
 const ENDPOINT_REGISTER = '/register';
 

@@ -1,5 +1,5 @@
 // Basic service worker for offline cache of static assets
-const VERSION = 'v3';
+const VERSION = 'v4';
 const STATIC_CACHE = `static-${VERSION}`;
 const ASSETS = [
   '/',
