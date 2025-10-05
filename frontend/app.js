@@ -1,12 +1,7 @@
-// Minimal PWA app logic
-// Configuration: update API_BASE_URL to your backend, e.g., https://api.example.com
-const API_BASE_URL = (window.API_BASE_URL_OVERRIDE) || 'http://localhost:8000';
+const API_BASE_URL = 'ENV_PUBLIC_API_BASE_URL' || 'http://localhost:8000';
 const ENDPOINT_VALIDATE = '/validate-key';
 const ENDPOINT_REGISTER = '/register';
 
-// Import db helpers (module via type=module not used to keep things simple)
-// We expose functions on window in db.js for simplicity when modules aren't used.
-// But here we rely on direct exported functions using classic script order.
 import { addRecord, getRecords, markAsSynced, deleteRecord, getRecentSynced } from './db.js';
 
 // Elements
