@@ -17,10 +17,13 @@ const $registerSection = document.getElementById('register-section');
 const $inlineAdd = document.getElementById('inline-add');
 const $inlineAnimal = document.getElementById('inline-animal');
 const $inlineMother = document.getElementById('inline-mother');
+const $inlineBorn = document.getElementById('inline-born');
 const $inlineWeight = document.getElementById('inline-weight');
 const $inlineGender = document.getElementById('inline-gender');
 const $inlineStatus = document.getElementById('inline-status');
+const $inlineColor = document.getElementById('inline-color');
 const $inlineNotes = document.getElementById('inline-notes');
+const $inlineNotesMother = document.getElementById('inline-notes-mother');
 const $dialog = document.getElementById('register-dialog');
 const $registerForm = document.getElementById('register-form');
 const $records = document.getElementById('records');
@@ -155,11 +158,25 @@ async function handleAdd(number) {
   if (!n) return;
   const userKey = localStorage.getItem(LS_USER_KEY);
   const motherVal = ($inlineMother?.value || '') || null;
+  const bornVal = ($inlineBorn?.value || '') || null;
   const weightVal = $inlineWeight?.value ? Number($inlineWeight.value) : null;
   const genderVal = ($inlineGender?.value || '') || null;
   const statusVal = ($inlineStatus?.value || '') || null;
+  const colorVal = ($inlineColor?.value || '') || null;
   const notesVal = ($inlineNotes?.value || '') || null;
-  const record = { animalNumber: n, userKey, motherId: motherVal, weight: isNaN(weightVal) ? null : weightVal, gender: genderVal, status: statusVal, notes: notesVal };
+  const notesMotherVal = ($inlineNotesMother?.value || '') || null;
+  const record = {
+    animalNumber: n,
+    userKey,
+    motherId: motherVal,
+    bornDate: bornVal,
+    weight: isNaN(weightVal) ? null : weightVal,
+    gender: genderVal,
+    status: statusVal,
+    color: colorVal,
+    notes: notesVal,
+    notesMother: notesMotherVal,
+  };
   await addRecord(record);
   await renderList();
   triggerSync();
@@ -171,10 +188,13 @@ $inlineAdd?.addEventListener('submit', async (e) => {
   await handleAdd($inlineAnimal.value);
   $inlineAnimal.value = '';
   if ($inlineMother) $inlineMother.value = '';
+  if ($inlineBorn) $inlineBorn.value = '';
   if ($inlineWeight) $inlineWeight.value = '';
   if ($inlineGender) $inlineGender.value = '';
   if ($inlineStatus) $inlineStatus.value = '';
+  if ($inlineColor) $inlineColor.value = '';
   if ($inlineNotes) $inlineNotes.value = '';
+  if ($inlineNotesMother) $inlineNotesMother.value = '';
   $inlineAnimal.focus();
 });
 
@@ -243,10 +263,13 @@ async function triggerSync(force = false) {
             animalNumber: r.animalNumber,
             createdAt: r.createdAt,
             motherId: r.motherId ?? null,
+            bornDate: r.bornDate ?? null,
             weight: r.weight ?? null,
             gender: r.gender ?? null,
             status: r.status ?? null,
-            notes: r.notes ?? null
+            color: r.color ?? null,
+            notes: r.notes ?? null,
+            notesMother: r.notesMother ?? null,
           })
         });
         if (res.ok) {

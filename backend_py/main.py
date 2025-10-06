@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import csv
 import io
+import uuid
+import random
 
 
 # Configuration via environment variables with sensible defaults
@@ -22,13 +24,16 @@ conn.execute(
     """
     CREATE TABLE IF NOT EXISTS registrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        short_id TEXT UNIQUE,
         animal_number TEXT NOT NULL,
         created_at TEXT NOT NULL,
         user_key TEXT NOT NULL,
         mother_id TEXT,
+        born_date TEXT,
         weight REAL,
         gender TEXT,
         status TEXT,
+        color TEXT,
         notes TEXT
     )
     """
@@ -46,12 +51,23 @@ def _add_column_if_missing(column: str, coltype: str) -> None:
 
 for _col, _type in [
     ("mother_id", "TEXT"),
+    ("born_date", "TEXT"),
     ("weight", "REAL"),
     ("gender", "TEXT"),
     ("status", "TEXT"),
+    ("color", "TEXT"),
     ("notes", "TEXT"),
+    ("short_id", "TEXT"),
 ]:
     _add_column_if_missing(_col, _type)
+
+
+def _generate_short_id() -> str:
+    # Generate a numeric 10-digit ID derived from uuid, ensuring length 10
+    digits = ''.join(ch for ch in uuid.uuid4().hex if ch.isdigit())
+    if len(digits) < 10:
+        digits += ''.join(str(random.randint(0, 9)) for _ in range(10 - len(digits)))
+    return digits[:10]
 
 
 class ValidateKeyBody(BaseModel):
@@ -62,9 +78,11 @@ class RegisterBody(BaseModel):
     animalNumber: str
     createdAt: str | None = None
     motherId: str | None = None
+    bornDate: str | None = None
     weight: float | None = None
     gender: str | None = None
     status: str | None = None
+    color: str | None = None
     notes: str | None = None
 
 
@@ -104,21 +122,32 @@ def register(body: RegisterBody, x_user_key: str | None = Header(default=None)):
 
     try:
         with conn:  # transaction
-            conn.execute(
+            cur = conn.execute(
                 """
-                INSERT INTO registrations (animal_number, created_at, user_key, mother_id, weight, gender, status, notes)
-                VALUES (?,?,?,?,?,?,?,?)
+                INSERT INTO registrations (
+                    animal_number, created_at, user_key,
+                    mother_id, born_date, weight, gender, status, color, notes
+                )
+                VALUES (?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     body.animalNumber,
                     created_at,
                     x_user_key,
                     body.motherId,
+                    body.bornDate,
                     body.weight,
                     body.gender,
                     body.status,
+                    body.color,
                     body.notes,
                 ),
+            )
+            # set short_id for the inserted row if missing
+            rowid = cur.lastrowid
+            conn.execute(
+                "UPDATE registrations SET short_id = COALESCE(short_id, ?) WHERE id = ?",
+                (_generate_short_id(), rowid),
             )
     except sqlite3.Error:
         raise HTTPException(status_code=500, detail="DB error")
@@ -135,7 +164,8 @@ def export_records(x_user_key: str | None = Header(default=None), format: str = 
     # Fetch all records for this key
     cur = conn.execute(
         """
-        SELECT id, animal_number, created_at, user_key, mother_id, weight, gender, status, notes
+        SELECT short_id as id, animal_number, created_at, user_key,
+               mother_id, born_date, weight, gender, status, color, notes
         FROM registrations
         WHERE user_key = ?
         ORDER BY id ASC
