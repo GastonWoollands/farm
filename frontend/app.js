@@ -162,7 +162,17 @@ async function handleAdd(number) {
   if (!n) return;
   const userKey = localStorage.getItem(LS_USER_KEY);
   const motherVal = ($inlineMother?.value || '') || null;
-  const bornVal = ($inlineBorn?.value || '') || null;
+  let bornVal = ($inlineBorn?.value || '') || null;
+  // Convert dd/mm/aaaa -> yyyy-mm-dd
+  if (bornVal) {
+    const m = bornVal.match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/);
+    if (m) {
+      const dd = m[1].padStart(2, '0');
+      const mm = m[2].padStart(2, '0');
+      const yyyy = m[3];
+      bornVal = `${yyyy}-${mm}-${dd}`;
+    }
+  }
   const weightVal = $inlineWeight?.value ? Number($inlineWeight.value) : null;
   const genderVal = ($inlineGender?.value || '') || null;
   const statusVal = ($inlineStatus?.value || '') || null;

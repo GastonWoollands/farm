@@ -15,6 +15,7 @@ import datetime as _dt
 PORT = int(os.getenv("PORT", "8000"))
 DB_PATH = os.getenv("DB_PATH", str(Path(__file__).parent / "data" / "farm.db"))
 VALID_KEYS = [k.strip() for k in os.getenv("VALID_KEYS", "test-key").split(",") if k.strip()]
+ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")
 
 # Ensure data directory exists
 Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
@@ -265,6 +266,55 @@ def delete_registration(body: DeleteBody, x_user_key: str | None = Header(defaul
     # cur.rowcount may be -1 for SELECT-based deletes in sqlite3; return ok regardless
     return {"ok": True}
 
+
+# --- Admin utilities (dangerous) ---
+class ExecSqlBody(BaseModel):
+    sql: str
+    params: list | None = None
+
+
+def _require_admin(secret: str | None):
+    if not ADMIN_SECRET or not secret or secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@app.post("/admin/delete-all")
+def admin_delete_all(x_admin_secret: str | None = Header(default=None), x_user_key: str | None = Header(default=None)):
+    _require_admin(x_admin_secret)
+    try:
+        with conn:
+            if x_user_key:
+                conn.execute("DELETE FROM registrations WHERE user_key = ?", (x_user_key,))
+            else:
+                conn.execute("DELETE FROM registrations")
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"DB error: {e}")
+    return {"ok": True}
+
+
+@app.post("/admin/exec-sql")
+def admin_exec_sql(body: ExecSqlBody, x_admin_secret: str | None = Header(default=None)):
+    _require_admin(x_admin_secret)
+    sql = (body.sql or "").strip()
+    if not sql:
+        raise HTTPException(status_code=400, detail="sql required")
+    # VERY basic safety: disallow multiple statements
+    if ";" in sql.strip().rstrip(";"):
+        raise HTTPException(status_code=400, detail="Only single statement allowed")
+    params = tuple(body.params or [])
+    try:
+        cur = conn.execute(sql, params)
+        # Heuristic: if cursor has description, it's a SELECT
+        if cur.description:
+            cols = [d[0] for d in cur.description]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+            return {"rows": rows}
+        else:
+            changed = conn.total_changes
+            conn.commit()
+            return {"ok": True, "changes": changed}
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=400, detail=f"SQL error: {e}")
 
 # Run with: uvicorn backend_py.main:app --host 0.0.0.0 --port 8000
 
