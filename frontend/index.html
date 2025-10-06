@@ -8,26 +8,26 @@
   <link rel="icon" href="icons/icon-192.jpg" sizes="192x192">
   <link rel="apple-touch-icon" href="icons/icon-192.jpg">
   <link rel="stylesheet" href="styles.css">
-  <title>Farm Register</title>
+  <title>Registro de Animales</title>
 </head>
 <body>
   <header class="app-header">
-    <h1>Farm Register <small id="pending-count" class="muted" style="font-size:12px; margin-left:8px;"></small></h1>
+    <h1>Registro de Animales <small id="pending-count" class="muted" style="font-size:12px; margin-left:8px;"></small></h1>
     <span class="badge" id="status-badge">Offline</span>
   </header>
 
   <main class="container" id="auth-screen" hidden>
     <section class="card">
-      <h2>Enter User Key</h2>
-      <p class="muted">Provided by your system administrator</p>
+      <h2>Ingresar clave de usuario</h2>
+      <p class="muted">Proporcionada por el administrador del sistema</p>
       <form id="key-form">
-        <label for="user-key">User key</label>
+        <label for="user-key">Clave de usuario</label>
         <div class="row gap" style="align-items:center;">
           <input id="user-key" name="user-key" type="password" placeholder="••••-••••-••••" required autocomplete="off" style="flex:1;">
           <button type="button" id="toggle-key" class="btn" aria-label="Show key">Show</button>
         </div>
-        <button type="submit" class="btn primary" style="margin-top:8px;">Continue</button>
-        <p id="key-error" class="error" role="alert" hidden>Invalid key. Please try again.</p>
+        <button type="submit" class="btn primary" style="margin-top:8px;">Continuar</button>
+        <p id="key-error" class="error" role="alert" hidden>Clave inválida. Intente nuevamente.</p>
         <pre id="key-debug" class="muted" style="white-space:pre-wrap; overflow:auto; margin-top:8px;" hidden></pre>
       </form>
     </section>
@@ -36,65 +36,65 @@
   <main class="container" id="app-screen" hidden>
     <section class="card">
       <div class="row space-between align-center">
-        <h2>Livestock</h2>
+      <h2>Animales</h2>
         <div class="row gap">
-          <button id="register-btn" class="btn primary">Register New</button>
-          <button id="manage-synced" class="btn">Manage registers…</button>
-          <button id="export-json" class="btn">Export JSON</button>
-          <button id="export-csv" class="btn">Export CSV</button>
+          <button id="register-btn" class="btn primary">Registrar Nuevo</button>
+          <button id="manage-synced" class="btn">Gestionar registros…</button>
+          <button id="export-json" class="btn">Exportar JSON</button>
+          <button id="export-csv" class="btn">Exportar CSV</button>
         </div>
       </div>
 
       <section id="register-section" hidden>
         <form id="inline-add" class="form-vertical" style="margin:8px 0 12px;">
           <div class="form-field">
-            <label for="inline-animal">Livestock ID</label>
+            <label for="inline-animal">ID (requerido)</label>
             <input id="inline-animal" type="text" placeholder="e.g., A123-45" autocomplete="off" required>
           </div>
           <div class="form-field">
-            <label for="inline-mother">Mother ID (optional)</label>
+            <label for="inline-mother">Madre ID (opcional)</label>
             <input id="inline-mother" type="text" inputmode="numeric" placeholder="e.g., 67890" autocomplete="off">
           </div>
           <div class="form-field">
-            <label for="inline-born">Born date (optional)</label>
+            <label for="inline-born">Nacimiento (opcional)</label>
             <input id="inline-born" type="date" autocomplete="off">
           </div>
           <div class="form-field">
-            <label for="inline-weight">Weight (kg, optional)</label>
+            <label for="inline-weight">Peso (kg, opcional)</label>
             <input id="inline-weight" type="number" step="0.01" min="0" placeholder="e.g., 250.5" autocomplete="off">
           </div>
           <div class="form-field">
-            <label for="inline-gender">Gender (optional)</label>
+            <label for="inline-gender">Sexo (opcional)</label>
             <select id="inline-gender">
-              <option value="">— Select —</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="unknown">Unknown</option>
+              <option value="">— Seleccionar —</option>
+              <option value="male">Macho</option>
+              <option value="female">Hembra</option>
+              <option value="unknown">Desconocido</option>
             </select>
           </div>
           <div class="form-field">
-            <label for="inline-status">Status (optional)</label>
+            <label for="inline-status">Estado (opcional)</label>
             <select id="inline-status">
-              <option value="">— Select —</option>
-              <option value="alive">Alive</option>
-              <option value="dead">Dead</option>
-              <option value="unknown">Unknown</option>
+              <option value="">— Seleccionar —</option>
+              <option value="alive">Vivo</option>
+              <option value="dead">Muerto</option>
+              <option value="unknown">Desconocido</option>
             </select>
           </div>
           <div class="form-field">
-            <label for="inline-color">Color (optional)</label>
-            <input id="inline-color" type="text" placeholder="e.g., brown/black" autocomplete="off">
+            <label for="inline-color">Color (opcional, ej, marrón/negro)</label>
+            <input id="inline-color" type="text" placeholder="ej, marrón/negro" autocomplete="off">
           </div>
           <div class="form-field">
-            <label for="inline-notes-mother">Mother notes (optional)</label>
-            <input id="inline-notes-mother" type="text" placeholder="Any notes about the mother" autocomplete="off">
+            <label for="inline-notes-mother">Notas de la madre (opcional)</label>
+            <input id="inline-notes-mother" type="text" placeholder="Cualquier nota sobre la madre" autocomplete="off">
           </div>
           <div class="form-field">
-            <label for="inline-notes">Notes (optional)</label>
-            <input id="inline-notes" type="text" placeholder="Any notes" autocomplete="off">
+            <label for="inline-notes">Notas (opcional)</label>
+            <input id="inline-notes" type="text" placeholder="Cualquier nota" autocomplete="off">
           </div>
           <div class="row gap">
-            <button class="btn primary" id="inline-add-btn" type="submit" aria-label="Register livestock">Register</button>
+            <button class="btn primary" id="inline-add-btn" type="submit" aria-label="Registrar animal">Registrar</button>
           </div>
         </form>
       </section>
@@ -114,9 +114,9 @@
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <dialog id="manage-synced-dialog">
     <div class="row space-between align-center">
-      <h3 style="margin:0;">Manage Synced Records</h3>
+      <h3 style="margin:0;">Gestionar registros sincronizados</h3>
       <form method="dialog">
-        <button class="btn" value="close">Close</button>
+        <button class="btn" value="close">Cerrar</button>
       </form>
     </div>
     <ul id="manage-synced-list" class="list" style="margin-top:8px;"></ul>
