@@ -1,6 +1,7 @@
 const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
 const ENDPOINT_VALIDATE = '/validate-key';
 const ENDPOINT_REGISTER = '/register';
+const DEFAULT_PREFIX = 'ac988';
 
 import { addRecord, getRecords, markAsSynced, deleteRecord, getRecentSynced } from './db.js';
 
@@ -149,6 +150,9 @@ $registerBtn?.addEventListener('click', () => {
   const isHidden = $registerSection.hidden;
   $registerSection.hidden = !isHidden;
   if (!isHidden) return;
+  // Prefill both animal and mother id with default prefix for convenience
+  if ($inlineAnimal && !$inlineAnimal.value) $inlineAnimal.value = DEFAULT_PREFIX;
+  if ($inlineMother && !$inlineMother.value) $inlineMother.value = DEFAULT_PREFIX;
   $inlineAnimal?.focus();
 });
 

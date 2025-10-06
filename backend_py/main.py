@@ -8,6 +8,7 @@ import csv
 import io
 import uuid
 import random
+import datetime as _dt
 
 
 # Configuration via environment variables with sensible defaults
@@ -61,6 +62,34 @@ for _col, _type in [
 ]:
     _add_column_if_missing(_col, _type)
 
+def _create_unique_index():
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_user_animal_mother ON registrations(user_key, animal_number, IFNULL(mother_id, ''))"
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        # Attempt to clean dupes then retry
+        try:
+            conn.execute(
+                """
+                DELETE FROM registrations
+                WHERE rowid NOT IN (
+                    SELECT MIN(rowid) FROM registrations
+                    GROUP BY user_key, animal_number, IFNULL(mother_id, '')
+                )
+                """
+            )
+            conn.commit()
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uniq_user_animal_mother ON registrations(user_key, animal_number, IFNULL(mother_id, ''))"
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+_create_unique_index()
+
 
 def _generate_short_id() -> str:
     digits = ''.join(ch for ch in uuid.uuid4().hex if ch.isdigit())
@@ -109,47 +138,49 @@ def validate_key(body: ValidateKeyBody):
 
 @app.post("/register", status_code=201)
 def register(body: RegisterBody, x_user_key: str | None = Header(default=None)):
+    # Validations
     if not x_user_key or x_user_key not in VALID_KEYS:
         raise HTTPException(status_code=401, detail="Invalid or missing user key")
     if not body.animalNumber:
         raise HTTPException(status_code=400, detail="animalNumber required")
 
+    # Creation date
     created_at = body.createdAt if (body.createdAt and isinstance(body.createdAt, str)) else None
     if not created_at:
-        import datetime as _dt
         created_at = _dt.datetime.utcnow().isoformat()
+
+    # Normalize
+    animal = (body.animalNumber or '').strip()
+    mother = (body.motherId or '').strip() or None
 
     try:
         with conn:  # transaction
-            cur = conn.execute(
+            conn.execute(
                 """
                 INSERT INTO registrations (
                     animal_number, created_at, user_key,
-                    mother_id, born_date, weight, gender, status, color, notes
+                    mother_id, born_date, weight, gender, status, color, notes, short_id
                 )
-                VALUES (?,?,?,?,?,?,?,?,?,?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    body.animalNumber,
+                    animal,
                     created_at,
                     x_user_key,
-                    body.motherId,
+                    mother,
                     body.bornDate,
                     body.weight,
                     body.gender,
                     body.status,
                     body.color,
                     body.notes,
+                    _generate_short_id(),
                 ),
             )
-            # set short_id for the inserted row if missing
-            rowid = cur.lastrowid
-            conn.execute(
-                "UPDATE registrations SET short_id = COALESCE(short_id, ?) WHERE id = ?",
-                (_generate_short_id(), rowid),
-            )
-    except sqlite3.Error:
-        raise HTTPException(status_code=500, detail="DB error")
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="Duplicate registration for this animal and mother")
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
     return {"ok": True}
 
@@ -163,8 +194,8 @@ def export_records(x_user_key: str | None = Header(default=None), format: str = 
     # Fetch all records for this key
     cur = conn.execute(
         """
-        SELECT short_id as id, animal_number, created_at, user_key,
-               mother_id, born_date, weight, gender, status, color, notes
+        SELECT short_id as id, animal_number, born_date, mother_id, 
+        weight, gender, status, color, notes, user_key, created_at
         FROM registrations
         WHERE user_key = ?
         ORDER BY id ASC
