@@ -151,8 +151,8 @@ $registerBtn?.addEventListener('click', () => {
   $registerSection.hidden = !isHidden;
   if (!isHidden) return;
   // Prefill both animal and mother id with default prefix for convenience
-  if ($inlineAnimal && !$inlineAnimal.value) $inlineAnimal.value = DEFAULT_PREFIX;
-  if ($inlineMother && !$inlineMother.value) $inlineMother.value = DEFAULT_PREFIX;
+  if ($inlineAnimal) $inlineAnimal.value = DEFAULT_PREFIX;
+  if ($inlineMother) $inlineMother.value = DEFAULT_PREFIX;
   $inlineAnimal?.focus();
 });
 
@@ -190,8 +190,9 @@ async function handleAdd(number) {
 $inlineAdd?.addEventListener('submit', async (e) => {
   e.preventDefault();
   await handleAdd($inlineAnimal.value);
-  $inlineAnimal.value = '';
-  if ($inlineMother) $inlineMother.value = '';
+  // Always restore suggested prefixes for rapid multiple entries
+  $inlineAnimal.value = DEFAULT_PREFIX;
+  if ($inlineMother) $inlineMother.value = DEFAULT_PREFIX;
   if ($inlineBorn) $inlineBorn.value = '';
   if ($inlineWeight) $inlineWeight.value = '';
   if ($inlineGender) $inlineGender.value = '';
