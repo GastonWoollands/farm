@@ -153,9 +153,9 @@ def register(body: RegisterBody, x_user_key: str | None = Header(default=None)):
     if not created_at:
         created_at = _dt.datetime.utcnow().isoformat()
 
-    # Normalize
-    animal = (body.animalNumber or '').strip()
-    mother = (body.motherId or '').strip() or None
+    # Normalize and convert to uppercase
+    animal = (body.animalNumber or '').strip().upper()
+    mother = (body.motherId or '').strip().upper() or None
     
     # Ensure weight is properly handled as float or None
     weight = None
@@ -166,6 +166,25 @@ def register(body: RegisterBody, x_user_key: str | None = Header(default=None)):
                 raise HTTPException(status_code=400, detail="Weight must be between 0 and 10000 kg")
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="Invalid weight value")
+    
+    # Convert text fields to uppercase
+    gender = (body.gender or '').upper() or None
+    status = (body.status or '').upper() or None
+    color = (body.color or '').upper() or None
+    notes = (body.notes or '').strip().upper() or None
+    notes_mother = (body.notesMother or '').strip().upper() or None
+    
+    # Validate dropdown values if provided
+    valid_genders = {"MALE", "FEMALE", "UNKNOWN"}
+    valid_statuses = {"ALIVE", "DEAD", "UNKNOWN"}
+    valid_colors = {"COLORADO", "MARRON", "NEGRO", "OTHERS"}
+    
+    if gender and gender not in valid_genders:
+        raise HTTPException(status_code=400, detail=f"Invalid gender. Must be one of: {', '.join(valid_genders)}")
+    if status and status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+    if color and color not in valid_colors:
+        raise HTTPException(status_code=400, detail=f"Invalid color. Must be one of: {', '.join(valid_colors)}")
 
     try:
         with conn:  # transaction
@@ -184,11 +203,11 @@ def register(body: RegisterBody, x_user_key: str | None = Header(default=None)):
                     mother,
                     body.bornDate,
                     weight,
-                    body.gender,
-                    body.status,
-                    body.color,
-                    body.notes,
-                    body.notesMother,
+                    gender,
+                    status,
+                    color,
+                    notes,
+                    notes_mother,
                     _generate_short_id(),
                 ),
             )

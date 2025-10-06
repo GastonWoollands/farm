@@ -45,6 +45,12 @@ let syncInFlight = false;
 // Local storage keys
 const LS_USER_KEY = 'farm:userKey';
 
+// Helper function to format display text with proper capitalization
+function formatDisplayText(text) {
+  if (!text) return text;
+  return text.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+}
+
 // Register service worker for asset caching
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -158,11 +164,11 @@ $registerBtn?.addEventListener('click', () => {
 
 // Save new record locally and attempt sync
 async function handleAdd(number) {
-  const n = (number || '').trim();
+  const n = (number || '').trim().toUpperCase();
   if (!n) return;
   const userKey = localStorage.getItem(LS_USER_KEY);
-  const motherVal = ($inlineMother?.value || '') || null;
-  let bornVal = ($inlineBorn?.value || '') || null;
+  const motherVal = ($inlineMother?.value || '').trim().toUpperCase() || null;
+  let bornVal = ($inlineBorn?.value || '').trim() || null;
   // Convert dd/mm/aaaa -> yyyy-mm-dd
   if (bornVal) {
     const m = bornVal.match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/);
@@ -174,11 +180,11 @@ async function handleAdd(number) {
     }
   }
   const weightVal = $inlineWeight?.value ? parseFloat($inlineWeight.value) : null;
-  const genderVal = ($inlineGender?.value || '') || null;
-  const statusVal = ($inlineStatus?.value || '') || null;
-  const colorVal = ($inlineColor?.value || '') || null;
-  const notesVal = ($inlineNotes?.value || '') || null;
-  const notesMotherVal = ($inlineNotesMother?.value || '') || null;
+  const genderVal = ($inlineGender?.value || '').toUpperCase() || null;
+  const statusVal = ($inlineStatus?.value || '').toUpperCase() || null;
+  const colorVal = ($inlineColor?.value || '').toUpperCase() || null;
+  const notesVal = ($inlineNotes?.value || '').trim().toUpperCase() || null;
+  const notesMotherVal = ($inlineNotesMother?.value || '').trim().toUpperCase() || null;
   const record = {
     animalNumber: n,
     userKey,
@@ -244,7 +250,7 @@ async function renderList() {
     const li = document.createElement('li');
     li.dataset.id = r.id;
     const left = document.createElement('div');
-    left.textContent = r.animalNumber + '';
+    left.textContent = formatDisplayText(r.animalNumber) + '';
     const right = document.createElement('div');
     right.textContent = r.synced ? 'Synced' : 'Pending';
     const del = document.createElement('button');
@@ -337,7 +343,7 @@ function renderManageSyncedList(records) {
   for (const r of records) {
     const li = document.createElement('li');
     const left = document.createElement('div');
-    left.textContent = `${r.id} • ${r.animalNumber}`;
+    left.textContent = `${r.id} • ${formatDisplayText(r.animalNumber)}`;
     const del = document.createElement('button');
     del.className = 'btn';
     del.textContent = '×';
