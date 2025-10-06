@@ -63,7 +63,6 @@ for _col, _type in [
 
 
 def _generate_short_id() -> str:
-    # Generate a numeric 10-digit ID derived from uuid, ensuring length 10
     digits = ''.join(ch for ch in uuid.uuid4().hex if ch.isdigit())
     if len(digits) < 10:
         digits += ''.join(str(random.randint(0, 9)) for _ in range(10 - len(digits)))
