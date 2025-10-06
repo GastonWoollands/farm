@@ -36,7 +36,8 @@ conn.execute(
         gender TEXT,
         status TEXT,
         color TEXT,
-        notes TEXT
+        notes TEXT,
+        notes_mother TEXT
     )
     """
 )
@@ -59,6 +60,7 @@ for _col, _type in [
     ("status", "TEXT"),
     ("color", "TEXT"),
     ("notes", "TEXT"),
+    ("notes_mother", "TEXT"),
     ("short_id", "TEXT"),
 ]:
     _add_column_if_missing(_col, _type)
@@ -113,6 +115,7 @@ class RegisterBody(BaseModel):
     status: str | None = None
     color: str | None = None
     notes: str | None = None
+    notesMother: str | None = None
 
 
 app = FastAPI(title="Farm Backend", version="0.1.0")
@@ -153,6 +156,16 @@ def register(body: RegisterBody, x_user_key: str | None = Header(default=None)):
     # Normalize
     animal = (body.animalNumber or '').strip()
     mother = (body.motherId or '').strip() or None
+    
+    # Ensure weight is properly handled as float or None
+    weight = None
+    if body.weight is not None:
+        try:
+            weight = float(body.weight)
+            if not (weight >= 0 and weight <= 10000):  # Reasonable weight range
+                raise HTTPException(status_code=400, detail="Weight must be between 0 and 10000 kg")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid weight value")
 
     try:
         with conn:  # transaction
@@ -160,9 +173,9 @@ def register(body: RegisterBody, x_user_key: str | None = Header(default=None)):
                 """
                 INSERT INTO registrations (
                     animal_number, created_at, user_key,
-                    mother_id, born_date, weight, gender, status, color, notes, short_id
+                    mother_id, born_date, weight, gender, status, color, notes, notes_mother, short_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     animal,
@@ -170,11 +183,12 @@ def register(body: RegisterBody, x_user_key: str | None = Header(default=None)):
                     x_user_key,
                     mother,
                     body.bornDate,
-                    body.weight,
+                    weight,
                     body.gender,
                     body.status,
                     body.color,
                     body.notes,
+                    body.notesMother,
                     _generate_short_id(),
                 ),
             )
@@ -195,8 +209,8 @@ def export_records(x_user_key: str | None = Header(default=None), format: str = 
     # Fetch all records for this key
     cur = conn.execute(
         """
-        SELECT short_id as id, animal_number, born_date, mother_id, 
-        weight, gender, status, color, notes, user_key, created_at
+        SELECT animal_number, born_date, mother_id, 
+        weight, gender, status, color, notes, notes_mother, created_at
         FROM registrations
         WHERE user_key = ?
         ORDER BY id ASC

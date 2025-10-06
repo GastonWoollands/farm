@@ -1,7 +1,7 @@
 const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
 const ENDPOINT_VALIDATE = '/validate-key';
 const ENDPOINT_REGISTER = '/register';
-const DEFAULT_PREFIX = 'ac988';
+const DEFAULT_PREFIX = 'AC988';
 
 import { addRecord, getRecords, markAsSynced, deleteRecord, getRecentSynced } from './db.js';
 
@@ -173,7 +173,7 @@ async function handleAdd(number) {
       bornVal = `${yyyy}-${mm}-${dd}`;
     }
   }
-  const weightVal = $inlineWeight?.value ? Number($inlineWeight.value) : null;
+  const weightVal = $inlineWeight?.value ? parseFloat($inlineWeight.value) : null;
   const genderVal = ($inlineGender?.value || '') || null;
   const statusVal = ($inlineStatus?.value || '') || null;
   const colorVal = ($inlineColor?.value || '') || null;
@@ -184,7 +184,7 @@ async function handleAdd(number) {
     userKey,
     motherId: motherVal,
     bornDate: bornVal,
-    weight: isNaN(weightVal) ? null : weightVal,
+    weight: (weightVal !== null && !isNaN(weightVal) && isFinite(weightVal)) ? weightVal : null,
     gender: genderVal,
     status: statusVal,
     color: colorVal,
@@ -211,6 +211,29 @@ $inlineAdd?.addEventListener('submit', async (e) => {
   if ($inlineNotes) $inlineNotes.value = '';
   if ($inlineNotesMother) $inlineNotesMother.value = '';
   $inlineAnimal.focus();
+});
+
+// Prevent Enter from submitting the form; use it to move to next field
+$inlineAdd?.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const target = e.target;
+  if (!(target instanceof HTMLElement)) return;
+  // Only intercept on inputs/selects/textarea, not on buttons
+  const isField = target.matches('input, select, textarea');
+  if (!isField) return;
+  // Allow multiline entry in textarea with Shift+Enter (none used now), otherwise navigate
+  e.preventDefault();
+  const fields = Array.from($inlineAdd.querySelectorAll('input, select, textarea'))
+    .filter(el => !el.hasAttribute('disabled'));
+  const idx = fields.indexOf(target);
+  const nextIdx = (idx + 1) % fields.length;
+  const next = fields[nextIdx];
+  if (next && next instanceof HTMLElement) {
+    next.focus();
+    if (next instanceof HTMLInputElement && next.type === 'text') {
+      next.select();
+    }
+  }
 });
 
 // Render list from DB
