@@ -40,7 +40,6 @@
         <div class="row gap">
           <button id="register-btn" class="btn primary">Registrar Nuevo</button>
           <button id="manage-synced" class="btn">Gestionar registros…</button>
-          <button id="export-json" class="btn">Exportar JSON</button>
           <button id="export-csv" class="btn">Exportar CSV</button>
         </div>
       </div>
@@ -126,6 +125,21 @@
       </form>
     </div>
     <ul id="manage-synced-list" class="list" style="margin-top:8px;"></ul>
+  </dialog>
+  <dialog id="export-dialog">
+    <form method="dialog" class="form-vertical">
+      <h3 style="margin:0 0 8px 0;">Exportar por fecha de nacimiento</h3>
+      <div class="row gap" style="align-items:center;">
+        <label class="muted" for="export-start-modal">Desde</label>
+        <input id="export-start-modal" type="date" aria-label="Desde fecha de nacimiento" />
+        <label class="muted" for="export-end-modal">Hasta</label>
+        <input id="export-end-modal" type="date" aria-label="Hasta fecha de nacimiento" />
+      </div>
+      <div class="row gap" style="margin-top:12px; justify-content:flex-end;">
+        <button class="btn" value="cancel" id="export-cancel">Cancelar</button>
+        <button class="btn primary" value="confirm" id="export-confirm">Exportar</button>
+      </div>
+    </form>
   </dialog>
 </body>
 </html>

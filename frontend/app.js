@@ -36,8 +36,12 @@ const $manageSyncedBtn = document.getElementById('manage-synced');
 const $manageSyncedDialog = document.getElementById('manage-synced-dialog');
 const $manageSyncedList = document.getElementById('manage-synced-list');
 const $toast = document.getElementById('toast');
-const $exportJson = document.getElementById('export-json');
 const $exportCsv = document.getElementById('export-csv');
+const $exportDialog = document.getElementById('export-dialog');
+const $exportStartModal = document.getElementById('export-start-modal');
+const $exportEndModal = document.getElementById('export-end-modal');
+const $exportConfirm = document.getElementById('export-confirm');
+const $exportCancel = document.getElementById('export-cancel');
 
 // Sync state must be initialized before any triggerSync() execution
 let syncInFlight = false;
@@ -401,7 +405,13 @@ function hideToast() {
 async function exportData(format) {
   const userKey = localStorage.getItem(LS_USER_KEY);
   if (!userKey) return;
-  const url = API_BASE_URL + '/export' + (format === 'csv' ? '?format=csv' : '');
+  const params = new URLSearchParams();
+  if (format === 'csv') params.set('format', 'csv');
+  const startDate = ($exportStartModal && $exportStartModal.value) ? $exportStartModal.value : '';
+  const endDate = ($exportEndModal && $exportEndModal.value) ? $exportEndModal.value : '';
+  if (startDate) params.set('start', startDate);
+  if (endDate) params.set('end', endDate);
+  const url = API_BASE_URL + '/export' + (params.toString() ? `?${params}` : '');
   const res = await fetch(url, { headers: { 'X-User-Key': userKey } });
   if (!res.ok) {
     withUndo(async()=>{}, async()=>{}, `Export failed (${res.status})`);
@@ -411,13 +421,34 @@ async function exportData(format) {
   const a = document.createElement('a');
   const objectUrl = URL.createObjectURL(blob);
   a.href = objectUrl;
-  a.download = format === 'csv' ? 'export.csv' : 'export.json';
+  a.download = 'export.csv';
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(objectUrl);
 }
 
-$exportJson?.addEventListener('click', () => exportData('json'));
-$exportCsv?.addEventListener('click', () => exportData('csv'));
+$exportCsv?.addEventListener('click', () => {
+  // Default end (Hasta) to today and cap max to today for both fields
+  const now = new Date();
+  const yyyy = String(now.getFullYear());
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+  if ($exportEndModal && !$exportEndModal.value) $exportEndModal.value = todayStr;
+  if ($exportEndModal) $exportEndModal.max = todayStr;
+  if ($exportStartModal) $exportStartModal.max = todayStr;
+  $exportDialog?.showModal();
+});
+
+$exportConfirm?.addEventListener('click', (e) => {
+  e.preventDefault();
+  exportData('csv');
+  $exportDialog?.close();
+});
+
+$exportCancel?.addEventListener('click', (e) => {
+  e.preventDefault();
+  $exportDialog?.close();
+});
 

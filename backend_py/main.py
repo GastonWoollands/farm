@@ -14,7 +14,7 @@ import datetime as _dt
 # Configuration via environment variables with sensible defaults
 PORT = int(os.getenv("PORT", "8000"))
 DB_PATH = os.getenv("DB_PATH", str(Path(__file__).parent / "data" / "farm.db"))
-VALID_KEYS = [k.strip() for k in os.getenv("VALID_KEYS", "test-key").split(",") if k.strip()]
+VALID_KEYS = [k.strip() for k in os.getenv("VALID_KEYS", "").split(",") if k.strip()]
 ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")
 
 # Ensure data directory exists
@@ -220,21 +220,46 @@ def register(body: RegisterBody, x_user_key: str | None = Header(default=None)):
 
 
 @app.get("/export")
-def export_records(x_user_key: str | None = Header(default=None), format: str = "json"):
+def export_records(
+    x_user_key: str | None = Header(default=None),
+    format: str = "json",
+    date: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+):
     # Validate key
     if not x_user_key or x_user_key not in VALID_KEYS:
         raise HTTPException(status_code=401, detail="Invalid or missing user key")
 
-    # Fetch all records for this key
+    # Build query with optional date filters on born_date
+    where_clauses = ["user_key = ?"]
+    params: list = [x_user_key]
+
+    # If specific date is provided, filter by that date only
+    if date:
+        # Filter by exact born_date day (expects YYYY-MM-DD)
+        where_clauses.append("date(born_date) = date(?)")
+        params.append(date)
+    else:
+        # Otherwise, allow start/end range if provided
+        if start:
+            where_clauses.append("date(born_date) >= date(?)")
+            params.append(start)
+        if end:
+            where_clauses.append("date(born_date) <= date(?)")
+            params.append(end)
+
+    where_sql = " AND ".join(where_clauses)
+
     cur = conn.execute(
-        """
+        f"""
         SELECT animal_number, born_date, mother_id, 
-        weight, gender, status, color, notes, notes_mother, created_at
+               weight, gender, status, color, notes, notes_mother, created_at
         FROM registrations
-        WHERE user_key = ?
+        WHERE {where_sql}
         ORDER BY id ASC
         """,
-        (x_user_key,),
+        tuple(params),
     )
     cols = [d[0] for d in cur.description]
     rows = [dict(zip(cols, r)) for r in cur.fetchall()]
