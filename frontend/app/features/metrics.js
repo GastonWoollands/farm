@@ -262,7 +262,8 @@ export class MetricsCalculator {
   calculateObjectiveMetrics() {
     const currentRegistrations = this.records.length;
     const currentWeight = this.calculateWeightMetrics().average;
-    const currentBirths = this.records.filter(r => r.bornDate).length;
+    // Every registration counts as a birth since this is a born registration app
+    const currentBirths = currentRegistrations;
     const currentMothers = this.calculateMotherMetrics().totalMothers;
 
     return {

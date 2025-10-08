@@ -111,7 +111,7 @@
             </div>
             <div class="form-field">
               <label for="inline-born-cow">Nacimiento (opcional)</label>
-              <input id="inline-born-cow" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off">
+              <input id="inline-born-cow" type="date" autocomplete="off">
             </div>
             <div class="form-field">
               <label for="inline-weight-cow">Peso (kg, opcional)</label>
@@ -189,7 +189,7 @@
             </div>
             <div class="form-field">
               <label for="inline-born-pig">Nacimiento (opcional)</label>
-              <input id="inline-born-pig" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off">
+              <input id="inline-born-pig" type="date" autocomplete="off">
             </div>
             <div class="form-field">
               <label for="inline-weight-pig">Peso (kg, opcional)</label>
@@ -249,6 +249,16 @@
       • API: <code id="api-base"></code>
     </small>
   </footer>
+
+  <!-- Fixed Cafecito Button -->
+  <div class="cafecito-fixed">
+    <a href='https://cafecito.app/wg83' rel='noopener' target='_blank' class="cafecito-link">
+      <img srcset='https://cdn.cafecito.app/imgs/buttons/button_2.png 1x, https://cdn.cafecito.app/imgs/buttons/button_2_2x.png 2x, https://cdn.cafecito.app/imgs/buttons/button_2_3.75x.png 3.75x' 
+           src='https://cdn.cafecito.app/imgs/buttons/button_2.png' 
+           alt='Invitame un café en cafecito.app' 
+           class="cafecito-button" />
+    </a>
+  </div>
 
   <script type="module" src="app/main.js"></script>
   <div id="toast" role="status" aria-live="polite" hidden></div>

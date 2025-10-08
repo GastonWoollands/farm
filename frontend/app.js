@@ -185,6 +185,8 @@ $registerCowBtn?.addEventListener('click', () => {
   // Prefill both animal and mother id with default prefix for convenience
   if ($inlineAnimalCow) $inlineAnimalCow.value = DEFAULT_PREFIX;
   if ($inlineMotherCow) $inlineMotherCow.value = DEFAULT_PREFIX;
+  // Set default date to today
+  if ($inlineBornCow) $inlineBornCow.value = new Date().toISOString().split('T')[0];
   $inlineAnimalCow?.focus();
 });
 
@@ -196,6 +198,8 @@ $registerPigBtn?.addEventListener('click', () => {
   // Prefill both animal and mother id with default prefix for convenience
   if ($inlineAnimalPig) $inlineAnimalPig.value = DEFAULT_PREFIX;
   if ($inlineMotherPig) $inlineMotherPig.value = DEFAULT_PREFIX;
+  // Set default date to today
+  if ($inlineBornPig) $inlineBornPig.value = new Date().toISOString().split('T')[0];
   $inlineAnimalPig?.focus();
 });
 
@@ -205,17 +209,7 @@ async function handleAddCow(number) {
   if (!n) return;
   const userKey = getAuthToken(); // Use Firebase token instead of stored key
   const motherVal = ($inlineMotherCow?.value || '').trim().toUpperCase() || null;
-  let bornVal = ($inlineBornCow?.value || '').trim() || null;
-  // Convert dd/mm/aaaa -> yyyy-mm-dd
-  if (bornVal) {
-    const m = bornVal.match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/);
-    if (m) {
-      const dd = m[1].padStart(2, '0');
-      const mm = m[2].padStart(2, '0');
-      const yyyy = m[3];
-      bornVal = `${yyyy}-${mm}-${dd}`;
-    }
-  }
+  const bornVal = ($inlineBornCow?.value || '').trim() || null;
   const weightVal = $inlineWeightCow?.value ? parseFloat($inlineWeightCow.value) : null;
   const genderVal = ($inlineGenderCow?.value || '').toUpperCase() || null;
   const statusVal = ($inlineStatusCow?.value || '').toUpperCase() || null;
@@ -248,17 +242,7 @@ async function handleAddPig(number) {
   if (!n) return;
   const userKey = getAuthToken(); // Use Firebase token instead of stored key
   const motherVal = ($inlineMotherPig?.value || '').trim().toUpperCase() || null;
-  let bornVal = ($inlineBornPig?.value || '').trim() || null;
-  // Convert dd/mm/aaaa -> yyyy-mm-dd
-  if (bornVal) {
-    const m = bornVal.match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/);
-    if (m) {
-      const dd = m[1].padStart(2, '0');
-      const mm = m[2].padStart(2, '0');
-      const yyyy = m[3];
-      bornVal = `${yyyy}-${mm}-${dd}`;
-    }
-  }
+  const bornVal = ($inlineBornPig?.value || '').trim() || null;
   const weightVal = $inlineWeightPig?.value ? parseFloat($inlineWeightPig.value) : null;
   const genderVal = ($inlineGenderPig?.value || '').toUpperCase() || null;
   const statusVal = ($inlineStatusPig?.value || '').toUpperCase() || null;
@@ -292,7 +276,7 @@ $inlineAddCow?.addEventListener('submit', async (e) => {
   // Always restore suggested prefixes for rapid multiple entries
   $inlineAnimalCow.value = DEFAULT_PREFIX;
   if ($inlineMotherCow) $inlineMotherCow.value = DEFAULT_PREFIX;
-  if ($inlineBornCow) $inlineBornCow.value = '';
+  if ($inlineBornCow) $inlineBornCow.value = new Date().toISOString().split('T')[0];
   if ($inlineWeightCow) $inlineWeightCow.value = '';
   if ($inlineGenderCow) $inlineGenderCow.value = '';
   if ($inlineStatusCow) $inlineStatusCow.value = '';
@@ -309,7 +293,7 @@ $inlineAddPig?.addEventListener('submit', async (e) => {
   // Always restore suggested prefixes for rapid multiple entries
   $inlineAnimalPig.value = DEFAULT_PREFIX;
   if ($inlineMotherPig) $inlineMotherPig.value = DEFAULT_PREFIX;
-  if ($inlineBornPig) $inlineBornPig.value = '';
+  if ($inlineBornPig) $inlineBornPig.value = new Date().toISOString().split('T')[0];
   if ($inlineWeightPig) $inlineWeightPig.value = '';
   if ($inlineGenderPig) $inlineGenderPig.value = '';
   if ($inlineStatusPig) $inlineStatusPig.value = '';

@@ -259,6 +259,16 @@ dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; col
   #register-section .form-vertical { grid-template-columns: 1fr; }
   #register-section .form-actions { flex-direction: column; }
   #register-section .form-actions .btn { width: 100%; }
+  
+  /* Fixed Cafecito mobile */
+  .cafecito-fixed {
+    bottom: 15px;
+    right: 15px;
+  }
+  
+  .cafecito-button {
+    height: 36px;
+  }
 }
 
 /* Animal Type Tabs */
@@ -319,5 +329,39 @@ dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; col
 .no-data p {
   margin: 0;
   font-size: 16px;
+}
+
+/* Fixed Cafecito Button Styles */
+.cafecito-fixed {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+}
+
+.cafecito-link {
+  display: inline-block;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  text-decoration: none;
+}
+
+.cafecito-link:hover {
+  transform: scale(1.05);
+  opacity: 0.9;
+}
+
+.cafecito-button {
+  height: 40px;
+  width: auto;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+}
+
+.cafecito-button:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
 }
 
