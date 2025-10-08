@@ -56,13 +56,6 @@ export class MetricsCalculator {
       overview: this.calculateOverview(),
       cows: this.calculateAnimalTypeMetrics(cows, 'Vacas'),
       pigs: this.calculateAnimalTypeMetrics(pigs, 'Cerdos'),
-      combined: {
-        gender: this.calculateGenderMetrics(),
-        status: this.calculateStatusMetrics(),
-        weight: this.calculateWeightMetrics(),
-        mothers: this.calculateMotherMetrics(),
-        timeline: this.calculateTimelineMetrics()
-      },
       objectives: this.calculateObjectiveMetrics()
     };
   }
@@ -359,9 +352,8 @@ export class MetricsRenderer {
     this.container.innerHTML = `
       <div class="metrics-dashboard">
         ${this.renderOverview(metrics.overview)}
-        ${this.renderAnimalTypeTabs(metrics.cows, metrics.pigs)}
-        ${this.renderCombinedMetrics(metrics.combined)}
         ${this.renderObjectives(metrics.objectives)}
+        ${this.renderAnimalTypeTabs(metrics.cows, metrics.pigs)}
         ${this.renderObjectivesSettings()}
       </div>
     `;
@@ -435,6 +427,27 @@ export class MetricsRenderer {
 
     return `
       <div class="animal-metrics-content">
+        <div class="metrics-section">
+          <h4>Resumen de ${animalData.typeName}</h4>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-value">${animalData.count}</div>
+              <div class="metric-label">Total ${animalData.typeName}</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">${animalData.weight.count}</div>
+              <div class="metric-label">Con Peso</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">${animalData.mothers.totalMothers}</div>
+              <div class="metric-label">Madres</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">${animalData.mothers.totalOffspring}</div>
+              <div class="metric-label">Crías</div>
+            </div>
+          </div>
+        </div>
         ${this.renderGenderStatus(animalData.gender, animalData.status)}
         ${this.renderWeightMetrics(animalData.weight)}
         ${this.renderMotherMetrics(animalData.mothers)}
@@ -442,20 +455,6 @@ export class MetricsRenderer {
     `;
   }
 
-  /**
-   * Render combined metrics (all animals together)
-   */
-  renderCombinedMetrics(combined) {
-    return `
-      <div class="metrics-section">
-        <h3>Métricas Combinadas</h3>
-        ${this.renderGenderStatus(combined.gender, combined.status)}
-        ${this.renderWeightMetrics(combined.weight)}
-        ${this.renderMotherMetrics(combined.mothers)}
-        ${this.renderTimeline(combined.timeline)}
-      </div>
-    `;
-  }
 
   /**
    * Render objectives section
