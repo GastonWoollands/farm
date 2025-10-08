@@ -2,11 +2,12 @@ import sqlite3
 from fastapi import HTTPException
 from ..db import conn
 
-def delete_all(x_user_key: str | None = None) -> None:
+def delete_all(user_identifier: str | None = None) -> None:
     try:
         with conn:
-            if x_user_key:
-                conn.execute("DELETE FROM registrations WHERE user_key = ?", (x_user_key,))
+            if user_identifier:
+                # Delete by either created_by (Firebase UID) or user_key (legacy)
+                conn.execute("DELETE FROM registrations WHERE created_by = ? OR user_key = ?", (user_identifier, user_identifier))
             else:
                 conn.execute("DELETE FROM registrations")
     except sqlite3.Error as e:
