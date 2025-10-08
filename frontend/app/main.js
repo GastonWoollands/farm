@@ -1,6 +1,8 @@
 import { formatDisplayText } from './format.js';
 import { setupExport } from './features/export.js';
 import { initAuth, signIn, signUp, signOutUser, getAuthToken, setAppFunctions } from './auth.js';
+import { initMetrics } from './features/metrics.js';
+import { initRegistrationPopup } from './features/registration.js';
 
 // Load existing application logic (initialization, UI, sync, listeners)
 import '../app.js';
@@ -9,6 +11,7 @@ import '../app.js';
 document.addEventListener('DOMContentLoaded', () => {
   setupExport();
   setupAuthUI();
+  setupNavigation();
   initAuth();
 });
 
@@ -99,6 +102,95 @@ function setupAuthUI() {
     };
     return messages[error] || 'Error: ' + error;
   }
+}
+
+// Navigation setup
+let metricsInstance = null;
+let registrationPopup = null;
+
+function setupNavigation() {
+  const $metricsTab = document.getElementById('metrics-tab');
+  const $cowsTab = document.getElementById('cows-tab');
+  const $pigsTab = document.getElementById('pigs-tab');
+  const $metricsPage = document.getElementById('metrics-page');
+  const $cowsPage = document.getElementById('cows-page');
+  const $pigsPage = document.getElementById('pigs-page');
+
+  // Ensure initial state is correct
+  if ($metricsPage) $metricsPage.removeAttribute('hidden');
+  if ($cowsPage) $cowsPage.setAttribute('hidden', '');
+  if ($pigsPage) $pigsPage.setAttribute('hidden', '');
+
+  // Initialize metrics and registration popup
+  metricsInstance = initMetrics();
+  registrationPopup = initRegistrationPopup();
+
+  // Tab switching
+  $metricsTab?.addEventListener('click', () => {
+    $metricsTab.classList.add('active');
+    $cowsTab?.classList.remove('active');
+    $pigsTab?.classList.remove('active');
+    $metricsPage?.removeAttribute('hidden');
+    $cowsPage?.setAttribute('hidden', '');
+    $pigsPage?.setAttribute('hidden', '');
+    
+    // Render metrics when switching to metrics tab
+    if (metricsInstance) {
+      metricsInstance.render();
+    }
+  });
+
+  $cowsTab?.addEventListener('click', () => {
+    $cowsTab.classList.add('active');
+    $metricsTab?.classList.remove('active');
+    $pigsTab?.classList.remove('active');
+    $cowsPage?.removeAttribute('hidden');
+    $metricsPage?.setAttribute('hidden', '');
+    $pigsPage?.setAttribute('hidden', '');
+    
+    // Render records when switching to cows tab
+    if (window.renderCowsList) {
+      window.renderCowsList();
+    }
+  });
+
+  $pigsTab?.addEventListener('click', () => {
+    $pigsTab.classList.add('active');
+    $metricsTab?.classList.remove('active');
+    $cowsTab?.classList.remove('active');
+    $pigsPage?.removeAttribute('hidden');
+    $metricsPage?.setAttribute('hidden', '');
+    $cowsPage?.setAttribute('hidden', '');
+    
+    // Render records when switching to pigs tab
+    if (window.renderPigsList) {
+      window.renderPigsList();
+    }
+  });
+
+  // Initial render of metrics and records
+  if (metricsInstance) {
+    metricsInstance.render();
+  }
+  
+  // Also ensure records are loaded initially
+  if (window.renderList) {
+    window.renderList();
+  }
+
+  // Setup registration popup callbacks
+  if (registrationPopup) {
+    registrationPopup.onSuccess(() => {
+      // Refresh both lists and metrics when registration succeeds
+      if (window.renderList) window.renderList();
+      if (window.triggerSync) window.triggerSync();
+      if (window.refreshMetrics) window.refreshMetrics();
+    });
+  }
+
+  // Expose instances globally for app.js
+  window.metricsInstance = metricsInstance;
+  window.registrationPopup = registrationPopup;
 }
 
 export { formatDisplayText, getAuthToken };

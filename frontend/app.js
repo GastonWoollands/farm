@@ -1,4 +1,5 @@
 const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
+// const API_BASE_URL = 'http://localhost:8000';
 const ENDPOINT_VALIDATE = '/validate-key';
 const ENDPOINT_REGISTER = '/register';
 const DEFAULT_PREFIX = 'AC988';
@@ -14,21 +15,47 @@ const $keyInput = document.getElementById('user-key');
 const $keyError = document.getElementById('key-error');
 const $keyDebug = document.getElementById('key-debug');
 const $toggleKey = document.getElementById('toggle-key');
-const $registerBtn = document.getElementById('register-btn');
-const $registerSection = document.getElementById('register-section');
-const $inlineAdd = document.getElementById('inline-add');
-const $inlineAnimal = document.getElementById('inline-animal');
-const $inlineMother = document.getElementById('inline-mother');
-const $inlineBorn = document.getElementById('inline-born');
-const $inlineWeight = document.getElementById('inline-weight');
-const $inlineGender = document.getElementById('inline-gender');
-const $inlineStatus = document.getElementById('inline-status');
-const $inlineColor = document.getElementById('inline-color');
-const $inlineNotes = document.getElementById('inline-notes');
-const $inlineNotesMother = document.getElementById('inline-notes-mother');
+// Cows elements
+const $registerCowBtn = document.getElementById('register-cow-btn');
+const $registerCowSection = document.getElementById('register-cow-section');
+const $inlineAddCow = document.getElementById('inline-add-cow');
+const $inlineAnimalCow = document.getElementById('inline-animal-cow');
+const $inlineMotherCow = document.getElementById('inline-mother-cow');
+const $inlineBornCow = document.getElementById('inline-born-cow');
+const $inlineWeightCow = document.getElementById('inline-weight-cow');
+const $inlineGenderCow = document.getElementById('inline-gender-cow');
+const $inlineStatusCow = document.getElementById('inline-status-cow');
+const $inlineColorCow = document.getElementById('inline-color-cow');
+const $inlineNotesCow = document.getElementById('inline-notes-cow');
+const $inlineNotesMotherCow = document.getElementById('inline-notes-mother-cow');
+
+// Pigs elements
+const $registerPigBtn = document.getElementById('register-pig-btn');
+const $registerPigSection = document.getElementById('register-pig-section');
+const $inlineAddPig = document.getElementById('inline-add-pig');
+const $inlineAnimalPig = document.getElementById('inline-animal-pig');
+const $inlineMotherPig = document.getElementById('inline-mother-pig');
+const $inlineBornPig = document.getElementById('inline-born-pig');
+const $inlineWeightPig = document.getElementById('inline-weight-pig');
+const $inlineGenderPig = document.getElementById('inline-gender-pig');
+const $inlineStatusPig = document.getElementById('inline-status-pig');
+const $inlineColorPig = document.getElementById('inline-color-pig');
+const $inlineNotesPig = document.getElementById('inline-notes-pig');
+const $inlineNotesMotherPig = document.getElementById('inline-notes-mother-pig');
 const $dialog = document.getElementById('register-dialog');
 const $registerForm = document.getElementById('register-form');
-const $records = document.getElementById('records');
+// Get records element when needed
+function getRecordsElement() {
+  return document.getElementById('records');
+}
+
+function getCowsRecordsElement() {
+  return document.getElementById('cows-records');
+}
+
+function getPigsRecordsElement() {
+  return document.getElementById('pigs-records');
+}
 const $statusBadge = document.getElementById('status-badge');
 const $syncStatus = document.getElementById('sync-status');
 const $apiBase = document.getElementById('api-base');
@@ -150,24 +177,35 @@ $toggleKey?.addEventListener('click', () => {
   $keyInput.focus();
 });
 
-// Toggle register form visibility
-$registerBtn?.addEventListener('click', () => {
-  const isHidden = $registerSection.hidden;
-  $registerSection.hidden = !isHidden;
+// Toggle cow register form visibility
+$registerCowBtn?.addEventListener('click', () => {
+  const isHidden = $registerCowSection.hidden;
+  $registerCowSection.hidden = !isHidden;
   if (!isHidden) return;
   // Prefill both animal and mother id with default prefix for convenience
-  if ($inlineAnimal) $inlineAnimal.value = DEFAULT_PREFIX;
-  if ($inlineMother) $inlineMother.value = DEFAULT_PREFIX;
-  $inlineAnimal?.focus();
+  if ($inlineAnimalCow) $inlineAnimalCow.value = DEFAULT_PREFIX;
+  if ($inlineMotherCow) $inlineMotherCow.value = DEFAULT_PREFIX;
+  $inlineAnimalCow?.focus();
 });
 
-// Save new record locally and attempt sync
-async function handleAdd(number) {
+// Toggle pig register form visibility
+$registerPigBtn?.addEventListener('click', () => {
+  const isHidden = $registerPigSection.hidden;
+  $registerPigSection.hidden = !isHidden;
+  if (!isHidden) return;
+  // Prefill both animal and mother id with default prefix for convenience
+  if ($inlineAnimalPig) $inlineAnimalPig.value = DEFAULT_PREFIX;
+  if ($inlineMotherPig) $inlineMotherPig.value = DEFAULT_PREFIX;
+  $inlineAnimalPig?.focus();
+});
+
+// Save new cow record locally and attempt sync
+async function handleAddCow(number) {
   const n = (number || '').trim().toUpperCase();
   if (!n) return;
   const userKey = getAuthToken(); // Use Firebase token instead of stored key
-  const motherVal = ($inlineMother?.value || '').trim().toUpperCase() || null;
-  let bornVal = ($inlineBorn?.value || '').trim() || null;
+  const motherVal = ($inlineMotherCow?.value || '').trim().toUpperCase() || null;
+  let bornVal = ($inlineBornCow?.value || '').trim() || null;
   // Convert dd/mm/aaaa -> yyyy-mm-dd
   if (bornVal) {
     const m = bornVal.match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/);
@@ -178,14 +216,15 @@ async function handleAdd(number) {
       bornVal = `${yyyy}-${mm}-${dd}`;
     }
   }
-  const weightVal = $inlineWeight?.value ? parseFloat($inlineWeight.value) : null;
-  const genderVal = ($inlineGender?.value || '').toUpperCase() || null;
-  const statusVal = ($inlineStatus?.value || '').toUpperCase() || null;
-  const colorVal = ($inlineColor?.value || '').toUpperCase() || null;
-  const notesVal = ($inlineNotes?.value || '').trim().toUpperCase() || null;
-  const notesMotherVal = ($inlineNotesMother?.value || '').trim().toUpperCase() || null;
+  const weightVal = $inlineWeightCow?.value ? parseFloat($inlineWeightCow.value) : null;
+  const genderVal = ($inlineGenderCow?.value || '').toUpperCase() || null;
+  const statusVal = ($inlineStatusCow?.value || '').toUpperCase() || null;
+  const colorVal = ($inlineColorCow?.value || '').toUpperCase() || null;
+  const notesVal = ($inlineNotesCow?.value || '').trim().toUpperCase() || null;
+  const notesMotherVal = ($inlineNotesMotherCow?.value || '').trim().toUpperCase() || null;
   const record = {
     animalNumber: n,
+    animalType: 1, // 1 = cow
     userKey,
     motherId: motherVal,
     bornDate: bornVal,
@@ -197,55 +236,129 @@ async function handleAdd(number) {
     notesMother: notesMotherVal,
   };
   await addRecord(record);
-  await renderList();
+  await renderCowsList();
   triggerSync();
+  // Refresh metrics when new record is added
+  window.refreshMetrics();
 }
 
-// Inline add
-$inlineAdd?.addEventListener('submit', async (e) => {
+// Save new pig record locally and attempt sync
+async function handleAddPig(number) {
+  const n = (number || '').trim().toUpperCase();
+  if (!n) return;
+  const userKey = getAuthToken(); // Use Firebase token instead of stored key
+  const motherVal = ($inlineMotherPig?.value || '').trim().toUpperCase() || null;
+  let bornVal = ($inlineBornPig?.value || '').trim() || null;
+  // Convert dd/mm/aaaa -> yyyy-mm-dd
+  if (bornVal) {
+    const m = bornVal.match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/);
+    if (m) {
+      const dd = m[1].padStart(2, '0');
+      const mm = m[2].padStart(2, '0');
+      const yyyy = m[3];
+      bornVal = `${yyyy}-${mm}-${dd}`;
+    }
+  }
+  const weightVal = $inlineWeightPig?.value ? parseFloat($inlineWeightPig.value) : null;
+  const genderVal = ($inlineGenderPig?.value || '').toUpperCase() || null;
+  const statusVal = ($inlineStatusPig?.value || '').toUpperCase() || null;
+  const colorVal = ($inlineColorPig?.value || '').toUpperCase() || null;
+  const notesVal = ($inlineNotesPig?.value || '').trim().toUpperCase() || null;
+  const notesMotherVal = ($inlineNotesMotherPig?.value || '').trim().toUpperCase() || null;
+  const record = {
+    animalNumber: n,
+    animalType: 2, // 2 = pig
+    userKey,
+    motherId: motherVal,
+    bornDate: bornVal,
+    weight: (weightVal !== null && !isNaN(weightVal) && isFinite(weightVal)) ? weightVal : null,
+    gender: genderVal,
+    status: statusVal,
+    color: colorVal,
+    notes: notesVal,
+    notesMother: notesMotherVal,
+  };
+  await addRecord(record);
+  await renderPigsList();
+  triggerSync();
+  // Refresh metrics when new record is added
+  window.refreshMetrics();
+}
+
+// Cow form submission
+$inlineAddCow?.addEventListener('submit', async (e) => {
   e.preventDefault();
-  await handleAdd($inlineAnimal.value);
+  await handleAddCow($inlineAnimalCow.value);
   // Always restore suggested prefixes for rapid multiple entries
-  $inlineAnimal.value = DEFAULT_PREFIX;
-  if ($inlineMother) $inlineMother.value = DEFAULT_PREFIX;
-  if ($inlineBorn) $inlineBorn.value = '';
-  if ($inlineWeight) $inlineWeight.value = '';
-  if ($inlineGender) $inlineGender.value = '';
-  if ($inlineStatus) $inlineStatus.value = '';
-  if ($inlineColor) $inlineColor.value = '';
-  if ($inlineNotes) $inlineNotes.value = '';
-  if ($inlineNotesMother) $inlineNotesMother.value = '';
-  $inlineAnimal.focus();
+  $inlineAnimalCow.value = DEFAULT_PREFIX;
+  if ($inlineMotherCow) $inlineMotherCow.value = DEFAULT_PREFIX;
+  if ($inlineBornCow) $inlineBornCow.value = '';
+  if ($inlineWeightCow) $inlineWeightCow.value = '';
+  if ($inlineGenderCow) $inlineGenderCow.value = '';
+  if ($inlineStatusCow) $inlineStatusCow.value = '';
+  if ($inlineColorCow) $inlineColorCow.value = '';
+  if ($inlineNotesCow) $inlineNotesCow.value = '';
+  if ($inlineNotesMotherCow) $inlineNotesMotherCow.value = '';
+  $inlineAnimalCow.focus();
+});
+
+// Pig form submission
+$inlineAddPig?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await handleAddPig($inlineAnimalPig.value);
+  // Always restore suggested prefixes for rapid multiple entries
+  $inlineAnimalPig.value = DEFAULT_PREFIX;
+  if ($inlineMotherPig) $inlineMotherPig.value = DEFAULT_PREFIX;
+  if ($inlineBornPig) $inlineBornPig.value = '';
+  if ($inlineWeightPig) $inlineWeightPig.value = '';
+  if ($inlineGenderPig) $inlineGenderPig.value = '';
+  if ($inlineStatusPig) $inlineStatusPig.value = '';
+  if ($inlineColorPig) $inlineColorPig.value = '';
+  if ($inlineNotesPig) $inlineNotesPig.value = '';
+  if ($inlineNotesMotherPig) $inlineNotesMotherPig.value = '';
+  $inlineAnimalPig.focus();
 });
 
 // Prevent Enter from submitting the form; use it to move to next field
-$inlineAdd?.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-  const target = e.target;
-  if (!(target instanceof HTMLElement)) return;
-  // Only intercept on inputs/selects/textarea, not on buttons
-  const isField = target.matches('input, select, textarea');
-  if (!isField) return;
-  // Allow multiline entry in textarea with Shift+Enter (none used now), otherwise navigate
-  e.preventDefault();
-  const fields = Array.from($inlineAdd.querySelectorAll('input, select, textarea'))
-    .filter(el => !el.hasAttribute('disabled'));
-  const idx = fields.indexOf(target);
-  const nextIdx = (idx + 1) % fields.length;
-  const next = fields[nextIdx];
-  if (next && next instanceof HTMLElement) {
-    next.focus();
-    if (next instanceof HTMLInputElement && next.type === 'text') {
-      next.select();
+function setupFormNavigation(form) {
+  form?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    // Only intercept on inputs/selects/textarea, not on buttons
+    const isField = target.matches('input, select, textarea');
+    if (!isField) return;
+    // Allow multiline entry in textarea with Shift+Enter (none used now), otherwise navigate
+    e.preventDefault();
+    const fields = Array.from(form.querySelectorAll('input, select, textarea'))
+      .filter(el => !el.hasAttribute('disabled'));
+    const idx = fields.indexOf(target);
+    const nextIdx = (idx + 1) % fields.length;
+    const next = fields[nextIdx];
+    if (next && next instanceof HTMLElement) {
+      next.focus();
+      if (next instanceof HTMLInputElement && next.type === 'text') {
+        next.select();
+      }
     }
-  }
-});
+  });
+}
 
-// Render list from DB
-async function renderList() {
+// Setup form navigation for both forms
+setupFormNavigation($inlineAddCow);
+setupFormNavigation($inlineAddPig);
+
+// Render cows list from DB
+async function renderCowsList() {
   const all = await getRecords();
+  const cows = all.filter(r => r.animalType === 1);
+  const $records = getCowsRecordsElement();
+  if (!$records) {
+    console.error('Cows records element not found!');
+    return;
+  }
   $records.innerHTML = '';
-  for (const r of all.sort((a,b) => (b.id||0)-(a.id||0))) {
+  for (const r of cows.sort((a,b) => (b.id||0)-(a.id||0))) {
     const li = document.createElement('li');
     li.dataset.id = r.id;
     const left = document.createElement('div');
@@ -272,7 +385,9 @@ async function renderList() {
         } catch (e) { /* ignore network errors, still remove locally */ }
       }
       await withUndo(async () => deleteRecord(id), async () => {}, `Deleted ${r.animalNumber}`);
-      await renderList();
+      await renderCowsList();
+      // Refresh metrics when record is deleted
+      window.refreshMetrics();
     });
     const rightWrap = document.createElement('div');
     rightWrap.className = 'row gap';
@@ -284,7 +399,64 @@ async function renderList() {
   }
   const pending = all.filter(r => !r.synced).length;
   $pendingCount.textContent = pending > 0 ? `(pending: ${pending})` : '';
+}
 
+// Render pigs list from DB
+async function renderPigsList() {
+  const all = await getRecords();
+  const pigs = all.filter(r => r.animalType === 2);
+  const $records = getPigsRecordsElement();
+  if (!$records) {
+    console.error('Pigs records element not found!');
+    return;
+  }
+  $records.innerHTML = '';
+  for (const r of pigs.sort((a,b) => (b.id||0)-(a.id||0))) {
+    const li = document.createElement('li');
+    li.dataset.id = r.id;
+    const left = document.createElement('div');
+    left.textContent = formatDisplayText(r.animalNumber) + '';
+    const right = document.createElement('div');
+    right.textContent = r.synced ? 'Synced' : 'Pending';
+    const del = document.createElement('button');
+    del.className = 'btn';
+    del.textContent = '×';
+    del.title = 'Delete';
+    del.setAttribute('aria-label', 'Delete');
+    del.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = r.id;
+      // If synced, attempt server delete first
+      const userKey = getAuthToken();
+      if (r.synced && userKey) {
+        try {
+          await fetch(API_BASE_URL + '/register', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userKey}` },
+            body: JSON.stringify({ animalNumber: r.animalNumber, createdAt: r.createdAt })
+          });
+        } catch (e) { /* ignore network errors, still remove locally */ }
+      }
+      await withUndo(async () => deleteRecord(id), async () => {}, `Deleted ${r.animalNumber}`);
+      await renderPigsList();
+      // Refresh metrics when record is deleted
+      window.refreshMetrics();
+    });
+    const rightWrap = document.createElement('div');
+    rightWrap.className = 'row gap';
+    rightWrap.appendChild(right);
+    rightWrap.appendChild(del);
+    li.appendChild(left);
+    li.appendChild(rightWrap);
+    $records.appendChild(li);
+  }
+  const pending = all.filter(r => !r.synced).length;
+  $pendingCount.textContent = pending > 0 ? `(pending: ${pending})` : '';
+}
+
+// Legacy renderList function for backward compatibility
+async function renderList() {
+  await renderCowsList();
 }
 
 // Sync logic: send unsynced to backend when online
@@ -336,7 +508,16 @@ async function triggerSync(force = false) {
 // Expose for debugging in console
 window.__farm = { triggerSync };
 window.renderList = renderList;
+window.renderCowsList = renderCowsList;
+window.renderPigsList = renderPigsList;
 window.triggerSync = triggerSync;
+
+// Global function to refresh metrics (called from main.js)
+window.refreshMetrics = () => {
+  if (window.metricsInstance) {
+    window.metricsInstance.render();
+  }
+};
 
 // Manage Synced dialog render
 function renderManageSyncedList(records) {
