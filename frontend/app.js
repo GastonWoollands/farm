@@ -426,15 +426,25 @@ async function exportData(format) {
 }
 
 $exportCsv?.addEventListener('click', () => {
-  // Default end (Hasta) to today and cap max to today for both fields
   const now = new Date();
   const yyyy = String(now.getFullYear());
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
   const todayStr = `${yyyy}-${mm}-${dd}`;
+  
+  // Calculate one month ago for start date
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+  const oneMonthAgoStr = `${oneMonthAgo.getFullYear()}-${String(oneMonthAgo.getMonth() + 1).padStart(2, '0')}-${String(oneMonthAgo.getDate()).padStart(2, '0')}`;
+  
+  // Set default values
+  if ($exportStartModal && !$exportStartModal.value) $exportStartModal.value = oneMonthAgoStr;
   if ($exportEndModal && !$exportEndModal.value) $exportEndModal.value = todayStr;
-  if ($exportEndModal) $exportEndModal.max = todayStr;
+  
+  // Cap max dates to today
   if ($exportStartModal) $exportStartModal.max = todayStr;
+  if ($exportEndModal) $exportEndModal.max = todayStr;
+  
   $exportDialog?.showModal();
 });
 
