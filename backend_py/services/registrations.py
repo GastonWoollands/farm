@@ -10,7 +10,7 @@ VALID_COLORS = {"COLORADO", "MARRON", "NEGRO", "OTHERS"}
 def _normalize_text(value: str | None) -> str | None:
     return (value or "").strip().upper() or None
 
-def insert_registration(x_user_key: str, body) -> None:
+def insert_registration(created_by_or_key: str, body) -> None:
     if not body.animalNumber:
         raise HTTPException(status_code=400, detail="animalNumber required")
 
@@ -48,15 +48,16 @@ def insert_registration(x_user_key: str, body) -> None:
             conn.execute(
                 """
                 INSERT INTO registrations (
-                    animal_number, created_at, user_key,
+                    animal_number, created_at, user_key, created_by,
                     mother_id, born_date, weight, gender, status, color, notes, notes_mother, short_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10))
                 """,
                 (
                     animal,
                     created_at,
-                    x_user_key,
+                    None,  # legacy user_key deprecated when using Firebase
+                    created_by_or_key,
                     mother,
                     body.bornDate,
                     weight,
@@ -72,7 +73,7 @@ def insert_registration(x_user_key: str, body) -> None:
     except sqlite3.Error as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
-def delete_registration(x_user_key: str, animal_number: str, created_at: str | None) -> None:
+def delete_registration(created_by_or_key: str, animal_number: str, created_at: str | None) -> None:
     try:
         with conn:
             if created_at:
@@ -81,11 +82,11 @@ def delete_registration(x_user_key: str, animal_number: str, created_at: str | N
                     DELETE FROM registrations
                     WHERE id IN (
                         SELECT id FROM registrations
-                        WHERE user_key = ? AND animal_number = ? AND created_at = ?
+                        WHERE ((created_by = ?) OR (user_key = ?)) AND animal_number = ? AND created_at = ?
                         ORDER BY id DESC LIMIT 1
                     )
                     """,
-                    (x_user_key, animal_number, created_at),
+                    (created_by_or_key, created_by_or_key, animal_number, created_at),
                 )
             else:
                 conn.execute(
@@ -93,18 +94,18 @@ def delete_registration(x_user_key: str, animal_number: str, created_at: str | N
                     DELETE FROM registrations
                     WHERE id IN (
                         SELECT id FROM registrations
-                        WHERE user_key = ? AND animal_number = ?
+                        WHERE ((created_by = ?) OR (user_key = ?)) AND animal_number = ?
                         ORDER BY id DESC LIMIT 1
                     )
                     """,
-                    (x_user_key, animal_number),
+                    (created_by_or_key, created_by_or_key, animal_number),
                 )
     except sqlite3.Error:
         raise HTTPException(status_code=500, detail="DB error")
 
-def export_rows(x_user_key: str, date: str | None, start: str | None, end: str | None) -> list[dict]:
-    where = ["user_key = ?"]
-    params: list = [x_user_key]
+def export_rows(created_by_or_key: str, date: str | None, start: str | None, end: str | None) -> list[dict]:
+    where = ["((created_by = ?) OR (user_key = ?))"]
+    params: list = [created_by_or_key, created_by_or_key]
     if date:
         where.append("date(born_date) = date(?)")
         params.append(date)

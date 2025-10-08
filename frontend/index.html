@@ -11,26 +11,63 @@
   <title>Registro de Animales</title>
   <script defer src="/_vercel/insights/script.js"></script>
   <script defer src="/_vercel/speed-insights/script.js"></script>
+  <!-- Configuration -->
+  <script src="config.js"></script>
+  
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getAuth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+    
+    // Use config from config.js
+    const firebaseConfig = window.FIREBASE_CONFIG;
+    
+    if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey === 'your-actual-api-key-here') {
+      console.error('Firebase configuration not set. Please update config.js with your Firebase project details.');
+      document.body.innerHTML = '<div style="text-align:center; padding:2rem; color:#c33;"><h2>Configuration Required</h2><p>Please update config.js with your Firebase project details.</p></div>';
+    } else {
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      window.firebaseAuth = auth;
+    }
+  </script>
 </head>
 <body>
   <header class="app-header">
     <h1>Registro de Animales <small id="pending-count" class="muted" style="font-size:12px; margin-left:8px;"></small></h1>
-    <span class="badge" id="status-badge">Offline</span>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span class="badge" id="status-badge">Offline</span>
+      <button id="signout-btn" class="btn" style="display:none; padding:6px 12px; font-size:12px;">Cerrar Sesión</button>
+    </div>
   </header>
 
   <main class="container" id="auth-screen" hidden>
-    <section class="card">
-      <h2>Ingresar clave de usuario</h2>
-      <p class="muted">Proporcionada por el administrador del sistema</p>
-      <form id="key-form">
-        <label for="user-key">Clave de usuario</label>
-        <div class="row gap" style="align-items:center;">
-          <input id="user-key" name="user-key" type="password" placeholder="••••-••••-••••" required autocomplete="off" style="flex:1;">
-          <button type="button" id="toggle-key" class="btn" aria-label="Show key">Show</button>
+    <section class="card" style="max-width:400px; margin:2rem auto;">
+      <div style="text-align:center; margin-bottom:2rem;">
+        <h2 style="margin:0 0 0.5rem 0; color:#0f766e;">Registro de Animales</h2>
+        <p class="muted">Inicia sesión para continuar</p>
+      </div>
+      
+      <form id="auth-form">
+        <div class="form-field">
+          <input id="auth-email" name="email" type="email" placeholder="Email" required autocomplete="email" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:6px; font-size:16px;">
         </div>
-        <button type="submit" class="btn primary" style="margin-top:8px;">Continuar</button>
-        <p id="key-error" class="error" role="alert" hidden>Clave inválida. Intente nuevamente.</p>
-        <pre id="key-debug" class="muted" style="white-space:pre-wrap; overflow:auto; margin-top:8px;" hidden></pre>
+        <div class="form-field">
+          <input id="auth-password" name="password" type="password" placeholder="Contraseña" required autocomplete="current-password" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:6px; font-size:16px;">
+        </div>
+        
+        <button type="submit" class="btn primary" id="signin-btn" style="width:100%; padding:12px; margin:8px 0; font-size:16px; background:#0f766e; border:none; border-radius:6px; color:white; cursor:pointer;">
+          Iniciar Sesión
+        </button>
+        
+        <div style="text-align:center; margin:1rem 0;">
+          <span class="muted">¿No tienes cuenta? </span>
+          <button type="button" class="btn" id="signup-btn" style="background:none; border:none; color:#0f766e; text-decoration:underline; cursor:pointer; font-size:14px;">
+            Regístrate aquí
+          </button>
+        </div>
+        
+        <div id="auth-message" style="text-align:center; margin:1rem 0; padding:8px; border-radius:4px;" hidden></div>
       </form>
     </section>
   </main>

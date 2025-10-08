@@ -4,6 +4,7 @@ const ENDPOINT_REGISTER = '/register';
 const DEFAULT_PREFIX = 'AC988';
 
 import { addRecord, getRecords, markAsSynced, deleteRecord, getRecentSynced } from './db.js';
+import { getAuthToken } from './app/auth.js';
 
 // Elements
 const $auth = document.getElementById('auth-screen');
@@ -46,7 +47,7 @@ const $exportCancel = document.getElementById('export-cancel');
 // Sync state must be initialized before any triggerSync() execution
 let syncInFlight = false;
 
-// Local storage keys
+// Local storage keys (legacy - now using Firebase auth)
 const LS_USER_KEY = 'farm:userKey';
 
 // Helper function to format display text with proper capitalization
@@ -78,14 +79,8 @@ $apiBase.textContent = API_BASE_URL;
 init();
 
 async function init() {
-  const existingKey = localStorage.getItem(LS_USER_KEY);
-  if (existingKey) {
-    showApp();
-    renderList();
-    triggerSync();
-  } else {
-    showAuth();
-  }
+  // Auth is now handled by Firebase auth state listener in auth.js
+  // This function is kept for compatibility but auth.js will control the flow
 }
 
 function showAuth() {
@@ -170,7 +165,7 @@ $registerBtn?.addEventListener('click', () => {
 async function handleAdd(number) {
   const n = (number || '').trim().toUpperCase();
   if (!n) return;
-  const userKey = localStorage.getItem(LS_USER_KEY);
+  const userKey = getAuthToken(); // Use Firebase token instead of stored key
   const motherVal = ($inlineMother?.value || '').trim().toUpperCase() || null;
   let bornVal = ($inlineBorn?.value || '').trim() || null;
   // Convert dd/mm/aaaa -> yyyy-mm-dd
@@ -266,12 +261,12 @@ async function renderList() {
       e.stopPropagation();
       const id = r.id;
       // If synced, attempt server delete first
-      const userKey = localStorage.getItem(LS_USER_KEY);
+      const userKey = getAuthToken();
       if (r.synced && userKey) {
         try {
           await fetch(API_BASE_URL + '/register', {
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/json', 'X-User-Key': userKey },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userKey}` },
             body: JSON.stringify({ animalNumber: r.animalNumber, createdAt: r.createdAt })
           });
         } catch (e) { /* ignore network errors, still remove locally */ }
@@ -296,7 +291,7 @@ async function renderList() {
 async function triggerSync(force = false) {
   if (syncInFlight) return; // prevent overlap
   if (!navigator.onLine && !force) return;
-  const userKey = localStorage.getItem(LS_USER_KEY);
+  const userKey = getAuthToken(); // Use Firebase token
   if (!userKey) return;
   try {
     syncInFlight = true;
@@ -306,7 +301,7 @@ async function triggerSync(force = false) {
       try {
         const res = await fetch(API_BASE_URL + ENDPOINT_REGISTER, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Key': userKey },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userKey}` },
           body: JSON.stringify({
             animalNumber: r.animalNumber,
             createdAt: r.createdAt,
@@ -340,6 +335,8 @@ async function triggerSync(force = false) {
 
 // Expose for debugging in console
 window.__farm = { triggerSync };
+window.renderList = renderList;
+window.triggerSync = triggerSync;
 
 // Manage Synced dialog render
 function renderManageSyncedList(records) {
@@ -403,7 +400,7 @@ function hideToast() {
 }
 
 async function exportData(format) {
-  const userKey = localStorage.getItem(LS_USER_KEY);
+  const userKey = getAuthToken();
   if (!userKey) return;
   const params = new URLSearchParams();
   if (format === 'csv') params.set('format', 'csv');
@@ -412,7 +409,7 @@ async function exportData(format) {
   if (startDate) params.set('start', startDate);
   if (endDate) params.set('end', endDate);
   const url = API_BASE_URL + '/export' + (params.toString() ? `?${params}` : '');
-  const res = await fetch(url, { headers: { 'X-User-Key': userKey } });
+  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${userKey}` } });
   if (!res.ok) {
     withUndo(async()=>{}, async()=>{}, `Export failed (${res.status})`);
     return;

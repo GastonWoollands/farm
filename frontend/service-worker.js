@@ -9,6 +9,8 @@ const ASSETS = [
   '/app.js',
   '/app/format.js',
   '/app/features/export.js',
+  '/app/auth.js',
+  '/config.js',
   '/db.js',
   '/manifest.json',
   '/icons/icon-192.jpg',

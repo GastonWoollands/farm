@@ -15,7 +15,8 @@ conn.execute(
         short_id TEXT UNIQUE,
         animal_number TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        user_key TEXT NOT NULL,
+        user_key TEXT,
+        created_by TEXT,
         mother_id TEXT,
         born_date TEXT,
         weight REAL,
@@ -46,6 +47,7 @@ for _col, _type in [
     ("notes", "TEXT"),
     ("notes_mother", "TEXT"),
     ("short_id", "TEXT"),
+    ("created_by", "TEXT"),
 ]:
     _add_column_if_missing(_col, _type)
 
@@ -73,6 +75,14 @@ def create_unique_index() -> None:
             conn.commit()
         except sqlite3.OperationalError:
             pass
+    # New index for Firebase user-based uniqueness
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_createdby_animal_mother ON registrations(created_by, animal_number, IFNULL(mother_id, ''))"
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
 create_unique_index()
 
