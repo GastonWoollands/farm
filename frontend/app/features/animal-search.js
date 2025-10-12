@@ -54,16 +54,8 @@ export class AnimalSearch {
         </div>
         <div class="search-filters">
           <label class="filter-label">
-            <input type="radio" name="animal-type" value="" checked>
-            <span>Todos</span>
-          </label>
-          <label class="filter-label">
-            <input type="radio" name="animal-type" value="1">
+            <input type="radio" name="animal-type" value="1" checked>
             <span>Vacas</span>
-          </label>
-          <label class="filter-label">
-            <input type="radio" name="animal-type" value="2">
-            <span>Cerdos</span>
           </label>
         </div>
       </div>
@@ -144,7 +136,7 @@ export class AnimalSearch {
    */
   async performSearch() {
     const query = this.currentQuery.trim();
-    const selectedType = document.querySelector('input[name="animal-type"]:checked')?.value;
+    const selectedType = document.querySelector('input[name="animal-type"]:checked')?.value || '1'; // Default to cows
     
     try {
       const results = await this.searchAnimals(query, selectedType);
@@ -162,14 +154,10 @@ export class AnimalSearch {
    */
   async searchAnimals(query, animalType) {
     const allRecords = await getRecords();
-    let filteredRecords = allRecords;
+    // Always filter to cows only (animalType = 1)
+    let filteredRecords = allRecords.filter(r => r.animalType === 1);
 
-    // Filter by animal type if specified
-    if (animalType) {
-      filteredRecords = filteredRecords.filter(r => r.animalType === parseInt(animalType));
-    }
-
-    // If no query, return all filtered records
+    // If no query, return all cow records
     if (!query) {
       return filteredRecords;
     }
@@ -231,7 +219,7 @@ export class AnimalSearch {
    * @returns {string}
    */
   renderAnimalCard(record) {
-    const animalType = record.animalType === 1 ? 'Vaca' : 'Cerdo';
+    const animalType = 'Vaca'; // Only cows are shown now
     const syncStatus = record.synced ? 'Sincronizado' : 'Pendiente';
     const syncClass = record.synced ? 'synced' : 'pending';
 
@@ -353,10 +341,7 @@ export class AnimalSearch {
   formatColor(color) {
     const colorMap = {
       'COLORADO': 'Colorado',
-      'MARRON': 'Marrón',
       'NEGRO': 'Negro',
-      'ROSA': 'Rosa',
-      'BLANCO': 'Blanco',
       'OTHERS': 'Otros'
     };
     return colorMap[color] || color;
@@ -368,7 +353,7 @@ export class AnimalSearch {
    */
   async openEditModal(recordId) {
     try {
-      const records = await this.searchAnimals('', ''); // Get all records
+      const records = await this.searchAnimals('', '1'); // Get all cow records only
       const record = records.find(r => r.id === recordId);
       
       if (!record) {
@@ -409,7 +394,7 @@ export class AnimalSearch {
             </div>
             <div class="edit-form-field">
               <label>Tipo de Animal</label>
-              <input type="text" value="${record.animalType === 1 ? 'Vaca' : 'Cerdo'}" readonly style="background-color: #f5f5f5; color: #666;">
+              <input type="text" value="Vaca" readonly style="background-color: #f5f5f5; color: #666;">
             </div>
             <div class="edit-form-field">
               <label for="edit-mother-id">ID de la Madre</label>
@@ -446,10 +431,7 @@ export class AnimalSearch {
               <select id="edit-color">
                 <option value="">— Seleccionar —</option>
                 <option value="COLORADO" ${record.color === 'COLORADO' ? 'selected' : ''}>Colorado</option>
-                <option value="MARRON" ${record.color === 'MARRON' ? 'selected' : ''}>Marrón</option>
                 <option value="NEGRO" ${record.color === 'NEGRO' ? 'selected' : ''}>Negro</option>
-                <option value="ROSA" ${record.color === 'ROSA' ? 'selected' : ''}>Rosa</option>
-                <option value="BLANCO" ${record.color === 'BLANCO' ? 'selected' : ''}>Blanco</option>
                 <option value="OTHERS" ${record.color === 'OTHERS' ? 'selected' : ''}>Otros</option>
               </select>
             </div>

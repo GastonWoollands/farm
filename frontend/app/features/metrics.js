@@ -50,12 +50,12 @@ export class MetricsCalculator {
   async calculateMetrics() {
     this.records = await getRecords();
     const cows = this.records.filter(r => r.animalType === 1);
-    const pigs = this.records.filter(r => r.animalType === 2);
+    // const pigs = this.records.filter(r => r.animalType === 2);
     
     return {
       overview: this.calculateOverview(),
       cows: this.calculateAnimalTypeMetrics(cows, 'Vacas'),
-      pigs: this.calculateAnimalTypeMetrics(pigs, 'Cerdos'),
+      // pigs: this.calculateAnimalTypeMetrics(pigs, 'Cerdos'),
       objectives: this.calculateObjectiveMetrics()
     };
   }
@@ -68,7 +68,7 @@ export class MetricsCalculator {
     const synced = this.records.filter(r => r.synced).length;
     const pending = total - synced;
     const cows = this.records.filter(r => r.animalType === 1).length;
-    const pigs = this.records.filter(r => r.animalType === 2).length;
+    // const pigs = this.records.filter(r => r.animalType === 2).length;
     
     return {
       total,
@@ -76,12 +76,12 @@ export class MetricsCalculator {
       pending,
       syncRate: total > 0 ? Math.round((synced / total) * 100) : 0,
       cows,
-      pigs
+      // pigs
     };
   }
 
   /**
-   * Calculate metrics for a specific animal type (cows or pigs)
+   * Calculate metrics for a specific animal type (cows)
    */
   calculateAnimalTypeMetrics(records, typeName) {
     if (records.length === 0) {
@@ -181,14 +181,8 @@ export class MetricsCalculator {
       ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
       : sorted[Math.floor(sorted.length / 2)];
 
-    // Weight ranges - different for cows vs pigs
-    const ranges = records.length > 0 && records[0].animalType === 2 ? [
-      { label: '0-20 kg', min: 0, max: 20, count: 0 },
-      { label: '20-50 kg', min: 20, max: 50, count: 0 },
-      { label: '50-100 kg', min: 50, max: 100, count: 0 },
-      { label: '100-150 kg', min: 100, max: 150, count: 0 },
-      { label: '150+ kg', min: 150, max: Infinity, count: 0 }
-    ] : [
+    // Weight ranges - for cows only
+    const ranges = [
       { label: '0-100 kg', min: 0, max: 100, count: 0 },
       { label: '100-200 kg', min: 100, max: 200, count: 0 },
       { label: '200-300 kg', min: 200, max: 300, count: 0 },
@@ -354,7 +348,7 @@ export class MetricsRenderer {
       <div class="metrics-dashboard">
         ${this.renderOverview(metrics.overview)}
         ${this.renderObjectives(metrics.objectives)}
-        ${this.renderAnimalTypeTabs(metrics.cows, metrics.pigs)}
+        ${this.renderAnimalTypeTabs(metrics.cows)}
       </div>
     `;
 
@@ -376,10 +370,6 @@ export class MetricsRenderer {
           <div class="metric-card">
             <div class="metric-value">${overview.cows}</div>
             <div class="metric-label">Vacas</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">${overview.pigs}</div>
-            <div class="metric-label">Cerdos</div>
           </div>
           <div class="metric-card">
             <div class="metric-value">${overview.syncRate}%</div>
@@ -431,22 +421,18 @@ export class MetricsRenderer {
   }
 
   /**
-   * Render animal type tabs (cows and pigs)
+   * Render animal type tabs (cows only)
    */
-  renderAnimalTypeTabs(cows, pigs) {
+  renderAnimalTypeTabs(cows) {
     return `
       <div class="metrics-section">
         <h3>Métricas por Tipo de Animal</h3>
         <div class="animal-type-tabs">
           <button class="animal-tab active" data-type="cows">Vacas (${cows.count})</button>
-          <button class="animal-tab" data-type="pigs">Cerdos (${pigs.count})</button>
         </div>
         <div class="animal-type-content">
           <div id="cows-metrics" class="animal-metrics active">
             ${this.renderAnimalTypeMetrics(cows)}
-          </div>
-          <div id="pigs-metrics" class="animal-metrics">
-            ${this.renderAnimalTypeMetrics(pigs)}
           </div>
         </div>
       </div>

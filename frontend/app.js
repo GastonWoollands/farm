@@ -30,6 +30,7 @@ const $inlineNotesCow = document.getElementById('inline-notes-cow');
 const $inlineNotesMotherCow = document.getElementById('inline-notes-mother-cow');
 
 // Pigs elements
+/*
 const $registerPigBtn = document.getElementById('register-pig-btn');
 const $registerPigSection = document.getElementById('register-pig-section');
 const $inlineAddPig = document.getElementById('inline-add-pig');
@@ -42,6 +43,7 @@ const $inlineStatusPig = document.getElementById('inline-status-pig');
 const $inlineColorPig = document.getElementById('inline-color-pig');
 const $inlineNotesPig = document.getElementById('inline-notes-pig');
 const $inlineNotesMotherPig = document.getElementById('inline-notes-mother-pig');
+*/
 const $dialog = document.getElementById('register-dialog');
 const $registerForm = document.getElementById('register-form');
 // Get records element when needed
@@ -53,9 +55,11 @@ function getCowsRecordsElement() {
   return document.getElementById('cows-records');
 }
 
+/*
 function getPigsRecordsElement() {
   return document.getElementById('pigs-records');
 }
+*/
 const $statusBadge = document.getElementById('status-badge');
 const $syncStatus = document.getElementById('sync-status');
 const $apiBase = document.getElementById('api-base');
@@ -191,6 +195,7 @@ $registerCowBtn?.addEventListener('click', () => {
 });
 
 // Toggle pig register form visibility
+/*
 $registerPigBtn?.addEventListener('click', () => {
   const isHidden = $registerPigSection.hidden;
   $registerPigSection.hidden = !isHidden;
@@ -202,6 +207,7 @@ $registerPigBtn?.addEventListener('click', () => {
   if ($inlineBornPig) $inlineBornPig.value = new Date().toISOString().split('T')[0];
   $inlineAnimalPig?.focus();
 });
+*/
 
 // Save new cow record locally and attempt sync
 async function handleAddCow(number) {
@@ -237,6 +243,7 @@ async function handleAddCow(number) {
 }
 
 // Save new pig record locally and attempt sync
+/*
 async function handleAddPig(number) {
   const n = (number || '').trim().toUpperCase();
   if (!n) return;
@@ -268,6 +275,7 @@ async function handleAddPig(number) {
   // Refresh metrics when new record is added
   window.refreshMetrics();
 }
+*/
 
 // Cow form submission
 $inlineAddCow?.addEventListener('submit', async (e) => {
@@ -287,6 +295,7 @@ $inlineAddCow?.addEventListener('submit', async (e) => {
 });
 
 // Pig form submission
+/*
 $inlineAddPig?.addEventListener('submit', async (e) => {
   e.preventDefault();
   await handleAddPig($inlineAnimalPig.value);
@@ -302,6 +311,7 @@ $inlineAddPig?.addEventListener('submit', async (e) => {
   if ($inlineNotesMotherPig) $inlineNotesMotherPig.value = '';
   $inlineAnimalPig.focus();
 });
+*/
 
 // Prevent Enter from submitting the form; use it to move to next field
 function setupFormNavigation(form) {
@@ -330,7 +340,7 @@ function setupFormNavigation(form) {
 
 // Setup form navigation for both forms
 setupFormNavigation($inlineAddCow);
-setupFormNavigation($inlineAddPig);
+// setupFormNavigation($inlineAddPig);
 
 // Render cows list from DB
 async function renderCowsList() {
@@ -386,59 +396,12 @@ async function renderCowsList() {
   $pendingCount.textContent = pending > 0 ? `(pending: ${pending})` : '';
 }
 
-// Render pigs list from DB
+// Render pigs list from DB - commented out
+/*
 async function renderPigsList() {
-  const all = await getRecords();
-  const pigs = all.filter(r => r.animalType === 2);
-  const $records = getPigsRecordsElement();
-  if (!$records) {
-    console.error('Pigs records element not found!');
-    return;
-  }
-  
-  $records.innerHTML = '';
-  for (const r of pigs.sort((a,b) => (b.id||0)-(a.id||0))) {
-    const li = document.createElement('li');
-    li.dataset.id = r.id;
-    const left = document.createElement('div');
-    left.textContent = formatDisplayText(r.animalNumber) + '';
-    const right = document.createElement('div');
-    right.textContent = r.synced ? 'Synced' : 'Pending';
-    const del = document.createElement('button');
-    del.className = 'btn';
-    del.textContent = '×';
-    del.title = 'Delete';
-    del.setAttribute('aria-label', 'Delete');
-    del.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const id = r.id;
-      // If synced, attempt server delete first
-      const userKey = getAuthToken();
-      if (r.synced && userKey) {
-        try {
-          await fetch(API_BASE_URL + '/register', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userKey}` },
-            body: JSON.stringify({ animalNumber: r.animalNumber, createdAt: r.createdAt })
-          });
-        } catch (e) { /* ignore network errors, still remove locally */ }
-      }
-      await withUndo(async () => deleteRecord(id), async () => {}, `Deleted ${r.animalNumber}`);
-      await renderPigsList();
-      // Refresh metrics when record is deleted
-      window.refreshMetrics();
-    });
-    const rightWrap = document.createElement('div');
-    rightWrap.className = 'row gap';
-    rightWrap.appendChild(right);
-    rightWrap.appendChild(del);
-    li.appendChild(left);
-    li.appendChild(rightWrap);
-    $records.appendChild(li);
-  }
-  const pending = all.filter(r => !r.synced).length;
-  $pendingCount.textContent = pending > 0 ? `(pending: ${pending})` : '';
+  // Function commented out for cows-only mode
 }
+*/
 
 // Legacy renderList function for backward compatibility
 async function renderList() {
@@ -495,7 +458,7 @@ async function triggerSync(force = false) {
 window.__farm = { triggerSync };
 window.renderList = renderList;
 window.renderCowsList = renderCowsList;
-window.renderPigsList = renderPigsList;
+// window.renderPigsList = renderPigsList;
 window.triggerSync = triggerSync;
 
 // Global function to refresh metrics (called from main.js)

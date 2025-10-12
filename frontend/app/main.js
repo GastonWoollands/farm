@@ -115,19 +115,19 @@ let objectivesInstance = null;
 function setupNavigation() {
   const $metricsTab = document.getElementById('metrics-tab');
   const $cowsTab = document.getElementById('cows-tab');
-  const $pigsTab = document.getElementById('pigs-tab');
+  // const $pigsTab = document.getElementById('pigs-tab');
   const $searchTab = document.getElementById('search-tab');
   const $objectivesTab = document.getElementById('objectives-tab');
   const $metricsPage = document.getElementById('metrics-page');
   const $cowsPage = document.getElementById('cows-page');
-  const $pigsPage = document.getElementById('pigs-page');
+  // const $pigsPage = document.getElementById('pigs-page');
   const $searchPage = document.getElementById('search-page');
   const $objectivesPage = document.getElementById('objectives-page');
 
   // Ensure initial state is correct
   if ($metricsPage) $metricsPage.removeAttribute('hidden');
   if ($cowsPage) $cowsPage.setAttribute('hidden', '');
-  if ($pigsPage) $pigsPage.setAttribute('hidden', '');
+  // if ($pigsPage) $pigsPage.setAttribute('hidden', '');
   if ($searchPage) $searchPage.setAttribute('hidden', '');
   if ($objectivesPage) $objectivesPage.setAttribute('hidden', '');
 
@@ -145,12 +145,12 @@ function setupNavigation() {
   $metricsTab?.addEventListener('click', () => {
     $metricsTab.classList.add('active');
     $cowsTab?.classList.remove('active');
-    $pigsTab?.classList.remove('active');
+    // $pigsTab?.classList.remove('active');
     $searchTab?.classList.remove('active');
     $objectivesTab?.classList.remove('active');
     $metricsPage?.removeAttribute('hidden');
     $cowsPage?.setAttribute('hidden', '');
-    $pigsPage?.setAttribute('hidden', '');
+    // $pigsPage?.setAttribute('hidden', '');
     $searchPage?.setAttribute('hidden', '');
     $objectivesPage?.setAttribute('hidden', '');
     
@@ -163,12 +163,12 @@ function setupNavigation() {
   $cowsTab?.addEventListener('click', () => {
     $cowsTab.classList.add('active');
     $metricsTab?.classList.remove('active');
-    $pigsTab?.classList.remove('active');
+    // $pigsTab?.classList.remove('active');
     $searchTab?.classList.remove('active');
     $objectivesTab?.classList.remove('active');
     $cowsPage?.removeAttribute('hidden');
     $metricsPage?.setAttribute('hidden', '');
-    $pigsPage?.setAttribute('hidden', '');
+    // $pigsPage?.setAttribute('hidden', '');
     $searchPage?.setAttribute('hidden', '');
     $objectivesPage?.setAttribute('hidden', '');
     
@@ -178,6 +178,7 @@ function setupNavigation() {
     }
   });
 
+  /*
   $pigsTab?.addEventListener('click', () => {
     $pigsTab.classList.add('active');
     $metricsTab?.classList.remove('active');
@@ -195,17 +196,18 @@ function setupNavigation() {
       window.renderPigsList();
     }
   });
+  */
 
   $searchTab?.addEventListener('click', () => {
     $searchTab.classList.add('active');
     $metricsTab?.classList.remove('active');
     $cowsTab?.classList.remove('active');
-    $pigsTab?.classList.remove('active');
+    // $pigsTab?.classList.remove('active');
     $objectivesTab?.classList.remove('active');
     $searchPage?.removeAttribute('hidden');
     $metricsPage?.setAttribute('hidden', '');
     $cowsPage?.setAttribute('hidden', '');
-    $pigsPage?.setAttribute('hidden', '');
+    // $pigsPage?.setAttribute('hidden', '');
     $objectivesPage?.setAttribute('hidden', '');
     
     // Perform initial search to show all animals
@@ -218,12 +220,12 @@ function setupNavigation() {
     $objectivesTab.classList.add('active');
     $metricsTab?.classList.remove('active');
     $cowsTab?.classList.remove('active');
-    $pigsTab?.classList.remove('active');
+    // $pigsTab?.classList.remove('active');
     $searchTab?.classList.remove('active');
     $objectivesPage?.removeAttribute('hidden');
     $metricsPage?.setAttribute('hidden', '');
     $cowsPage?.setAttribute('hidden', '');
-    $pigsPage?.setAttribute('hidden', '');
+    // $pigsPage?.setAttribute('hidden', '');
     $searchPage?.setAttribute('hidden', '');
     
     // Render objectives when switching to objectives tab
