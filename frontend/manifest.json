@@ -1,6 +1,6 @@
 {
-  "name": "Farm Register",
-  "short_name": "FarmReg",
+  "name": "Contando vacas",
+  "short_name": "Contando vacas",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b1220",
