@@ -16,6 +16,34 @@ function normalizeString(value) {
   return trimmed.length > 0 ? trimmed.toUpperCase() : null;
 }
 
+/**
+ * Get user configuration from localStorage
+ * @returns {Object} - User configuration object
+ */
+function getUserConfig() {
+  const defaultConfig = {
+    animalIdPrefix: 'AC988',
+    motherIdPrefix: 'AC988',
+    fatherIdPrefix: ''
+  };
+  
+  try {
+    const stored = localStorage.getItem('farm:userConfig');
+    return stored ? { ...defaultConfig, ...JSON.parse(stored) } : defaultConfig;
+  } catch {
+    return defaultConfig;
+  }
+}
+
+/**
+ * Update global configuration
+ * @param {Object} config - Configuration object
+ */
+window.updateGlobalConfig = function(config) {
+  // This function can be called by the objectives manager to update global state
+  console.log('Global config updated:', config);
+};
+
 import { addRecord, getRecords, markAsSynced, deleteRecord, getRecentSynced } from './db.js';
 import { getAuthToken } from './app/auth.js';
 
@@ -199,10 +227,14 @@ $registerCowBtn?.addEventListener('click', () => {
   const isHidden = $registerCowSection.hidden;
   $registerCowSection.hidden = !isHidden;
   if (!isHidden) return;
-  // Prefill both animal and mother id with defau convenience
-  if ($inlineAnimalCow) $inlineAnimalCow.value = DEFAULT_PREFIX;
-  if ($inlineMotherCow) $inlineMotherCow.value = DEFAULT_PREFIX;
-  if ($inlineFatherCow) $inlineFatherCow.value = DEFAULT_FATHER_PREFIX;
+  
+  // Get user configuration
+  const userConfig = getUserConfig();
+  
+  // Prefill both animal and mother id with user-defined prefixes
+  if ($inlineAnimalCow) $inlineAnimalCow.value = userConfig.animalIdPrefix;
+  if ($inlineMotherCow) $inlineMotherCow.value = userConfig.motherIdPrefix;
+  if ($inlineFatherCow) $inlineFatherCow.value = userConfig.fatherIdPrefix;
   // Set default date to today
   if ($inlineBornCow) $inlineBornCow.value = new Date().toISOString().split('T')[0];
   $inlineAnimalCow?.focus();
@@ -295,10 +327,14 @@ async function handleAddPig(number) {
 $inlineAddCow?.addEventListener('submit', async (e) => {
   e.preventDefault();
   await handleAddCow($inlineAnimalCow.value);
+  
+  // Get user configuration for form reset
+  const userConfig = getUserConfig();
+  
   // Always restore suggested prefixes for rapid multiple entries
-  $inlineAnimalCow.value = DEFAULT_PREFIX;
-  if ($inlineMotherCow) $inlineMotherCow.value = DEFAULT_PREFIX;
-  if ($inlineFatherCow) $inlineFatherCow.value = DEFAULT_FATHER_PREFIX;
+  $inlineAnimalCow.value = userConfig.animalIdPrefix;
+  if ($inlineMotherCow) $inlineMotherCow.value = userConfig.motherIdPrefix;
+  if ($inlineFatherCow) $inlineFatherCow.value = userConfig.fatherIdPrefix;
   if ($inlineBornCow) $inlineBornCow.value = new Date().toISOString().split('T')[0];
   if ($inlineWeightCow) $inlineWeightCow.value = '';
   if ($inlineGenderCow) $inlineGenderCow.value = '';

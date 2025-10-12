@@ -46,6 +46,44 @@ export class ObjectivesManager {
   }
 
   /**
+   * Load user configuration from localStorage
+   */
+  loadUserConfig() {
+    const defaultConfig = {
+      animalIdPrefix: 'AC988',
+      motherIdPrefix: 'AC988',
+      fatherIdPrefix: ''
+    };
+    
+    try {
+      const stored = localStorage.getItem('farm:userConfig');
+      return stored ? { ...defaultConfig, ...JSON.parse(stored) } : defaultConfig;
+    } catch {
+      return defaultConfig;
+    }
+  }
+
+  /**
+   * Save user configuration to localStorage
+   */
+  saveUserConfig() {
+    localStorage.setItem('farm:userConfig', JSON.stringify(this.userConfig));
+  }
+
+  /**
+   * Update user configuration
+   */
+  updateUserConfig(newConfig) {
+    this.userConfig = { ...this.userConfig, ...newConfig };
+    this.saveUserConfig();
+    
+    // Update global configuration for immediate use
+    if (window.updateGlobalConfig) {
+      window.updateGlobalConfig(this.userConfig);
+    }
+  }
+
+  /**
    * Calculate objective-based metrics (same logic as metrics module)
    */
   async calculateObjectiveMetrics() {
@@ -140,20 +178,38 @@ export class ObjectivesManager {
    * Render the objectives page
    */
   async render(containerId) {
-    this.container = document.getElementById(containerId);
-    if (!this.container) return;
+    try {
+      console.log('Starting objectives render with containerId:', containerId);
+      this.container = document.getElementById(containerId);
+      if (!this.container) {
+        console.error('Objectives container not found:', containerId);
+        return;
+      }
 
-    const objectives = await this.calculateObjectiveMetrics();
-    
-    this.container.innerHTML = `
-      <div class="objectives-dashboard">
-        ${this.renderObjectivesHeader()}
-        ${this.renderObjectivesProgress(objectives)}
-        ${this.renderObjectivesSettings()}
-      </div>
-    `;
+      console.log('Container found, calculating objectives...');
+      const objectives = await this.calculateObjectiveMetrics();
+      console.log('Objectives calculated:', objectives);
+      
+      console.log('Rendering objectives HTML...');
+      this.container.innerHTML = `
+        <div class="objectives-dashboard">
+          ${this.renderObjectivesHeader()}
+          ${this.renderObjectivesSettings()}
+          ${this.renderObjectivesProgress(objectives)}
+          ${this.renderUserConfiguration()}
+        </div>
+      `;
 
-    this.setupEventListeners();
+      console.log('Setting up event listeners...');
+      this.setupEventListeners();
+      console.log('Objectives render completed successfully');
+    } catch (error) {
+      console.error('Error rendering objectives:', error);
+      console.error('Error stack:', error.stack);
+      if (this.container) {
+        this.container.innerHTML = '<div class="error">Error loading objectives. Please refresh the page.</div>';
+      }
+    }
   }
 
   /**
@@ -169,6 +225,77 @@ export class ObjectivesManager {
             Los objetivos te ayudan a mantener el enfoque y medir el progreso.
           </p>
         </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render user configuration section
+   */
+  renderUserConfiguration() {
+    const userConfig = this.userConfig || this.loadUserConfig();
+    
+    return `
+      <div class="objectives-config-section">
+        <div class="objectives-header">
+          <div class="objectives-summary">
+            <h3>Configuración de Usuario</h3>
+            <p class="objectives-description">
+              Personaliza los prefijos para tus identificadores de animales. Estos prefijos se utilizan automáticamente 
+              al registrar nuevos animales, facilitando la identificación y organización de tu ganado. Puedes cambiar 
+              estos valores en cualquier momento y se aplicarán a todos los nuevos registros.
+            </p>
+          </div>
+        </div>
+        
+        <form id="user-config-form" class="objectives-settings-form">
+          <div class="settings-grid">
+            <div class="setting-group">
+              <label for="config-animal-prefix">Prefijo ID Animal</label>
+              <input 
+                id="config-animal-prefix" 
+                type="text" 
+                value="${userConfig.animalIdPrefix || 'AC988'}" 
+                placeholder="e.g., AC988"
+                autocomplete="off"
+              >
+              <div class="setting-description">Prefijo usado para nuevos registros de animales</div>
+            </div>
+            
+            <div class="setting-group">
+              <label for="config-mother-prefix">Prefijo ID Madre</label>
+              <input 
+                id="config-mother-prefix" 
+                type="text" 
+                value="${userConfig.motherIdPrefix || 'AC988'}" 
+                placeholder="e.g., AC988"
+                autocomplete="off"
+              >
+              <div class="setting-description">Prefijo usado para el campo Madre ID</div>
+            </div>
+            
+            <div class="setting-group">
+              <label for="config-father-prefix">Prefijo ID Padre</label>
+              <input 
+                id="config-father-prefix" 
+                type="text" 
+                value="${userConfig.fatherIdPrefix || ''}" 
+                placeholder="e.g., Repaso (opcional)"
+                autocomplete="off"
+              >
+              <div class="setting-description">Prefijo usado para el campo Padre ID (opcional)</div>
+            </div>
+          </div>
+          
+          <div class="settings-actions">
+            <button type="submit" class="save-objectives-btn">
+              Guardar Configuración
+            </button>
+            <button type="button" class="reset-objectives-btn" id="reset-config-btn">
+              Restaurar Valores por Defecto
+            </button>
+          </div>
+        </form>
       </div>
     `;
   }
@@ -229,7 +356,7 @@ export class ObjectivesManager {
    * Render objectives settings
    */
   renderObjectivesSettings() {
-    const objectives = this.objectives;
+    const objectives = this.objectives || this.loadObjectives();
     
     return `
       <div class="objectives-settings-section">
@@ -238,13 +365,13 @@ export class ObjectivesManager {
           <p class="section-subtitle">Establece tus metas anuales para el crecimiento del ganado</p>
         </div>
         
-        <div class="objectives-settings-form">
+        <form id="objectives-settings-form" class="objectives-settings-form">
           <div class="settings-grid">
             <div class="setting-group">
               <label for="target-registrations">
                 Registros Objetivo
               </label>
-              <input type="number" id="target-registrations" value="${objectives.targetRegistrations}" min="1" placeholder="Ej: 100">
+              <input type="number" id="target-registrations" value="${objectives.targetRegistrations || 100}" min="1" placeholder="Ej: 100">
               <span class="setting-description">Total de animales a registrar este año</span>
             </div>
             
@@ -252,7 +379,7 @@ export class ObjectivesManager {
               <label for="target-weight">
                 Peso Objetivo (kg)
               </label>
-              <input type="number" id="target-weight" value="${objectives.targetWeight}" min="1" step="0.1" placeholder="Ej: 300">
+              <input type="number" id="target-weight" value="${objectives.targetWeight || 300}" min="1" step="0.1" placeholder="Ej: 300">
               <span class="setting-description">Peso promedio objetivo por animal</span>
             </div>
             
@@ -260,7 +387,7 @@ export class ObjectivesManager {
               <label for="target-births">
                 Nacimientos Objetivo
               </label>
-              <input type="number" id="target-births" value="${objectives.targetBirths}" min="1" placeholder="Ej: 50">
+              <input type="number" id="target-births" value="${objectives.targetBirths || 50}" min="1" placeholder="Ej: 50">
               <span class="setting-description">Número de nacimientos esperados</span>
             </div>
             
@@ -268,20 +395,20 @@ export class ObjectivesManager {
               <label for="target-mothers">
                 Madres Objetivo
               </label>
-              <input type="number" id="target-mothers" value="${objectives.targetMothers}" min="1" placeholder="Ej: 20">
+              <input type="number" id="target-mothers" value="${objectives.targetMothers || 20}" min="1" placeholder="Ej: 20">
               <span class="setting-description">Número de madres reproductoras</span>
             </div>
           </div>
           
           <div class="settings-actions">
-            <button id="save-objectives" class="btn primary save-objectives-btn">
+            <button type="submit" id="save-objectives" class="btn primary save-objectives-btn">
               Guardar Objetivos
             </button>
-            <button id="reset-objectives" class="btn secondary reset-objectives-btn">
+            <button type="button" id="reset-objectives" class="btn secondary reset-objectives-btn">
               Restaurar Valores por Defecto
             </button>
           </div>
-        </div>
+        </form>
       </div>
     `;
   }
@@ -290,11 +417,14 @@ export class ObjectivesManager {
    * Setup event listeners
    */
   setupEventListeners() {
-    const saveBtn = document.getElementById('save-objectives');
+    // Objectives form
+    const objectivesForm = document.getElementById('objectives-settings-form');
     const resetBtn = document.getElementById('reset-objectives');
     
-    if (saveBtn) {
-      saveBtn.addEventListener('click', () => {
+    if (objectivesForm) {
+      objectivesForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        
         const newObjectives = {
           targetRegistrations: parseInt(document.getElementById('target-registrations').value) || 100,
           targetWeight: parseFloat(document.getElementById('target-weight').value) || 300,
@@ -338,6 +468,46 @@ export class ObjectivesManager {
         }
       });
     }
+
+    // User configuration form
+    const configForm = document.getElementById('user-config-form');
+    const resetConfigBtn = document.getElementById('reset-config-btn');
+    
+    if (configForm) {
+      configForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        
+        const newConfig = {
+          animalIdPrefix: document.getElementById('config-animal-prefix').value.trim().toUpperCase() || 'AC988',
+          motherIdPrefix: document.getElementById('config-mother-prefix').value.trim().toUpperCase() || 'AC988',
+          fatherIdPrefix: document.getElementById('config-father-prefix').value.trim().toUpperCase() || ''
+        };
+        
+        this.updateUserConfig(newConfig);
+        this.render('objectives-container');
+        
+        // Show success message
+        this.showSuccess('Configuración actualizada exitosamente');
+      });
+    }
+    
+    if (resetConfigBtn) {
+      resetConfigBtn.addEventListener('click', () => {
+        if (confirm('¿Estás seguro de que quieres restaurar la configuración por defecto? Esto sobrescribirá tus prefijos actuales.')) {
+          const defaultConfig = {
+            animalIdPrefix: 'AC988',
+            motherIdPrefix: 'AC988',
+            fatherIdPrefix: ''
+          };
+          
+          this.updateUserConfig(defaultConfig);
+          this.render('objectives-container');
+          
+          // Show success message
+          this.showSuccess('Configuración restaurada a valores por defecto');
+        }
+      });
+    }
   }
 
   /**
@@ -366,6 +536,6 @@ export function initObjectives() {
   
   return {
     manager: objectivesManager,
-    render: () => objectivesManager.render('objectives-container')
+    render: (containerId) => objectivesManager.render(containerId || 'objectives-container')
   };
 }

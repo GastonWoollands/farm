@@ -230,7 +230,7 @@ function setupNavigation() {
     
     // Render objectives when switching to objectives tab
     if (objectivesInstance) {
-      objectivesInstance.render();
+      objectivesInstance.render('objectives-container');
     }
   });
 

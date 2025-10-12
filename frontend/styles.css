@@ -298,6 +298,13 @@ dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; col
   font-style: italic;
 }
 
+.objectives-config-section {
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 24px;
+}
+
 .objectives-settings-section {
   background: #0b1220;
   border: 1px solid #1f2937;
@@ -526,7 +533,7 @@ dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; col
   .settings-actions { flex-direction: column; }
   .save-objectives-btn, .reset-objectives-btn { width: 100%; justify-content: center; }
   .objectives-header { padding: 16px; }
-  .objectives-progress-section, .objectives-settings-section { padding: 16px; }
+  .objectives-progress-section, .objectives-settings-section, .objectives-config-section { padding: 16px; }
   .objective-card { padding: 16px; }
   .objective-card-header { gap: 8px; }
   .objective-icon { width: 32px; height: 32px; font-size: 16px; }
