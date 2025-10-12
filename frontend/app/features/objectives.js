@@ -147,6 +147,7 @@ export class ObjectivesManager {
     
     this.container.innerHTML = `
       <div class="objectives-dashboard">
+        ${this.renderObjectivesHeader()}
         ${this.renderObjectivesProgress(objectives)}
         ${this.renderObjectivesSettings()}
       </div>
@@ -156,17 +157,37 @@ export class ObjectivesManager {
   }
 
   /**
+   * Render objectives header with summary
+   */
+  renderObjectivesHeader() {
+    return `
+      <div class="objectives-header">
+        <div class="objectives-summary">
+          <h3>Resumen de Objetivos</h3>
+          <p class="objectives-description">
+            Establece y monitorea tus objetivos anuales para el crecimiento de tu ganado. 
+            Los objetivos te ayudan a mantener el enfoque y medir el progreso.
+          </p>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
    * Render objectives progress section
    */
   renderObjectivesProgress(objectives) {
     return `
       <div class="objectives-progress-section">
-        <h3>Progreso Actual</h3>
+        <div class="section-header">
+          <h3>Progreso Actual</h3>
+          <p class="section-subtitle">Monitorea tu avance hacia los objetivos establecidos</p>
+        </div>
         <div class="objectives-grid">
-          ${this.renderObjectiveCard('Registros', objectives.registrations)}
+          ${this.renderObjectiveCard('Registros', objectives.registrations, 'animales')}
           ${this.renderObjectiveCard('Peso Promedio', objectives.weight, 'kg')}
-          ${this.renderObjectiveCard('Nacimientos', objectives.births)}
-          ${this.renderObjectiveCard('Madres', objectives.mothers)}
+          ${this.renderObjectiveCard('Nacimientos', objectives.births, 'animales')}
+          ${this.renderObjectiveCard('Madres', objectives.mothers, 'madres')}
         </div>
       </div>
     `;
@@ -177,19 +198,28 @@ export class ObjectivesManager {
    */
   renderObjectiveCard(label, data, unit = '') {
     const progressColor = data.progress >= 100 ? '#10b981' : data.progress >= 75 ? '#f59e0b' : '#ef4444';
+    const progressIcon = data.progress >= 100 ? '✓' : data.progress >= 75 ? '●' : '○';
     
     return `
       <div class="objective-card">
-        <div class="objective-header">
-          <span class="objective-label">${label}</span>
-          <span class="objective-progress">${data.progress}%</span>
+        <div class="objective-card-header">
+          <div class="objective-icon">${progressIcon}</div>
+          <div class="objective-info">
+            <span class="objective-label">${label}</span>
+            <span class="objective-progress">${data.progress}%</span>
+          </div>
         </div>
         <div class="objective-bar">
           <div class="objective-bar-fill" style="width: ${Math.min(100, data.progress)}%; background-color: ${progressColor};"></div>
         </div>
         <div class="objective-values">
-          <span class="objective-current">${data.current}${unit}</span>
-          <span class="objective-target">/ ${data.target}${unit}</span>
+          <span class="objective-current">${data.current}</span>
+          <span class="objective-unit">${unit}</span>
+          <span class="objective-separator">de</span>
+          <span class="objective-target">${data.target}</span>
+        </div>
+        <div class="objective-status">
+          ${data.progress >= 100 ? 'Objetivo alcanzado' : data.progress >= 75 ? 'Cerca del objetivo' : 'En progreso'}
         </div>
       </div>
     `;
@@ -203,25 +233,54 @@ export class ObjectivesManager {
     
     return `
       <div class="objectives-settings-section">
-        <h3>Configurar Objetivos</h3>
-        <div class="objectives-settings">
-          <div class="setting-group">
-            <label for="target-registrations">Registros Objetivo:</label>
-            <input type="number" id="target-registrations" value="${objectives.targetRegistrations}" min="1">
+        <div class="section-header">
+          <h3>Configurar Objetivos</h3>
+          <p class="section-subtitle">Establece tus metas anuales para el crecimiento del ganado</p>
+        </div>
+        
+        <div class="objectives-settings-form">
+          <div class="settings-grid">
+            <div class="setting-group">
+              <label for="target-registrations">
+                Registros Objetivo
+              </label>
+              <input type="number" id="target-registrations" value="${objectives.targetRegistrations}" min="1" placeholder="Ej: 100">
+              <span class="setting-description">Total de animales a registrar este año</span>
+            </div>
+            
+            <div class="setting-group">
+              <label for="target-weight">
+                Peso Objetivo (kg)
+              </label>
+              <input type="number" id="target-weight" value="${objectives.targetWeight}" min="1" step="0.1" placeholder="Ej: 300">
+              <span class="setting-description">Peso promedio objetivo por animal</span>
+            </div>
+            
+            <div class="setting-group">
+              <label for="target-births">
+                Nacimientos Objetivo
+              </label>
+              <input type="number" id="target-births" value="${objectives.targetBirths}" min="1" placeholder="Ej: 50">
+              <span class="setting-description">Número de nacimientos esperados</span>
+            </div>
+            
+            <div class="setting-group">
+              <label for="target-mothers">
+                Madres Objetivo
+              </label>
+              <input type="number" id="target-mothers" value="${objectives.targetMothers}" min="1" placeholder="Ej: 20">
+              <span class="setting-description">Número de madres reproductoras</span>
+            </div>
           </div>
-          <div class="setting-group">
-            <label for="target-weight">Peso Objetivo (kg):</label>
-            <input type="number" id="target-weight" value="${objectives.targetWeight}" min="1" step="0.1">
+          
+          <div class="settings-actions">
+            <button id="save-objectives" class="btn primary save-objectives-btn">
+              Guardar Objetivos
+            </button>
+            <button id="reset-objectives" class="btn secondary reset-objectives-btn">
+              Restaurar Valores por Defecto
+            </button>
           </div>
-          <div class="setting-group">
-            <label for="target-births">Nacimientos Objetivo:</label>
-            <input type="number" id="target-births" value="${objectives.targetBirths}" min="1">
-          </div>
-          <div class="setting-group">
-            <label for="target-mothers">Madres Objetivo:</label>
-            <input type="number" id="target-mothers" value="${objectives.targetMothers}" min="1">
-          </div>
-          <button id="save-objectives" class="btn primary">Guardar Objetivos</button>
         </div>
       </div>
     `;
@@ -232,6 +291,8 @@ export class ObjectivesManager {
    */
   setupEventListeners() {
     const saveBtn = document.getElementById('save-objectives');
+    const resetBtn = document.getElementById('reset-objectives');
+    
     if (saveBtn) {
       saveBtn.addEventListener('click', () => {
         const newObjectives = {
@@ -250,6 +311,30 @@ export class ObjectivesManager {
         // Refresh metrics if available
         if (window.refreshMetrics) {
           window.refreshMetrics();
+        }
+      });
+    }
+    
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        if (confirm('¿Estás seguro de que quieres restaurar los valores por defecto? Esto sobrescribirá tus objetivos actuales.')) {
+          const defaultObjectives = {
+            targetRegistrations: 100,
+            targetWeight: 300,
+            targetBirths: 50,
+            targetMothers: 20
+          };
+          
+          this.updateObjectives(defaultObjectives);
+          this.render('objectives-container');
+          
+          // Show success message
+          this.showSuccess('Objetivos restaurados a valores por defecto');
+          
+          // Refresh metrics if available
+          if (window.refreshMetrics) {
+            window.refreshMetrics();
+          }
         }
       });
     }

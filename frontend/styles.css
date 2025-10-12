@@ -136,11 +136,262 @@ dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; col
 .timeline-label { font-size: 10px; color: var(--muted); margin-top: 4px; transform: rotate(-45deg); white-space: nowrap; }
 .timeline-count { font-size: 10px; color: var(--text); margin-top: 2px; }
 
-.objectives-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-.setting-group { display: flex; flex-direction: column; gap: 6px; }
-.setting-group label { font-size: 12px; color: var(--muted); font-weight: 600; }
-.setting-group input { padding: 8px 12px; border: 1px solid #334155; border-radius: 6px; background: #0b1220; color: var(--text); font-size: 14px; }
-.setting-group input:focus { outline: none; border-color: var(--accent); }
+/* Enhanced Objectives Styles */
+.objectives-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.objectives-header {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 8px;
+}
+
+.objectives-summary h3 {
+  color: var(--accent-2);
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+
+.objectives-description {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.section-header {
+  margin-bottom: 20px;
+}
+
+.section-header h3 {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+
+.section-subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.objectives-progress-section {
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.objectives-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
+  gap: 20px; 
+}
+
+.objective-card { 
+  background: #111827; 
+  border: 1px solid #374151; 
+  border-radius: 12px; 
+  padding: 20px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.objective-card:hover {
+  border-color: var(--accent-2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.objective-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.objective-icon {
+  font-size: 18px;
+  font-weight: bold;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 8px;
+  color: var(--accent-2);
+}
+
+.objective-info {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.objective-label { 
+  font-weight: 600; 
+  color: var(--text);
+  font-size: 14px;
+}
+
+.objective-progress { 
+  font-weight: bold; 
+  color: var(--accent-2);
+  font-size: 16px;
+}
+
+.objective-bar { 
+  height: 8px; 
+  background: #1f2937; 
+  border-radius: 4px; 
+  overflow: hidden; 
+  margin-bottom: 12px;
+}
+
+.objective-bar-fill { 
+  height: 100%; 
+  transition: width 0.6s ease;
+  border-radius: 4px;
+}
+
+.objective-values { 
+  display: flex; 
+  align-items: center; 
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.objective-current { 
+  font-weight: bold; 
+  color: var(--text);
+  font-size: 18px;
+}
+
+.objective-unit {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.objective-separator {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.objective-target { 
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.objective-status {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.objectives-settings-section {
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.objectives-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
+  gap: 20px; 
+}
+
+.setting-group { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 8px;
+}
+
+.setting-group label { 
+  font-size: 14px; 
+  color: var(--text); 
+  font-weight: 600;
+}
+
+.setting-group input { 
+  padding: 12px 16px; 
+  border: 1px solid #374151; 
+  border-radius: 8px; 
+  background: #111827; 
+  color: var(--text); 
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.setting-group input:focus {
+  outline: none;
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.setting-description {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  padding-top: 16px;
+  border-top: 1px solid #1f2937;
+}
+
+.save-objectives-btn, .reset-objectives-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.save-objectives-btn {
+  background: var(--accent-2);
+  color: white;
+  border: none;
+}
+
+.save-objectives-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.reset-objectives-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid #374151;
+}
+
+.reset-objectives-btn:hover {
+  background: #374151;
+  color: var(--text);
+  transform: translateY(-1px);
+}
 
 .no-data { text-align: center; color: var(--muted); font-style: italic; padding: 20px; }
 
@@ -271,7 +522,14 @@ dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; col
   .metrics-grid, .objectives-grid, .distribution-grid, .weight-stats, .mother-stats { grid-template-columns: 1fr; }
   .timeline-chart { height: 80px; }
   .timeline-label { transform: none; font-size: 8px; }
-  .objectives-settings { grid-template-columns: 1fr; }
+  .settings-grid { grid-template-columns: 1fr; }
+  .settings-actions { flex-direction: column; }
+  .save-objectives-btn, .reset-objectives-btn { width: 100%; justify-content: center; }
+  .objectives-header { padding: 16px; }
+  .objectives-progress-section, .objectives-settings-section { padding: 16px; }
+  .objective-card { padding: 16px; }
+  .objective-card-header { gap: 8px; }
+  .objective-icon { width: 32px; height: 32px; font-size: 16px; }
   .nav-tabs { 
     flex-direction: row; 
     flex-wrap: wrap;
