@@ -39,7 +39,7 @@ export class AnimalSearch {
               type="text" 
               id="animal-search-input" 
               class="search-input" 
-              placeholder="Buscar por ID, madre, notas..."
+              placeholder="Buscar por ID, madre, padre, notas..."
               autocomplete="off"
               aria-label="Buscar animales"
             />
@@ -169,6 +169,7 @@ export class AnimalSearch {
       const searchableFields = [
         record.animalNumber,
         record.motherId,
+        record.fatherId,
         record.notes,
         record.notesMother,
         record.gender,
@@ -233,6 +234,7 @@ export class AnimalSearch {
         <div class="animal-card-body">
           <div class="animal-details">
             ${record.motherId ? `<div class="detail-item"><span class="detail-label">Madre:</span> ${this.formatDisplayText(record.motherId)}</div>` : ''}
+            ${record.fatherId ? `<div class="detail-item"><span class="detail-label">Padre:</span> ${this.formatDisplayText(record.fatherId)}</div>` : ''}
             ${record.bornDate ? `<div class="detail-item"><span class="detail-label">Nacimiento:</span> ${this.formatDate(record.bornDate)}</div>` : ''}
             ${record.weight ? `<div class="detail-item"><span class="detail-label">Peso:</span> ${record.weight} kg</div>` : ''}
             ${record.gender ? `<div class="detail-item"><span class="detail-label">Sexo:</span> ${this.formatGender(record.gender)}</div>` : ''}
@@ -401,6 +403,10 @@ export class AnimalSearch {
               <input id="edit-mother-id" type="text" value="${record.motherId || ''}" autocomplete="off">
             </div>
             <div class="edit-form-field">
+              <label for="edit-father-id">ID del Padre</label>
+              <input id="edit-father-id" type="text" value="${record.fatherId || ''}" placeholder="e.g., Repaso, 2399" autocomplete="off">
+            </div>
+            <div class="edit-form-field">
               <label for="edit-born-date">Fecha de Nacimiento</label>
               <input id="edit-born-date" type="date" value="${record.bornDate || ''}" autocomplete="off">
             </div>
@@ -510,6 +516,7 @@ export class AnimalSearch {
         animalNumber,
         animalType: parseInt(document.getElementById('edit-animal-type').value),
         motherId: document.getElementById('edit-mother-id').value.trim().toUpperCase() || null,
+        fatherId: document.getElementById('edit-father-id').value.trim().toUpperCase() || null,
         bornDate: document.getElementById('edit-born-date').value || null,
         weight: document.getElementById('edit-weight').value ? parseFloat(document.getElementById('edit-weight').value) : null,
         gender: document.getElementById('edit-gender').value.toUpperCase() || null,

@@ -3,6 +3,7 @@ const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
 const ENDPOINT_VALIDATE = '/validate-key';
 const ENDPOINT_REGISTER = '/register';
 const DEFAULT_PREFIX = 'AC988';
+const DEFAULT_FATHER_PREFIX = '';
 
 import { addRecord, getRecords, markAsSynced, deleteRecord, getRecentSynced } from './db.js';
 import { getAuthToken } from './app/auth.js';
@@ -21,6 +22,7 @@ const $registerCowSection = document.getElementById('register-cow-section');
 const $inlineAddCow = document.getElementById('inline-add-cow');
 const $inlineAnimalCow = document.getElementById('inline-animal-cow');
 const $inlineMotherCow = document.getElementById('inline-mother-cow');
+const $inlineFatherCow = document.getElementById('inline-father-cow');
 const $inlineBornCow = document.getElementById('inline-born-cow');
 const $inlineWeightCow = document.getElementById('inline-weight-cow');
 const $inlineGenderCow = document.getElementById('inline-gender-cow');
@@ -186,9 +188,10 @@ $registerCowBtn?.addEventListener('click', () => {
   const isHidden = $registerCowSection.hidden;
   $registerCowSection.hidden = !isHidden;
   if (!isHidden) return;
-  // Prefill both animal and mother id with default prefix for convenience
+  // Prefill both animal and mother id with defau convenience
   if ($inlineAnimalCow) $inlineAnimalCow.value = DEFAULT_PREFIX;
   if ($inlineMotherCow) $inlineMotherCow.value = DEFAULT_PREFIX;
+  if ($inlineFatherCow) $inlineFatherCow.value = '';
   // Set default date to today
   if ($inlineBornCow) $inlineBornCow.value = new Date().toISOString().split('T')[0];
   $inlineAnimalCow?.focus();
@@ -215,6 +218,7 @@ async function handleAddCow(number) {
   if (!n) return;
   const userKey = getAuthToken(); // Use Firebase token instead of stored key
   const motherVal = ($inlineMotherCow?.value || '').trim().toUpperCase() || null;
+  const fatherVal = ($inlineFatherCow?.value || '').trim().toUpperCase() || null;
   const bornVal = ($inlineBornCow?.value || '').trim() || null;
   const weightVal = $inlineWeightCow?.value ? parseFloat($inlineWeightCow.value) : null;
   const genderVal = ($inlineGenderCow?.value || '').toUpperCase() || null;
@@ -227,6 +231,7 @@ async function handleAddCow(number) {
     animalType: 1, // 1 = cow
     userKey,
     motherId: motherVal,
+    fatherId: fatherVal,
     bornDate: bornVal,
     weight: (weightVal !== null && !isNaN(weightVal) && isFinite(weightVal)) ? weightVal : null,
     gender: genderVal,
@@ -284,6 +289,7 @@ $inlineAddCow?.addEventListener('submit', async (e) => {
   // Always restore suggested prefixes for rapid multiple entries
   $inlineAnimalCow.value = DEFAULT_PREFIX;
   if ($inlineMotherCow) $inlineMotherCow.value = DEFAULT_PREFIX;
+  if ($inlineFatherCow) $inlineFatherCow.value = '';
   if ($inlineBornCow) $inlineBornCow.value = new Date().toISOString().split('T')[0];
   if ($inlineWeightCow) $inlineWeightCow.value = '';
   if ($inlineGenderCow) $inlineGenderCow.value = '';
