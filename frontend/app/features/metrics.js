@@ -355,7 +355,6 @@ export class MetricsRenderer {
         ${this.renderOverview(metrics.overview)}
         ${this.renderObjectives(metrics.objectives)}
         ${this.renderAnimalTypeTabs(metrics.cows, metrics.pigs)}
-        ${this.renderObjectivesSettings()}
       </div>
     `;
 
@@ -386,6 +385,46 @@ export class MetricsRenderer {
             <div class="metric-value">${overview.syncRate}%</div>
             <div class="metric-label">Tasa de Sincronización</div>
           </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render objectives section
+   */
+  renderObjectives(objectives) {
+    return `
+      <div class="metrics-section">
+        <h3>Objetivos del Año</h3>
+        <div class="objectives-grid">
+          ${this.renderObjectiveCard('Registros', objectives.registrations)}
+          ${this.renderObjectiveCard('Peso Promedio', objectives.weight, 'kg')}
+          ${this.renderObjectiveCard('Nacimientos', objectives.births)}
+          ${this.renderObjectiveCard('Madres', objectives.mothers)}
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render individual objective card
+   */
+  renderObjectiveCard(label, data, unit = '') {
+    const progressColor = data.progress >= 100 ? '#10b981' : data.progress >= 75 ? '#f59e0b' : '#ef4444';
+    
+    return `
+      <div class="objective-card">
+        <div class="objective-header">
+          <span class="objective-label">${label}</span>
+          <span class="objective-progress">${data.progress}%</span>
+        </div>
+        <div class="objective-bar">
+          <div class="objective-bar-fill" style="width: ${Math.min(100, data.progress)}%; background-color: ${progressColor};"></div>
+        </div>
+        <div class="objective-values">
+          <span class="objective-current">${data.current}${unit}</span>
+          <span class="objective-target">/ ${data.target}${unit}</span>
         </div>
       </div>
     `;
@@ -457,45 +496,6 @@ export class MetricsRenderer {
   }
 
 
-  /**
-   * Render objectives section
-   */
-  renderObjectives(objectives) {
-    return `
-      <div class="metrics-section">
-        <h3>Objetivos del Año</h3>
-        <div class="objectives-grid">
-          ${this.renderObjectiveCard('Registros', objectives.registrations)}
-          ${this.renderObjectiveCard('Peso Promedio', objectives.weight, 'kg')}
-          ${this.renderObjectiveCard('Nacimientos', objectives.births)}
-          ${this.renderObjectiveCard('Madres', objectives.mothers)}
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Render individual objective card
-   */
-  renderObjectiveCard(label, data, unit = '') {
-    const progressColor = data.progress >= 100 ? '#10b981' : data.progress >= 75 ? '#f59e0b' : '#ef4444';
-    
-    return `
-      <div class="objective-card">
-        <div class="objective-header">
-          <span class="objective-label">${label}</span>
-          <span class="objective-progress">${data.progress}%</span>
-        </div>
-        <div class="objective-bar">
-          <div class="objective-bar-fill" style="width: ${Math.min(100, data.progress)}%; background-color: ${progressColor};"></div>
-        </div>
-        <div class="objective-values">
-          <span class="objective-current">${data.current}${unit}</span>
-          <span class="objective-target">/ ${data.target}${unit}</span>
-        </div>
-      </div>
-    `;
-  }
 
   /**
    * Render gender and status distribution
@@ -695,21 +695,6 @@ export class MetricsRenderer {
     animalTabs.forEach(tab => {
       tab.addEventListener('click', () => this.switchAnimalType(tab.dataset.type));
     });
-
-    const saveBtn = document.getElementById('save-objectives');
-    if (saveBtn) {
-      saveBtn.addEventListener('click', () => {
-        const newObjectives = {
-          targetRegistrations: parseInt(document.getElementById('target-registrations').value) || 100,
-          targetWeight: parseFloat(document.getElementById('target-weight').value) || 300,
-          targetBirths: parseInt(document.getElementById('target-births').value) || 50,
-          targetMothers: parseInt(document.getElementById('target-mothers').value) || 20
-        };
-        
-        this.calculator.updateObjectives(newObjectives);
-        this.render('metrics-container');
-      });
-    }
   }
 
   /**

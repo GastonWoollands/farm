@@ -3,6 +3,8 @@ import { setupExport } from './features/export.js';
 import { initAuth, signIn, signUp, signOutUser, getAuthToken, setAppFunctions } from './auth.js';
 import { initMetrics } from './features/metrics.js';
 import { initRegistrationPopup } from './features/registration.js';
+import { initAnimalSearch } from './features/animal-search.js';
+import { initObjectives } from './features/objectives.js';
 
 // Load existing application logic (initialization, UI, sync, listeners)
 import '../app.js';
@@ -107,32 +109,50 @@ function setupAuthUI() {
 // Navigation setup
 let metricsInstance = null;
 let registrationPopup = null;
+let animalSearchInstance = null;
+let objectivesInstance = null;
 
 function setupNavigation() {
   const $metricsTab = document.getElementById('metrics-tab');
   const $cowsTab = document.getElementById('cows-tab');
   const $pigsTab = document.getElementById('pigs-tab');
+  const $searchTab = document.getElementById('search-tab');
+  const $objectivesTab = document.getElementById('objectives-tab');
   const $metricsPage = document.getElementById('metrics-page');
   const $cowsPage = document.getElementById('cows-page');
   const $pigsPage = document.getElementById('pigs-page');
+  const $searchPage = document.getElementById('search-page');
+  const $objectivesPage = document.getElementById('objectives-page');
 
   // Ensure initial state is correct
   if ($metricsPage) $metricsPage.removeAttribute('hidden');
   if ($cowsPage) $cowsPage.setAttribute('hidden', '');
   if ($pigsPage) $pigsPage.setAttribute('hidden', '');
+  if ($searchPage) $searchPage.setAttribute('hidden', '');
+  if ($objectivesPage) $objectivesPage.setAttribute('hidden', '');
 
   // Initialize metrics and registration popup
   metricsInstance = initMetrics();
   registrationPopup = initRegistrationPopup();
+
+  // Initialize animal search
+  animalSearchInstance = initAnimalSearch();
+
+  // Initialize objectives
+  objectivesInstance = initObjectives();
 
   // Tab switching
   $metricsTab?.addEventListener('click', () => {
     $metricsTab.classList.add('active');
     $cowsTab?.classList.remove('active');
     $pigsTab?.classList.remove('active');
+    $searchTab?.classList.remove('active');
+    $objectivesTab?.classList.remove('active');
     $metricsPage?.removeAttribute('hidden');
     $cowsPage?.setAttribute('hidden', '');
     $pigsPage?.setAttribute('hidden', '');
+    $searchPage?.setAttribute('hidden', '');
+    $objectivesPage?.setAttribute('hidden', '');
     
     // Render metrics when switching to metrics tab
     if (metricsInstance) {
@@ -144,9 +164,13 @@ function setupNavigation() {
     $cowsTab.classList.add('active');
     $metricsTab?.classList.remove('active');
     $pigsTab?.classList.remove('active');
+    $searchTab?.classList.remove('active');
+    $objectivesTab?.classList.remove('active');
     $cowsPage?.removeAttribute('hidden');
     $metricsPage?.setAttribute('hidden', '');
     $pigsPage?.setAttribute('hidden', '');
+    $searchPage?.setAttribute('hidden', '');
+    $objectivesPage?.setAttribute('hidden', '');
     
     // Render records when switching to cows tab
     if (window.renderCowsList) {
@@ -158,13 +182,53 @@ function setupNavigation() {
     $pigsTab.classList.add('active');
     $metricsTab?.classList.remove('active');
     $cowsTab?.classList.remove('active');
+    $searchTab?.classList.remove('active');
+    $objectivesTab?.classList.remove('active');
     $pigsPage?.removeAttribute('hidden');
     $metricsPage?.setAttribute('hidden', '');
     $cowsPage?.setAttribute('hidden', '');
+    $searchPage?.setAttribute('hidden', '');
+    $objectivesPage?.setAttribute('hidden', '');
     
     // Render records when switching to pigs tab
     if (window.renderPigsList) {
       window.renderPigsList();
+    }
+  });
+
+  $searchTab?.addEventListener('click', () => {
+    $searchTab.classList.add('active');
+    $metricsTab?.classList.remove('active');
+    $cowsTab?.classList.remove('active');
+    $pigsTab?.classList.remove('active');
+    $objectivesTab?.classList.remove('active');
+    $searchPage?.removeAttribute('hidden');
+    $metricsPage?.setAttribute('hidden', '');
+    $cowsPage?.setAttribute('hidden', '');
+    $pigsPage?.setAttribute('hidden', '');
+    $objectivesPage?.setAttribute('hidden', '');
+    
+    // Perform initial search to show all animals
+    if (animalSearchInstance) {
+      animalSearchInstance.performSearch();
+    }
+  });
+
+  $objectivesTab?.addEventListener('click', () => {
+    $objectivesTab.classList.add('active');
+    $metricsTab?.classList.remove('active');
+    $cowsTab?.classList.remove('active');
+    $pigsTab?.classList.remove('active');
+    $searchTab?.classList.remove('active');
+    $objectivesPage?.removeAttribute('hidden');
+    $metricsPage?.setAttribute('hidden', '');
+    $cowsPage?.setAttribute('hidden', '');
+    $pigsPage?.setAttribute('hidden', '');
+    $searchPage?.setAttribute('hidden', '');
+    
+    // Render objectives when switching to objectives tab
+    if (objectivesInstance) {
+      objectivesInstance.render();
     }
   });
 
@@ -191,6 +255,8 @@ function setupNavigation() {
   // Expose instances globally for app.js
   window.metricsInstance = metricsInstance;
   window.registrationPopup = registrationPopup;
+  window.animalSearchInstance = animalSearchInstance;
+  window.objectivesInstance = objectivesInstance;
 }
 
 export { formatDisplayText, getAuthToken };

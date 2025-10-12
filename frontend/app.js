@@ -341,6 +341,7 @@ async function renderCowsList() {
     console.error('Cows records element not found!');
     return;
   }
+  
   $records.innerHTML = '';
   for (const r of cows.sort((a,b) => (b.id||0)-(a.id||0))) {
     const li = document.createElement('li');
@@ -394,6 +395,7 @@ async function renderPigsList() {
     console.error('Pigs records element not found!');
     return;
   }
+  
   $records.innerHTML = '';
   for (const r of pigs.sort((a,b) => (b.id||0)-(a.id||0))) {
     const li = document.createElement('li');
