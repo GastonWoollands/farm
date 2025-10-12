@@ -1,6 +1,17 @@
 import { getRecords } from '../../db.js';
 
 /**
+ * Normalize string data for database storage
+ * @param {string} value - The string value to normalize
+ * @returns {string|null} - Normalized string or null if empty
+ */
+function normalizeString(value) {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.toUpperCase() : null;
+}
+
+/**
  * Animal Search Module
  * Provides comprehensive search functionality for the dedicated search tab
  */
@@ -504,7 +515,7 @@ export class AnimalSearch {
     
     const formData = new FormData(e.target);
     const recordId = parseInt(document.getElementById('edit-record-id').value);
-    const animalNumber = document.getElementById('edit-animal-number').value.trim().toUpperCase();
+    const animalNumber = normalizeString(document.getElementById('edit-animal-number').value);
     
     if (!animalNumber) {
       this.showEditError('El ID del animal es requerido');
@@ -515,16 +526,21 @@ export class AnimalSearch {
       const updatedData = {
         animalNumber,
         animalType: parseInt(document.getElementById('edit-animal-type').value),
-        motherId: document.getElementById('edit-mother-id').value.trim().toUpperCase() || null,
-        fatherId: document.getElementById('edit-father-id').value.trim().toUpperCase() || null,
-        bornDate: document.getElementById('edit-born-date').value || null,
+        motherId: normalizeString(document.getElementById('edit-mother-id').value),
+        fatherId: normalizeString(document.getElementById('edit-father-id').value),
+        bornDate: (document.getElementById('edit-born-date').value || '').trim() || null,
         weight: document.getElementById('edit-weight').value ? parseFloat(document.getElementById('edit-weight').value) : null,
-        gender: document.getElementById('edit-gender').value.toUpperCase() || null,
-        status: document.getElementById('edit-status').value.toUpperCase() || null,
-        color: document.getElementById('edit-color').value.toUpperCase() || null,
-        notes: document.getElementById('edit-notes').value.trim().toUpperCase() || null,
-        notesMother: document.getElementById('edit-notes-mother').value.trim().toUpperCase() || null
+        gender: normalizeString(document.getElementById('edit-gender').value),
+        status: normalizeString(document.getElementById('edit-status').value),
+        color: normalizeString(document.getElementById('edit-color').value),
+        notes: normalizeString(document.getElementById('edit-notes').value),
+        notesMother: normalizeString(document.getElementById('edit-notes-mother').value)
       };
+
+      // Validate weight if provided
+      if (updatedData.weight !== null && (isNaN(updatedData.weight) || !isFinite(updatedData.weight))) {
+        updatedData.weight = null;
+      }
 
       await this.updateRecord(recordId, updatedData);
       this.closeEditModal();

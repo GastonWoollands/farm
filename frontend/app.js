@@ -5,6 +5,17 @@ const ENDPOINT_REGISTER = '/register';
 const DEFAULT_PREFIX = 'AC988';
 const DEFAULT_FATHER_PREFIX = '';
 
+/**
+ * Normalize string data for database storage
+ * @param {string} value - The string value to normalize
+ * @returns {string|null} - Normalized string or null if empty
+ */
+function normalizeString(value) {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.toUpperCase() : null;
+}
+
 import { addRecord, getRecords, markAsSynced, deleteRecord, getRecentSynced } from './db.js';
 import { getAuthToken } from './app/auth.js';
 
@@ -191,7 +202,7 @@ $registerCowBtn?.addEventListener('click', () => {
   // Prefill both animal and mother id with defau convenience
   if ($inlineAnimalCow) $inlineAnimalCow.value = DEFAULT_PREFIX;
   if ($inlineMotherCow) $inlineMotherCow.value = DEFAULT_PREFIX;
-  if ($inlineFatherCow) $inlineFatherCow.value = '';
+  if ($inlineFatherCow) $inlineFatherCow.value = DEFAULT_FATHER_PREFIX;
   // Set default date to today
   if ($inlineBornCow) $inlineBornCow.value = new Date().toISOString().split('T')[0];
   $inlineAnimalCow?.focus();
@@ -214,32 +225,30 @@ $registerPigBtn?.addEventListener('click', () => {
 
 // Save new cow record locally and attempt sync
 async function handleAddCow(number) {
-  const n = (number || '').trim().toUpperCase();
+  const n = normalizeString(number);
   if (!n) return;
   const userKey = getAuthToken(); // Use Firebase token instead of stored key
-  const motherVal = ($inlineMotherCow?.value || '').trim().toUpperCase() || null;
-  const fatherVal = ($inlineFatherCow?.value || '').trim().toUpperCase() || null;
-  const bornVal = ($inlineBornCow?.value || '').trim() || null;
-  const weightVal = $inlineWeightCow?.value ? parseFloat($inlineWeightCow.value) : null;
-  const genderVal = ($inlineGenderCow?.value || '').toUpperCase() || null;
-  const statusVal = ($inlineStatusCow?.value || '').toUpperCase() || null;
-  const colorVal = ($inlineColorCow?.value || '').toUpperCase() || null;
-  const notesVal = ($inlineNotesCow?.value || '').trim().toUpperCase() || null;
-  const notesMotherVal = ($inlineNotesMotherCow?.value || '').trim().toUpperCase() || null;
+  
   const record = {
     animalNumber: n,
     animalType: 1, // 1 = cow
     userKey,
-    motherId: motherVal,
-    fatherId: fatherVal,
-    bornDate: bornVal,
-    weight: (weightVal !== null && !isNaN(weightVal) && isFinite(weightVal)) ? weightVal : null,
-    gender: genderVal,
-    status: statusVal,
-    color: colorVal,
-    notes: notesVal,
-    notesMother: notesMotherVal,
+    motherId: normalizeString($inlineMotherCow?.value),
+    fatherId: normalizeString($inlineFatherCow?.value),
+    bornDate: ($inlineBornCow?.value || '').trim() || null,
+    weight: $inlineWeightCow?.value ? parseFloat($inlineWeightCow.value) : null,
+    gender: normalizeString($inlineGenderCow?.value),
+    status: normalizeString($inlineStatusCow?.value),
+    color: normalizeString($inlineColorCow?.value),
+    notes: normalizeString($inlineNotesCow?.value),
+    notesMother: normalizeString($inlineNotesMotherCow?.value),
   };
+  
+  // Validate weight if provided
+  if (record.weight !== null && (isNaN(record.weight) || !isFinite(record.weight))) {
+    record.weight = null;
+  }
+  
   await addRecord(record);
   await renderCowsList();
   triggerSync();
@@ -289,7 +298,7 @@ $inlineAddCow?.addEventListener('submit', async (e) => {
   // Always restore suggested prefixes for rapid multiple entries
   $inlineAnimalCow.value = DEFAULT_PREFIX;
   if ($inlineMotherCow) $inlineMotherCow.value = DEFAULT_PREFIX;
-  if ($inlineFatherCow) $inlineFatherCow.value = '';
+  if ($inlineFatherCow) $inlineFatherCow.value = DEFAULT_FATHER_PREFIX;
   if ($inlineBornCow) $inlineBornCow.value = new Date().toISOString().split('T')[0];
   if ($inlineWeightCow) $inlineWeightCow.value = '';
   if ($inlineGenderCow) $inlineGenderCow.value = '';
