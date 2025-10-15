@@ -1,9 +1,19 @@
+import os
 import sqlite3
 from pathlib import Path
 from .config import DB_PATH
 
 # Ensure data directory exists
 Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+
+db_path = Path(DB_PATH)
+data_dir = db_path.parent
+data_dir.mkdir(parents=True, exist_ok=True)
+
+try:
+    os.chmod(data_dir, 0o777)
+except PermissionError:
+    pass
 
 # Initialize DB and table
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
