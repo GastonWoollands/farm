@@ -6,7 +6,7 @@ authors = [
     {name = "Your Name",email = "you@example.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<4.0"
 dependencies = [
     "fastapi (>=0.118.0,<0.119.0)",
     "uvicorn (>=0.37.0,<0.38.0)",
@@ -17,3 +17,15 @@ dependencies = [
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+commitizen = "^4.9.1"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.1"
+tag_format = "$version"
+version_files = [
+    "pyproject.toml:version"
+]
+update_changelog_on_bump = true

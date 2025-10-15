@@ -135,3 +135,68 @@ export async function getRecentSynced(limit = 10) {
     .slice(0, limit);
 }
 
+
+/** Find a record by animalNumber and createdAt (server identity) */
+export async function findByAnimalAndCreatedAt(animalNumber, createdAt) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_RECORDS, 'readonly');
+    const store = tx.objectStore(STORE_RECORDS);
+    const req = store.getAll();
+    req.onsuccess = () => {
+      const all = req.result || [];
+      const found = all.find(r => r && r.animalNumber === animalNumber && r.createdAt === createdAt);
+      resolve(found || null);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/** Upsert a record coming from the server export into local IndexedDB */
+export async function upsertFromServer(serverItem) {
+  // Normalize expected fields
+  const localShape = {
+    animalNumber: serverItem.animal_number,
+    createdAt: serverItem.created_at,
+    motherId: serverItem.mother_id ?? null,
+    bornDate: serverItem.born_date ?? null,
+    weight: serverItem.weight ?? null,
+    gender: serverItem.gender ?? null,
+    status: serverItem.status ?? null,
+    color: serverItem.color ?? null,
+    notes: serverItem.notes ?? null,
+    notesMother: serverItem.notes_mother ?? null,
+    animalType: 1, // default to cow; server currently exports only cows
+    synced: true,
+    syncedAt: new Date().toISOString(),
+  };
+
+  const existing = await findByAnimalAndCreatedAt(localShape.animalNumber, localShape.createdAt);
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_RECORDS, 'readwrite');
+    const store = tx.objectStore(STORE_RECORDS);
+    if (existing && existing.id != null) {
+      const merged = { ...existing, ...localShape, id: existing.id, synced: true };
+      const putReq = store.put(merged);
+      putReq.onsuccess = () => resolve(merged);
+      putReq.onerror = () => reject(putReq.error);
+    } else {
+      // Create with auto id
+      const toAdd = { ...localShape };
+      const addReq = store.add(toAdd);
+      addReq.onsuccess = () => resolve({ ...toAdd, id: addReq.result });
+      addReq.onerror = () => reject(addReq.error);
+    }
+  });
+}
+
+/** Bulk import items from server export */
+export async function importFromServer(items = []) {
+  for (const it of items) {
+    try { // continue on individual failures
+      await upsertFromServer(it);
+    } catch (_) {}
+  }
+}
+

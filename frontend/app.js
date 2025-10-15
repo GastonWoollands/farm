@@ -44,7 +44,7 @@ window.updateGlobalConfig = function(config) {
   console.log('Global config updated:', config);
 };
 
-import { addRecord, getRecords, markAsSynced, deleteRecord, getRecentSynced } from './db.js';
+import { addRecord, getRecords, markAsSynced, deleteRecord, getRecentSynced, importFromServer } from './db.js';
 import { getAuthToken } from './app/auth.js';
 
 // Elements
@@ -105,11 +105,11 @@ const $statusBadge = document.getElementById('status-badge');
 const $syncStatus = document.getElementById('sync-status');
 const $apiBase = document.getElementById('api-base');
 const $pendingCount = document.getElementById('pending-count');
-const $manageSyncedBtn = document.getElementById('manage-synced');
+const $manageSyncedBtn = document.getElementById('manage-synced') || document.getElementById('manage-synced-cows');
 const $manageSyncedDialog = document.getElementById('manage-synced-dialog');
 const $manageSyncedList = document.getElementById('manage-synced-list');
 const $toast = document.getElementById('toast');
-const $exportCsv = document.getElementById('export-csv');
+const $exportCsv = document.getElementById('export-csv') || document.getElementById('export-csv-cows');
 const $exportDialog = document.getElementById('export-dialog');
 const $exportStartModal = document.getElementById('export-start-modal');
 const $exportEndModal = document.getElementById('export-end-modal');
@@ -421,11 +421,16 @@ async function renderCowsList() {
       const id = r.id;
       // If synced, attempt server delete first
       const userKey = getAuthToken();
-      if (r.synced && userKey) {
+      const legacyKey = (()=>{ try { return localStorage.getItem(LS_USER_KEY); } catch { return null; } })();
+      if (r.synced && (userKey || legacyKey)) {
         try {
           await fetch(API_BASE_URL + '/register', {
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userKey}` },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(userKey ? { 'Authorization': `Bearer ${userKey}` } : {}),
+              ...(!userKey && legacyKey ? { 'x-user-key': legacyKey } : {})
+            },
             body: JSON.stringify({ animalNumber: r.animalNumber, createdAt: r.createdAt })
           });
         } catch (e) { /* ignore network errors, still remove locally */ }
@@ -463,8 +468,9 @@ async function renderList() {
 async function triggerSync(force = false) {
   if (syncInFlight) return; // prevent overlap
   if (!navigator.onLine && !force) return;
-  const userKey = getAuthToken(); // Use Firebase token
-  if (!userKey) return;
+  const userKey = getAuthToken(); // Firebase token
+  const legacyKey = (()=>{ try { return localStorage.getItem(LS_USER_KEY); } catch { return null; } })();
+  if (!userKey && !legacyKey) return;
   try {
     syncInFlight = true;
     const unsynced = await getRecords({ unsyncedOnly: true });
@@ -473,7 +479,11 @@ async function triggerSync(force = false) {
       try {
         const res = await fetch(API_BASE_URL + ENDPOINT_REGISTER, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userKey}` },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(userKey ? { 'Authorization': `Bearer ${userKey}` } : {}),
+            ...(!userKey && legacyKey ? { 'x-user-key': legacyKey } : {})
+          },
           body: JSON.stringify({
             animalNumber: r.animalNumber,
             createdAt: r.createdAt,
@@ -497,6 +507,26 @@ async function triggerSync(force = false) {
       } catch (err) {
         console.warn('Network error during sync for record', r.id, err);
       }
+    }
+    // After pushing, pull latest records from server for this user
+    try {
+      const url = API_BASE_URL + '/export';
+      const res = await fetch(url, { headers: {
+        ...(userKey ? { 'Authorization': `Bearer ${userKey}` } : {}),
+        ...(!userKey && legacyKey ? { 'x-user-key': legacyKey } : {})
+      }});
+      if (res.ok) {
+        const data = await res.json();
+        const items = Array.isArray(data?.items) ? data.items : [];
+        if (items.length) {
+          await importFromServer(items);
+          await renderList();
+        }
+      } else {
+        console.warn('Pull sync failed', res.status);
+      }
+    } catch (e) {
+      console.warn('Network error during pull sync', e);
     }
   } finally {
     syncInFlight = false;

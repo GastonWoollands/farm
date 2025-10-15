@@ -1,4 +1,5 @@
-import { getRecords } from '../../db.js';
+import { getRecords, deleteRecord } from '../../db.js';
+import { getAuthToken } from '../auth.js';
 
 /**
  * Normalize string data for database storage
@@ -22,6 +23,8 @@ export class AnimalSearch {
     this.currentQuery = '';
     this.debounceTimer = null;
     this.debounceDelay = 300;
+    this.currentPage = 1;
+    this.pageSize = 10;
   }
 
   /**
@@ -126,6 +129,22 @@ export class AnimalSearch {
         const recordId = parseInt(editBtn.dataset.recordId);
         this.openEditModal(recordId);
       }
+      if (e.target.closest('.delete-btn')) {
+        const delBtn = e.target.closest('.delete-btn');
+        const recordId = parseInt(delBtn.dataset.recordId);
+        const animalNumber = delBtn.dataset.animalNumber;
+        const createdAt = delBtn.dataset.createdAt || null;
+        const synced = delBtn.dataset.synced === 'true';
+        this.confirmAndDelete(recordId, animalNumber, createdAt, synced);
+      }
+      if (e.target.closest('.pagination button')) {
+        const btn = e.target.closest('.pagination button');
+        const page = parseInt(btn.dataset.page);
+        if (!isNaN(page)) {
+          this.currentPage = page;
+          this.performSearch();
+        }
+      }
     });
   }
 
@@ -168,14 +187,9 @@ export class AnimalSearch {
     // Always filter to cows only (animalType = 1)
     let filteredRecords = allRecords.filter(r => r.animalType === 1);
 
-    // If no query, return all cow records
-    if (!query) {
-      return filteredRecords;
-    }
+    const searchTerm = (query || '').toLowerCase().trim();
 
-    const searchTerm = query.toLowerCase().trim();
-    
-    return filteredRecords.filter(record => {
+    const matched = !searchTerm ? filteredRecords : filteredRecords.filter(record => {
       // Search in multiple fields
       const searchableFields = [
         record.animalNumber,
@@ -192,6 +206,16 @@ export class AnimalSearch {
         field.toString().toLowerCase().includes(searchTerm)
       );
     });
+
+    // Sort by createdAt desc (fallback to id desc)
+    matched.sort((a, b) => {
+      const ad = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bd = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (bd !== ad) return bd - ad;
+      return (b.id || 0) - (a.id || 0);
+    });
+
+    return matched;
   }
 
   /**
@@ -212,17 +236,41 @@ export class AnimalSearch {
         </div>
       `;
     } else {
+      const total = results.length;
+      const totalPages = Math.max(1, Math.ceil(total / this.pageSize));
+      if (this.currentPage > totalPages) this.currentPage = totalPages;
+      const start = (this.currentPage - 1) * this.pageSize;
+      const pageItems = results.slice(start, start + this.pageSize);
+
       html = `
         <div class="search-results-info has-results">
-          ${query ? `Se encontraron ${results.length} animal${results.length === 1 ? '' : 'es'} para "${query}"` : `Total: ${results.length} animales`}
+          ${query ? `Se encontraron ${total} animal${total === 1 ? '' : 'es'} para "${query}"` : `Total: ${total} animales`}
         </div>
         <div class="search-results-list">
-          ${results.map(record => this.renderAnimalCard(record)).join('')}
+          ${pageItems.map(record => this.renderAnimalCard(record)).join('')}
         </div>
+        ${this.renderPagination(totalPages)}
       `;
     }
 
     container.innerHTML = html;
+  }
+
+  renderPagination(totalPages) {
+    if (totalPages <= 1) return '';
+    const buttons = [];
+    const maxButtons = 7;
+    let start = Math.max(1, this.currentPage - 3);
+    let end = Math.min(totalPages, start + maxButtons - 1);
+    start = Math.max(1, end - maxButtons + 1);
+
+    buttons.push(`<button class="btn" data-page="${Math.max(1, this.currentPage - 1)}" ${this.currentPage === 1 ? 'disabled' : ''}>Anterior</button>`);
+    for (let p = start; p <= end; p++) {
+      buttons.push(`<button class="btn ${p === this.currentPage ? 'primary' : ''}" data-page="${p}">${p}</button>`);
+    }
+    buttons.push(`<button class="btn" data-page="${Math.min(totalPages, this.currentPage + 1)}" ${this.currentPage === totalPages ? 'disabled' : ''}>Siguiente</button>`);
+
+    return `<div class="pagination" style="display:flex; gap:8px; justify-content:center; margin-top:12px;">${buttons.join('')}</div>`;
   }
 
   /**
@@ -260,15 +308,49 @@ export class AnimalSearch {
         <div class="animal-card-footer">
           <div class="sync-status ${syncClass}">${syncStatus}</div>
           <div class="record-date">Registrado: ${this.formatDate(record.createdAt)}</div>
-          <button class="edit-btn" data-record-id="${record.id}" title="Editar animal">
-            <svg class="edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>
-          </button>
+          <div class="row gap">
+            <button class="edit-btn" data-record-id="${record.id}" title="Editar animal">✎</button>
+            <button class="delete-btn" data-record-id="${record.id}" data-animal-number="${record.animalNumber}" data-created-at="${record.createdAt || ''}" data-synced="${record.synced ? 'true' : 'false'}" title="Eliminar registro">🗑</button>
+          </div>
         </div>
       </div>
     `;
+  }
+
+  async confirmAndDelete(recordId, animalNumber, createdAt, synced) {
+    const ok = window.confirm(`¿Eliminar el registro ${this.formatDisplayText(animalNumber)}? Esta acción no se puede deshacer.`);
+    if (!ok) return;
+
+    // If synced, attempt server delete first
+    if (synced) {
+      try {
+        const token = getAuthToken();
+        const legacyKey = (() => { try { return localStorage.getItem('farm:userKey'); } catch { return null; } })();
+        const apiBaseEl = document.getElementById('api-base');
+        const apiBase = apiBaseEl ? apiBaseEl.textContent.trim() : '';
+        if (apiBase) {
+          await fetch(apiBase + '/register', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+              ...(!token && legacyKey ? { 'x-user-key': legacyKey } : {})
+            },
+            body: JSON.stringify({ animalNumber, createdAt: createdAt || null })
+          });
+        }
+      } catch (_) {
+        // ignore network errors, still remove locally
+      }
+    }
+
+    try {
+      await deleteRecord(recordId);
+      this.performSearch();
+      if (window.refreshMetrics) window.refreshMetrics();
+    } catch (e) {
+      this.showSuccess('No se pudo eliminar el registro');
+    }
   }
 
   /**

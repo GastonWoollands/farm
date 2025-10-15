@@ -105,3 +105,4 @@ Deploy to any static hosting service (Vercel, Netlify, GitHub Pages, etc.)
 - Firefox 75+
 - Safari 13+
 - Mobile browsers with ES6 support
+
