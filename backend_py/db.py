@@ -15,6 +15,27 @@ try:
 except PermissionError:
     pass
 
+print("[DEBUG] DB_PATH =", DB_PATH)
+print("[DEBUG] Data dir exists:", data_dir.exists())
+print("[DEBUG] Writable:", os.access(data_dir, os.W_OK))
+print("[DEBUG] Absolute path:", data_dir.resolve())
+print("[DEBUG] User:", os.getenv("USER", "unknown"))
+
+# Intentar crear la carpeta si no existe
+try:
+    data_dir.mkdir(parents=True, exist_ok=True)
+    print("[DEBUG] Data dir created / exists")
+except Exception as e:
+    print("[DEBUG] Failed to create data dir:", e)
+
+# Intentar abrir DB
+try:
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    print("[DEBUG] SQLite connection successful")
+except sqlite3.OperationalError as e:
+    print("[DEBUG] SQLite connection failed:", e)
+    raise
+
 # Initialize DB and table
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 
