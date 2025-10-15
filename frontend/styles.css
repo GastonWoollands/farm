@@ -567,12 +567,14 @@ dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; col
   
   /* Fixed Cafecito mobile */
   .cafecito-fixed {
-    bottom: 15px;
-    right: 15px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
   }
-  
+
   .cafecito-button {
-    height: 36px;
+    height: 34px;
   }
 }
 
@@ -639,9 +641,9 @@ dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; col
 /* Fixed Cafecito Button Styles */
 .cafecito-fixed {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 1000;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  right: calc(env(safe-area-inset-right, 0px) + 16px);
+  z-index: 2000;
   display: flex;
   align-items: center;
 }
