@@ -10,7 +10,8 @@ requires-python = ">=3.10,<4.0"
 dependencies = [
     "fastapi (>=0.118.0,<0.119.0)",
     "uvicorn (>=0.37.0,<0.38.0)",
-    "firebase-admin (>=7.1.0,<8.0.0)"
+    "firebase-admin (>=7.1.0,<8.0.0)",
+    "google-cloud-storage (>=3.4.1,<4.0.0)"
 ]
 
 

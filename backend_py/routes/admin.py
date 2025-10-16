@@ -3,6 +3,7 @@ from ..config import ADMIN_SECRET
 from ..models import ExecSqlBody
 from ..services import admin as admin_svc
 from ..services.firebase_auth import verify_bearer_id_token
+from ..backup.backup_gcs import create_backup
 
 router = APIRouter()
 
@@ -44,5 +45,23 @@ def admin_exec_sql(body: ExecSqlBody, request: Request, x_admin_secret: str | No
         raise HTTPException(status_code=400, detail="Only single statement allowed")
     params = tuple(body.params or [])
     return admin_svc.exec_sql(sql, params)
+
+@router.post("/admin/backup")
+def admin_backup(request: Request, authorization: str = Header(alias="Authorization")):
+    """Create a backup of the database and upload to Google Cloud Storage"""
+    # Verify bearer token
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Bearer token required")
+    
+    token = authorization.split(" ")[1]
+    decoded = verify_bearer_id_token(token)
+    if not decoded or not decoded.get('uid'):
+        raise HTTPException(status_code=403, detail="Invalid or expired token")
+    
+    try:
+        create_backup()
+        return {"ok": True, "message": "Backup created successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
 
 
