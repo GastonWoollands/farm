@@ -18,15 +18,12 @@ jobs:
       with:
         python-version: 3.12
 
-    - name: Install dependencies
-      run: pip install requests
-
     - name: Trigger backup via API
       env:
-        BACKUP_BEARER_TOKEN: ${{ secrets.BACKUP_BEARER_TOKEN }}
+        BACKUP_SECRET: ${{ secrets.BACKUP_SECRET }}
         API_BASE_URL: ${{ secrets.API_BASE_URL }}
       run: |
         curl -X POST \
-          -H "Authorization: Bearer $BACKUP_BEARER_TOKEN" \
+          -H "Authorization: Bearer $BACKUP_SECRET" \
           -H "Content-Type: application/json" \
           "$API_BASE_URL/admin/backup"
