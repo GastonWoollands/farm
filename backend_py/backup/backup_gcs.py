@@ -1,21 +1,21 @@
 import os
-import sqlite3
 import gzip
 import shutil
+import sqlite3
 from google.cloud import storage
 from datetime import datetime, timezone
 
 # --- Configuration ---
-DB_PATH = os.environ["DB_PATH"]
+DB_PATH = os.getenv("DB_PATH", "")
 TMP_BACKUP = "/tmp/backup.sqlite"
 GZ_BACKUP = "/tmp/backup.sqlite.gz"
-BUCKET_NAME = os.environ["GCS_BUCKET_NAME"]
+BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "")
 
 def create_backup():
     try:
         # --- Create temporary file with the key ---
         with open("/tmp/gcs-key.json", "w") as f:
-            f.write(os.environ["GCS_KEY_JSON"])
+            f.write(os.getenv("GCS_KEY_JSON", ""))
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/gcs-key.json"
 
         # --- 1. Backup SQLite safely ---

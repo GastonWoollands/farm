@@ -631,6 +631,11 @@ export class AnimalSearch {
       // Refresh search results
       this.performSearch();
       
+      // Refresh the main list to show updated sync status
+      if (window.renderList) {
+        await window.renderList();
+      }
+      
       // Refresh metrics if available
       if (window.refreshMetrics) {
         window.refreshMetrics();
@@ -657,26 +662,189 @@ export class AnimalSearch {
       
       // Get the existing record first
       const getReq = store.get(recordId);
-      getReq.onsuccess = () => {
+      getReq.onsuccess = async () => {
         const existingRecord = getReq.result;
+        console.log('Retrieved record for editing:', existingRecord);
         if (!existingRecord) {
           reject(new Error('Registro no encontrado'));
           return;
         }
 
+        // For synced records, we'll update directly using animalNumber and createdAt
+        // No need to get backendId - we'll use the record identifier
+        console.log('Updating synced record:', {
+          animalNumber: existingRecord.animalNumber,
+          createdAt: existingRecord.createdAt,
+          synced: existingRecord.synced
+        });
+
         // Update the record with new data while preserving metadata
         const updatedRecord = {
           ...existingRecord,
           ...data,
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          synced: existingRecord.synced // Keep the original sync status
         };
+        
+        console.log('Updated record:', { 
+          id: updatedRecord.id, 
+          animalNumber: updatedRecord.animalNumber,
+          synced: updatedRecord.synced 
+        });
+        
+        // Check if record has been synced with backend
+        if (!existingRecord.synced) {
+          console.warn('Record has not been synced with backend yet. Cannot edit.');
+          reject(new Error('Record must be synced with backend before editing. Please refresh the page and try again.'));
+          return;
+        }
 
+        // Update local database
         const putReq = store.put(updatedRecord);
-        putReq.onsuccess = () => resolve(updatedRecord);
+        putReq.onsuccess = async () => {
+          // For synced records, update directly on the server
+          if (navigator.onLine && existingRecord.synced) {
+            try {
+              // Update the record directly on the server using animalNumber and createdAt
+              // Ensure weight is a number or null
+              let weight = null;
+              if (data.weight !== null && data.weight !== undefined && data.weight !== '') {
+                const numWeight = parseFloat(data.weight);
+                if (!isNaN(numWeight)) {
+                  weight = numWeight;
+                }
+              }
+              
+              const requestData = {
+                animalNumber: existingRecord.animalNumber,
+                createdAt: existingRecord.createdAt,
+                motherId: data.motherId || null,
+                bornDate: data.bornDate || null,
+                weight: weight,
+                gender: data.gender || null,
+                status: data.status || null,
+                color: data.color || null,
+                notes: data.notes || null,
+                notesMother: data.notesMother || null,
+              };
+              
+              console.log('Sending update request with data:', requestData);
+              
+              // Use Firebase authentication consistently
+              const firebaseToken = getAuthToken();
+              
+              const headers = {
+                'Content-Type': 'application/json'
+              };
+              
+              if (firebaseToken) {
+                // Use Firebase token for authentication
+                headers['Authorization'] = `Bearer ${firebaseToken}`;
+              } else {
+                // If no Firebase token, try to get a fresh one
+                console.warn('No Firebase token available, attempting to refresh...');
+                // This will trigger a re-authentication if needed
+                throw new Error('Authentication required. Please sign in again.');
+              }
+              
+              const response = await fetch(`${window.API_BASE_URL || 'http://127.0.0.1:8000'}/register/update`, {
+                method: 'PUT',
+                headers: headers,
+                body: JSON.stringify(requestData)
+              });
+              
+              if (response.ok) {
+                console.log('Record updated successfully on server');
+                // Mark as synced
+                const syncedRecord = { ...updatedRecord, synced: true };
+                const syncPutReq = store.put(syncedRecord);
+                syncPutReq.onsuccess = () => resolve(syncedRecord);
+                syncPutReq.onerror = () => resolve(updatedRecord);
+              } else {
+                console.warn('Failed to update record on server:', response.status);
+                // Log the error response
+                try {
+                  const errorText = await response.text();
+                  console.error('Error response:', errorText);
+                } catch (e) {
+                  console.error('Could not read error response');
+                }
+                resolve(updatedRecord); // Return unsynced record
+              }
+            } catch (error) {
+              console.warn('Failed to sync update to backend:', error);
+              resolve(updatedRecord); // Return unsynced record
+            }
+          } else {
+            // For unsynced records, use the global sync mechanism
+            if (navigator.onLine && window.triggerSync) {
+              try {
+                await window.triggerSync(true);
+                resolve(updatedRecord);
+              } catch (error) {
+                console.warn('Failed to sync update to backend:', error);
+                resolve(updatedRecord);
+              }
+            } else {
+              resolve(updatedRecord);
+            }
+          }
+        };
         putReq.onerror = () => reject(putReq.error);
       };
       getReq.onerror = () => reject(getReq.error);
     });
+  }
+
+  /**
+   * Sync update to backend
+   * @param {number} recordId - Record ID
+   * @param {Object} data - Updated data
+   */
+  async syncUpdateToBackend(recordId, data) {
+    const firebaseToken = getAuthToken();
+    
+    if (!firebaseToken) {
+      throw new Error('Authentication required. Please sign in again.');
+    }
+
+    // Get the backend ID from the record
+    const { openDb } = await import('../../db.js');
+    const db = await openDb();
+    const record = await new Promise((resolve, reject) => {
+      const tx = db.transaction('records', 'readonly');
+      const store = tx.objectStore('records');
+      const getReq = store.get(recordId);
+      getReq.onsuccess = () => resolve(getReq.result);
+      getReq.onerror = () => reject(getReq.error);
+    });
+
+    if (!record || !record.backendId) {
+      throw new Error('Record not found or not synced with backend');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/register/${record.backendId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${firebaseToken}`
+      },
+      body: JSON.stringify({
+        animalNumber: data.animalNumber,
+        motherId: data.motherId ?? null,
+        bornDate: data.bornDate ?? null,
+        weight: data.weight ?? null,
+        gender: data.gender ?? null,
+        status: data.status ?? null,
+        color: data.color ?? null,
+        notes: data.notes ?? null,
+        notesMother: data.notesMother ?? null,
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend update failed: ${response.status}`);
+    }
   }
 
   /**

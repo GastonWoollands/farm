@@ -1,5 +1,6 @@
 // API Configuration
-window.API_BASE_URL_OVERRIDE = 'https://farm-production-d087.up.railway.app';
+// window.API_BASE_URL_OVERRIDE = 'https://farm-production-d087.up.railway.app';
+window.API_BASE_URL_OVERRIDE = 'http://127.0.0.1:8000';
 
 // Firebase Configuration
 window.FIREBASE_CONFIG = {

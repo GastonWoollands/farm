@@ -2,8 +2,8 @@ from fastapi import APIRouter, Header, HTTPException, Response, Request
 import csv
 import io
 from ..config import VALID_KEYS
-from ..models import RegisterBody, DeleteBody
-from ..services.registrations import insert_registration, delete_registration as svc_delete, export_rows
+from ..models import RegisterBody, DeleteBody, UpdateBody
+from ..services.registrations import insert_registration, delete_registration as svc_delete, update_registration, export_rows
 from ..services.firebase_auth import verify_bearer_id_token
 
 router = APIRouter()
@@ -16,7 +16,33 @@ def register(body: RegisterBody, request: Request, x_user_key: str | None = Head
         # Fallback to legacy key if token missing
         if not x_user_key or x_user_key not in VALID_KEYS:
             raise HTTPException(status_code=401, detail="Unauthorized")
-    insert_registration(user_id or x_user_key, body)
+    record_id = insert_registration(user_id or x_user_key, body)
+    return {"ok": True, "id": record_id}
+
+@router.put("/register/update")
+def update_registration_by_identifier(body: UpdateBody, request: Request, x_user_key: str | None = Header(default=None)):
+    decoded = verify_bearer_id_token(request.headers.get('Authorization'))
+    user_id = decoded.get('uid') if decoded else None
+    if not user_id:
+        if not x_user_key or x_user_key not in VALID_KEYS:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    # Find the record by animalNumber and createdAt
+    from ..services.registrations import find_and_update_registration
+    result = find_and_update_registration(user_id or x_user_key, body)
+    if not result:
+        raise HTTPException(status_code=404, detail="Record not found")
+    return {"ok": True}
+
+@router.put("/register/{animal_id}")
+def update_registration_endpoint(animal_id: int, body: RegisterBody, request: Request, x_user_key: str | None = Header(default=None)):
+    decoded = verify_bearer_id_token(request.headers.get('Authorization'))
+    user_id = decoded.get('uid') if decoded else None
+    if not user_id:
+        # Fallback to legacy key if token missing
+        if not x_user_key or x_user_key not in VALID_KEYS:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+    update_registration(user_id or x_user_key, animal_id, body)
     return {"ok": True}
 
 @router.delete("/register")

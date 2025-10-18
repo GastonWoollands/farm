@@ -83,7 +83,8 @@ export async function getRecords({ unsyncedOnly = false } = {}) {
 }
 
 /** Mark a record as synced */
-export async function markAsSynced(id) {
+export async function markAsSynced(id, backendId = null) {
+  console.log('markAsSynced called with:', { id, backendId });
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_RECORDS, 'readwrite');
@@ -91,11 +92,23 @@ export async function markAsSynced(id) {
     const getReq = store.get(id);
     getReq.onsuccess = () => {
       const val = getReq.result;
-      if (!val) return resolve();
+      if (!val) {
+        console.log('Record not found for id:', id);
+        return resolve();
+      }
+      console.log('Before update:', { id: val.id, backendId: val.backendId, synced: val.synced });
       val.synced = true;
       val.syncedAt = new Date().toISOString();
+      if (backendId) {
+        val.backendId = backendId;
+        console.log('Setting backendId to:', backendId);
+      }
+      console.log('After update:', { id: val.id, backendId: val.backendId, synced: val.synced });
       const putReq = store.put(val);
-      putReq.onsuccess = () => resolve();
+      putReq.onsuccess = () => {
+        console.log('Record updated successfully');
+        resolve();
+      };
       putReq.onerror = () => reject(putReq.error);
     };
     getReq.onerror = () => reject(getReq.error);
@@ -169,6 +182,7 @@ export async function upsertFromServer(serverItem) {
     animalType: 1, // default to cow; server currently exports only cows
     synced: true,
     syncedAt: new Date().toISOString(),
+    backendId: serverItem.id, // Store the backend database ID
   };
 
   const existing = await findByAnimalAndCreatedAt(localShape.animalNumber, localShape.createdAt);
@@ -198,5 +212,17 @@ export async function importFromServer(items = []) {
       await upsertFromServer(it);
     } catch (_) {}
   }
+}
+
+/** Get a single record by ID */
+export async function getRecordById(id) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_RECORDS, 'readonly');
+    const store = tx.objectStore(STORE_RECORDS);
+    const req = store.get(id);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
 

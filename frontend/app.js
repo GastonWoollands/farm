@@ -1,5 +1,5 @@
-const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
-// const API_BASE_URL = 'http://localhost:8000';
+// const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
+const API_BASE_URL = 'http://localhost:8000';
 const ENDPOINT_VALIDATE = '/validate-key';
 const ENDPOINT_REGISTER = '/register';
 const DEFAULT_PREFIX = 'AC988';
@@ -44,7 +44,7 @@ window.updateGlobalConfig = function(config) {
   console.log('Global config updated:', config);
 };
 
-import { addRecord, getRecords, markAsSynced, deleteRecord, getRecentSynced, importFromServer } from './db.js';
+import { addRecord, getRecords, markAsSynced, deleteRecord, getRecentSynced, importFromServer, getRecordById } from './db.js';
 import { getAuthToken } from './app/auth.js';
 
 // Elements
@@ -121,6 +121,24 @@ let syncInFlight = false;
 
 // Local storage keys (legacy - now using Firebase auth)
 const LS_USER_KEY = 'farm:userKey';
+
+// Set up legacy key for local development
+function setupLocalDevelopment() {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    const existingKey = localStorage.getItem(LS_USER_KEY);
+    if (!existingKey) {
+      console.log('Setting up legacy key for local development');
+      localStorage.setItem(LS_USER_KEY, 'test-key-123');
+      // Show the app directly for local development
+      showApp();
+      renderList();
+      triggerSync();
+    }
+  }
+}
+
+// Initialize local development setup
+setupLocalDevelopment();
 
 // Helper function to format display text with proper capitalization
 function formatDisplayText(text) {
@@ -466,43 +484,120 @@ async function renderList() {
 
 // Sync logic: send unsynced to backend when online
 async function triggerSync(force = false) {
-  if (syncInFlight) return; // prevent overlap
-  if (!navigator.onLine && !force) return;
+  console.log('triggerSync called with force:', force);
+  if (syncInFlight) {
+    console.log('Sync already in flight, skipping');
+    return; // prevent overlap
+  }
+  if (!navigator.onLine && !force) {
+    console.log('Offline and not forced, skipping sync');
+    return;
+  }
   const userKey = getAuthToken(); // Firebase token
-  const legacyKey = (()=>{ try { return localStorage.getItem(LS_USER_KEY); } catch { return null; } })();
-  if (!userKey && !legacyKey) return;
+  console.log('Auth token:', { userKey: !!userKey });
+  if (!userKey) {
+    console.log('No Firebase token available, skipping sync');
+    return;
+  }
   try {
     syncInFlight = true;
     const unsynced = await getRecords({ unsyncedOnly: true });
+    console.log('Found unsynced records:', unsynced.length, unsynced);
     $syncStatus.textContent = unsynced.length ? `Syncing ${unsynced.length}...` : 'Idle';
     for (const r of unsynced) {
       try {
-        const res = await fetch(API_BASE_URL + ENDPOINT_REGISTER, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(userKey ? { 'Authorization': `Bearer ${userKey}` } : {}),
-            ...(!userKey && legacyKey ? { 'x-user-key': legacyKey } : {})
-          },
-          body: JSON.stringify({
-            animalNumber: r.animalNumber,
-            createdAt: r.createdAt,
-            motherId: r.motherId ?? null,
-            bornDate: r.bornDate ?? null,
-            weight: r.weight ?? null,
-            gender: r.gender ?? null,
-            status: r.status ?? null,
-            color: r.color ?? null,
-            notes: r.notes ?? null,
-            notesMother: r.notesMother ?? null,
-          })
-        });
+        let res;
+        
+        console.log('Syncing record:', { id: r.id, backendId: r.backendId, animalNumber: r.animalNumber, synced: r.synced });
+        
+        if (r.backendId) {
+          // This is an edited record - use PUT
+          console.log('Using PUT for edited record:', r.backendId);
+          res = await fetch(`${API_BASE_URL}/register/${r.backendId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${userKey}`
+            },
+            body: JSON.stringify({
+              animalNumber: r.animalNumber,
+              motherId: r.motherId ?? null,
+              bornDate: r.bornDate ?? null,
+              weight: r.weight ?? null,
+              gender: r.gender ?? null,
+              status: r.status ?? null,
+              color: r.color ?? null,
+              notes: r.notes ?? null,
+              notesMother: r.notesMother ?? null,
+            })
+          });
+        } else {
+          // This is a new record - use POST
+          console.log('Using POST for new record');
+          res = await fetch(API_BASE_URL + ENDPOINT_REGISTER, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${userKey}`
+            },
+            body: JSON.stringify({
+              animalNumber: r.animalNumber,
+              createdAt: r.createdAt,
+              motherId: r.motherId ?? null,
+              bornDate: r.bornDate ?? null,
+              weight: r.weight ?? null,
+              gender: r.gender ?? null,
+              status: r.status ?? null,
+              color: r.color ?? null,
+              notes: r.notes ?? null,
+              notesMother: r.notesMother ?? null,
+            })
+          });
+        }
+        
         if (res.ok) {
-          await markAsSynced(r.id);
+          if (r.backendId) {
+            // For updates, just mark as synced (backendId already exists)
+            console.log('Marking existing record as synced:', r.id);
+            await markAsSynced(r.id);
+          } else {
+            // For new records, get the backend ID from the response
+            console.log('Response status:', res.status);
+            console.log('Response headers:', Object.fromEntries(res.headers.entries()));
+            const responseText = await res.text();
+            console.log('Raw response text:', responseText);
+            let responseData;
+            try {
+              responseData = JSON.parse(responseText);
+              console.log('Parsed response data:', responseData);
+            } catch (e) {
+              console.error('Failed to parse response as JSON:', e);
+              console.log('Raw response:', responseText);
+              return;
+            }
+            const backendId = responseData?.id;
+            console.log('Extracted backendId:', backendId, 'type:', typeof backendId);
+            if (backendId) {
+              console.log('Storing backendId:', backendId, 'for record:', r.id);
+              await markAsSynced(r.id, backendId);
+              // Verify the backendId was stored
+              const updatedRecord = await getRecordById(r.id);
+              console.log('Verification - record after sync:', { id: updatedRecord?.id, backendId: updatedRecord?.backendId });
+              
+              // Double-check that the backendId was actually stored
+              if (!updatedRecord?.backendId) {
+                console.error('CRITICAL: backendId was not stored properly!');
+                console.log('Record after markAsSynced:', updatedRecord);
+              }
+            } else {
+              console.log('No backendId in response, marking as synced without ID');
+              await markAsSynced(r.id);
+            }
+          }
           await renderList();
         } else {
           // continue syncing other items, but keep status note
-          console.warn('Sync failed for record', r.id, res.status);
+          console.warn('Sync failed for record', r.id, res.status, res.statusText);
         }
       } catch (err) {
         console.warn('Network error during sync for record', r.id, err);
@@ -511,10 +606,9 @@ async function triggerSync(force = false) {
     // After pushing, pull latest records from server for this user
     try {
       const url = API_BASE_URL + '/export';
-      const res = await fetch(url, { headers: {
-        ...(userKey ? { 'Authorization': `Bearer ${userKey}` } : {}),
-        ...(!userKey && legacyKey ? { 'x-user-key': legacyKey } : {})
-      }});
+            const res = await fetch(url, { headers: {
+              'Authorization': `Bearer ${userKey}`
+            }});
       if (res.ok) {
         const data = await res.json();
         const items = Array.isArray(data?.items) ? data.items : [];
