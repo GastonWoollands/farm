@@ -88,9 +88,6 @@ try:
 except sqlite3.OperationalError:
     pass  # Column already exists
 
-# Update existing records to set updated_at = created_at
-conn.execute("UPDATE registrations SET updated_at = created_at WHERE updated_at IS NULL")
-conn.commit()
 
 def create_unique_index() -> None:
     try:
@@ -267,5 +264,12 @@ def create_events_trigger():
         print(f"Error creating events trigger: {e}")
 
 create_events_trigger()
+
+# Update existing records to set updated_at = created_at (after all columns are added)
+try:
+    conn.execute("UPDATE registrations SET updated_at = created_at WHERE updated_at IS NULL")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass  # Column doesn't exist, skip update
 
 
