@@ -1,10 +1,10 @@
-# Contando vacas - Farm Management System
+# LiveStock - Farm Management System
 
 A complete farm management solution for tracking cattle registrations, metrics, and objectives.
 
 ## Description
 
-Contando vacas is a full-stack application designed for farm owners to manage their cattle inventory. It provides offline-capable registration, real-time metrics tracking, search functionality, and goal setting for farm operations.
+LiveStock is a full-stack application designed for farm owners to manage their cattle inventory. It provides offline-capable registration, real-time metrics tracking, search functionality, and goal setting for farm operations.
 
 ## Project Structure
 

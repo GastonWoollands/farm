@@ -1,6 +1,6 @@
-# Backend API - Contando vacas
+# Backend API - LiveStock
 
-FastAPI backend service for the Contando vacas farm management application.
+FastAPI backend service for the LiveStock farm management application.
 
 ## Description
 

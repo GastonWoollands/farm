@@ -1,4 +1,4 @@
-# Frontend - Contando vacas
+# Frontend - LiveStock
 
 Progressive Web Application (PWA) for farm animal registration and management.
 

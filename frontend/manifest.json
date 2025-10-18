@@ -1,6 +1,6 @@
 {
-  "name": "Contando vacas",
-  "short_name": "Contando vacas",
+  "name": "LiveStock",
+  "short_name": "LiveStock",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b1220",
