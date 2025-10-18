@@ -1,5 +1,5 @@
 // const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
 const ENDPOINT_VALIDATE = '/validate-key';
 const ENDPOINT_REGISTER = '/register';
 const DEFAULT_PREFIX = 'AC988';

@@ -747,7 +747,7 @@ export class AnimalSearch {
                 throw new Error('Authentication required. Please sign in again.');
               }
               
-              const response = await fetch(`${window.API_BASE_URL || 'http://127.0.0.1:8000'}/register/update`, {
+              const response = await fetch(`${window.API_BASE_URL || 'https://farm-production-d087.up.railway.app'}/register/update`, {
                 method: 'PUT',
                 headers: headers,
                 body: JSON.stringify(requestData)
