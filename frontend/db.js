@@ -172,6 +172,7 @@ export async function upsertFromServer(serverItem) {
     animalNumber: serverItem.animal_number,
     createdAt: serverItem.created_at,
     motherId: serverItem.mother_id ?? null,
+    fatherId: serverItem.father_id ?? null,
     bornDate: serverItem.born_date ?? null,
     weight: serverItem.weight ?? null,
     gender: serverItem.gender ?? null,

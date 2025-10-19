@@ -7,6 +7,7 @@ class RegisterBody(BaseModel):
     animalNumber: str
     createdAt: str | None = None
     motherId: str | None = None
+    fatherId: str | None = None
     bornDate: str | None = None
     weight: float | None = None
     gender: str | None = None
@@ -19,6 +20,7 @@ class UpdateBody(BaseModel):
     animalNumber: str
     createdAt: str
     motherId: str | None = None
+    fatherId: str | None = None
     bornDate: str | None = None
     weight: float | None = None
     gender: str | None = None

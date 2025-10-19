@@ -51,6 +51,10 @@ export class RegistrationPopup {
               <input id="reg-mother" type="text" placeholder="e.g., 67890" autocomplete="off">
             </div>
             <div class="form-field">
+              <label for="reg-father">ID del Padre</label>
+              <input id="reg-father" type="text" placeholder="e.g., Repaso, 2399" autocomplete="off">
+            </div>
+            <div class="form-field">
               <label for="reg-born">Fecha de Nacimiento</label>
               <input id="reg-born" type="text" placeholder="dd/mm/aaaa" autocomplete="off">
             </div>
@@ -186,6 +190,7 @@ export class RegistrationPopup {
       await this.registerAnimal({
         animalNumber,
         motherId: formData.get('reg-mother')?.trim().toUpperCase() || null,
+        fatherId: formData.get('reg-father')?.trim().toUpperCase() || null,
         bornDate: this.formatDate(formData.get('reg-born')?.trim()),
         weight: formData.get('reg-weight') ? parseFloat(formData.get('reg-weight')) : null,
         gender: formData.get('reg-gender')?.toUpperCase() || null,

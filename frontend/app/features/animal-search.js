@@ -1,6 +1,9 @@
 import { getRecords, deleteRecord } from '../../db.js';
 import { getAuthToken } from '../auth.js';
 
+// Get API base URL
+const API_BASE_URL = window.API_BASE_URL_OVERRIDE || 'http://localhost:8000';
+
 /**
  * Normalize string data for database storage
  * @param {string} value - The string value to normalize
@@ -699,6 +702,9 @@ export class AnimalSearch {
           return;
         }
 
+        // Store reference to this for callbacks
+        const self = this;
+        
         // Update local database
         const putReq = store.put(updatedRecord);
         putReq.onsuccess = async () => {
@@ -719,6 +725,7 @@ export class AnimalSearch {
                 animalNumber: existingRecord.animalNumber,
                 createdAt: existingRecord.createdAt,
                 motherId: data.motherId || null,
+                fatherId: data.fatherId || null,
                 bornDate: data.bornDate || null,
                 weight: weight,
                 gender: data.gender || null,
@@ -747,7 +754,7 @@ export class AnimalSearch {
                 throw new Error('Authentication required. Please sign in again.');
               }
               
-              const response = await fetch(`${window.API_BASE_URL || 'https://farm-production-d087.up.railway.app'}/register/update`, {
+              const response = await fetch(`${API_BASE_URL}/register/update`, {
                 method: 'PUT',
                 headers: headers,
                 body: JSON.stringify(requestData)
@@ -755,10 +762,16 @@ export class AnimalSearch {
               
               if (response.ok) {
                 console.log('Record updated successfully on server');
-                // Mark as synced
+                // Mark as synced - create a new transaction for this
                 const syncedRecord = { ...updatedRecord, synced: true };
-                const syncPutReq = store.put(syncedRecord);
-                syncPutReq.onsuccess = () => resolve(syncedRecord);
+                const syncTx = db.transaction('records', 'readwrite');
+                const syncStore = syncTx.objectStore('records');
+                const syncPutReq = syncStore.put(syncedRecord);
+                syncPutReq.onsuccess = () => {
+                  // Refresh the UI to show the updated data
+                  self.performSearch();
+                  resolve(syncedRecord);
+                };
                 syncPutReq.onerror = () => resolve(updatedRecord);
               } else {
                 console.warn('Failed to update record on server:', response.status);
@@ -769,10 +782,14 @@ export class AnimalSearch {
                 } catch (e) {
                   console.error('Could not read error response');
                 }
+                // Refresh the UI even if server update failed
+                self.performSearch();
                 resolve(updatedRecord); // Return unsynced record
               }
             } catch (error) {
               console.warn('Failed to sync update to backend:', error);
+              // Refresh the UI even if sync failed
+              self.performSearch();
               resolve(updatedRecord); // Return unsynced record
             }
           } else {
@@ -780,12 +797,18 @@ export class AnimalSearch {
             if (navigator.onLine && window.triggerSync) {
               try {
                 await window.triggerSync(true);
+                // Refresh the UI after sync
+                self.performSearch();
                 resolve(updatedRecord);
               } catch (error) {
                 console.warn('Failed to sync update to backend:', error);
+                // Refresh the UI even if sync failed
+                self.performSearch();
                 resolve(updatedRecord);
               }
             } else {
+              // Refresh the UI for offline records
+              self.performSearch();
               resolve(updatedRecord);
             }
           }
@@ -832,6 +855,7 @@ export class AnimalSearch {
       body: JSON.stringify({
         animalNumber: data.animalNumber,
         motherId: data.motherId ?? null,
+        fatherId: data.fatherId ?? null,
         bornDate: data.bornDate ?? null,
         weight: data.weight ?? null,
         gender: data.gender ?? null,

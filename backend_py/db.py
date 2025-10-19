@@ -68,6 +68,7 @@ def _add_column_if_missing(column: str, coltype: str) -> None:
 
 for _col, _type in [
     ("mother_id", "TEXT"),
+    ("father_id", "TEXT"),
     ("born_date", "TEXT"),
     ("weight", "REAL"),
     ("gender", "TEXT"),
@@ -92,7 +93,7 @@ except sqlite3.OperationalError:
 def create_unique_index() -> None:
     try:
         conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_user_animal_mother ON registrations(user_key, animal_number, IFNULL(mother_id, ''))"
+            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_user_animal_mother_father ON registrations(user_key, animal_number, IFNULL(mother_id, ''), IFNULL(father_id, ''))"
         )
         conn.commit()
     except sqlite3.OperationalError:
@@ -102,13 +103,13 @@ def create_unique_index() -> None:
                 DELETE FROM registrations
                 WHERE rowid NOT IN (
                     SELECT MIN(rowid) FROM registrations
-                    GROUP BY user_key, animal_number, IFNULL(mother_id, '')
+                    GROUP BY user_key, animal_number, IFNULL(mother_id, ''), IFNULL(father_id, '')
                 )
                 """
             )
             conn.commit()
             conn.execute(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uniq_user_animal_mother ON registrations(user_key, animal_number, IFNULL(mother_id, ''))"
+                "CREATE UNIQUE INDEX IF NOT EXISTS uniq_user_animal_mother_father ON registrations(user_key, animal_number, IFNULL(mother_id, ''), IFNULL(father_id, ''))"
             )
             conn.commit()
         except sqlite3.OperationalError:
@@ -116,7 +117,7 @@ def create_unique_index() -> None:
     # New index for Firebase user-based uniqueness
     try:
         conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_createdby_animal_mother ON registrations(created_by, animal_number, IFNULL(mother_id, ''))"
+            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_createdby_animal_mother_father ON registrations(created_by, animal_number, IFNULL(mother_id, ''), IFNULL(father_id, ''))"
         )
         conn.commit()
     except sqlite3.OperationalError:
@@ -186,6 +187,19 @@ def create_events_trigger():
             WHERE (OLD.mother_id IS NULL AND NEW.mother_id IS NOT NULL) 
                OR (OLD.mother_id IS NOT NULL AND NEW.mother_id IS NULL) 
                OR (OLD.mother_id != NEW.mother_id);
+            
+            INSERT INTO events_state (
+                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
+                user_id, event_date, notes
+            ) 
+            SELECT NEW.id, NEW.animal_number, 'correccion', 'father_id', 
+                   COALESCE(OLD.father_id, 'NULL'), 
+                   COALESCE(NEW.father_id, 'NULL'), 
+                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
+                   datetime('now'), NEW.notes
+            WHERE (OLD.father_id IS NULL AND NEW.father_id IS NOT NULL) 
+               OR (OLD.father_id IS NOT NULL AND NEW.father_id IS NULL) 
+               OR (OLD.father_id != NEW.father_id);
             
             INSERT INTO events_state (
                 animal_id, animal_number, event_type, modified_field, old_value, new_value, 

@@ -1,5 +1,5 @@
-// const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
 const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
+// const API_BASE_URL = 'http://localhost:8000';
 const ENDPOINT_VALIDATE = '/validate-key';
 const ENDPOINT_REGISTER = '/register';
 const DEFAULT_PREFIX = 'AC988';
@@ -522,6 +522,7 @@ async function triggerSync(force = false) {
             body: JSON.stringify({
               animalNumber: r.animalNumber,
               motherId: r.motherId ?? null,
+              fatherId: r.fatherId ?? null,
               bornDate: r.bornDate ?? null,
               weight: r.weight ?? null,
               gender: r.gender ?? null,
@@ -544,6 +545,7 @@ async function triggerSync(force = false) {
               animalNumber: r.animalNumber,
               createdAt: r.createdAt,
               motherId: r.motherId ?? null,
+              fatherId: r.fatherId ?? null,
               bornDate: r.bornDate ?? null,
               weight: r.weight ?? null,
               gender: r.gender ?? null,

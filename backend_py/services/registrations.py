@@ -20,6 +20,7 @@ def insert_registration(created_by_or_key: str, body) -> None:
 
     animal = _normalize_text(body.animalNumber)
     mother = _normalize_text(body.motherId)
+    father = _normalize_text(body.fatherId)
 
     weight = None
     if body.weight is not None:
@@ -49,9 +50,9 @@ def insert_registration(created_by_or_key: str, body) -> None:
                 """
                 INSERT INTO registrations (
                     animal_number, created_at, user_key, created_by,
-                    mother_id, born_date, weight, gender, status, color, notes, notes_mother, short_id
+                    mother_id, father_id, born_date, weight, gender, status, color, notes, notes_mother, short_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10))
                 """,
                 (
                     animal,
@@ -59,6 +60,7 @@ def insert_registration(created_by_or_key: str, body) -> None:
                     None,  # legacy user_key deprecated when using Firebase
                     created_by_or_key,
                     mother,
+                    father,
                     body.bornDate,
                     weight,
                     gender,
@@ -112,6 +114,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
 
     animal = _normalize_text(body.animalNumber)
     mother = _normalize_text(body.motherId)
+    father = _normalize_text(body.fatherId)
 
     weight = None
     if body.weight is not None:
@@ -152,13 +155,13 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
             conn.execute(
                 """
                 UPDATE registrations SET
-                    animal_number = ?, mother_id = ?, born_date = ?, weight = ?,
+                    animal_number = ?, mother_id = ?, father_id = ?, born_date = ?, weight = ?,
                     gender = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
                     updated_at = datetime('now')
                 WHERE id = ?
                 """,
                 (
-                    animal, mother, body.bornDate, weight,
+                    animal, mother, father, body.bornDate, weight,
                     gender, status, color, notes, notes_mother,
                     animal_id
                 )
@@ -202,6 +205,7 @@ def find_and_update_registration(created_by_or_key: str, body) -> bool:
             update_body = RegisterBody(
                 animalNumber=body.animalNumber,
                 motherId=body.motherId,
+                fatherId=body.fatherId,
                 bornDate=body.bornDate,
                 weight=body.weight,
                 gender=body.gender,
@@ -235,7 +239,7 @@ def export_rows(created_by_or_key: str, date: str | None, start: str | None, end
     where_sql = " AND ".join(where)
     cur = conn.execute(
         f"""
-        SELECT animal_number, born_date, mother_id,
+        SELECT animal_number, born_date, mother_id, father_id,
                weight, gender, status, color, notes, notes_mother, created_at
         FROM registrations
         WHERE {where_sql}
