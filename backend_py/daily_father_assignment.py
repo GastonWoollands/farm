@@ -11,8 +11,8 @@ from datetime import datetime
 import os
 
 # Configuration
-API_BASE_URL = os.getenv("FARM_API_URL", "http://localhost:8000")
-USER_KEY = os.getenv("FARM_USER_KEY", "system")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")
 GESTATION_DAYS = int(os.getenv("GESTATION_DAYS", "300"))
 
 # Setup logging
@@ -29,7 +29,7 @@ def run_daily_father_assignment():
     """Run the daily father assignment process"""
     
     headers = {
-        "X-User-Key": USER_KEY,
+        "X-Admin-Secret": ADMIN_SECRET,
         "Content-Type": "application/json"
     }
     
@@ -83,7 +83,7 @@ def validate_existing_assignments():
     """Validate existing father ID assignments"""
     
     headers = {
-        "X-User-Key": USER_KEY,
+        "X-Admin-Secret": ADMIN_SECRET,
         "Content-Type": "application/json"
     }
     

@@ -3,18 +3,26 @@ Father Assignment API Endpoints
 Provides endpoints for automatic father ID assignment to registrations
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Header
 from typing import Dict, List
 from ..services.father_assignment import create_father_assignment_service
+from ..config import ADMIN_SECRET
 from ..db import conn
 
 router = APIRouter(prefix="/father-assignment", tags=["father-assignment"])
 
 
+def _require_admin_auth(x_admin_secret: str | None = Header(default=None)):
+    """Require admin authentication for father assignment operations"""
+    if not x_admin_secret or x_admin_secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
 @router.post("/process", response_model=Dict)
 async def process_father_assignments(
     dry_run: bool = Query(False, description="If true, simulate the process without making changes"),
-    gestation_days: int = Query(300, description="Gestation period in days", ge=200, le=400)
+    gestation_days: int = Query(300, description="Gestation period in days", ge=200, le=400),
+    x_admin_secret: str | None = Header(default=None)
 ):
     """
     Process all registrations without father IDs and assign them based on insemination data.
@@ -24,6 +32,8 @@ async def process_father_assignments(
     
     Returns processing results and statistics.
     """
+    _require_admin_auth(x_admin_secret)
+    
     try:
         service = create_father_assignment_service(gestation_days)
         results = service.process_all_registrations(dry_run=dry_run)
