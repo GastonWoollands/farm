@@ -36,6 +36,8 @@ def insert_registration(created_by_or_key: str, body) -> None:
     color = _normalize_text(body.color)
     notes = _normalize_text(body.notes)
     notes_mother = _normalize_text(body.notesMother)
+    insemination_round_id = _normalize_text(body.inseminationRoundId)
+    insemination_identifier = _normalize_text(body.inseminationIdentifier)
 
     if gender and gender not in VALID_GENDERS:
         raise HTTPException(status_code=400, detail=f"Invalid gender. Must be one of: {', '.join(VALID_GENDERS)}")
@@ -50,9 +52,10 @@ def insert_registration(created_by_or_key: str, body) -> None:
                 """
                 INSERT INTO registrations (
                     animal_number, created_at, user_key, created_by,
-                    mother_id, father_id, born_date, weight, gender, status, color, notes, notes_mother, short_id
+                    mother_id, father_id, born_date, weight, gender, status, color, notes, notes_mother, short_id,
+                    insemination_round_id, insemination_identifier
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?)
                 """,
                 (
                     animal,
@@ -68,6 +71,8 @@ def insert_registration(created_by_or_key: str, body) -> None:
                     color,
                     notes,
                     notes_mother,
+                    insemination_round_id,
+                    insemination_identifier,
                 ),
             )
             # Return the ID of the inserted record
@@ -130,6 +135,8 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
     color = _normalize_text(body.color)
     notes = _normalize_text(body.notes)
     notes_mother = _normalize_text(body.notesMother)
+    insemination_round_id = _normalize_text(body.inseminationRoundId)
+    insemination_identifier = _normalize_text(body.inseminationIdentifier)
 
     if gender and gender not in VALID_GENDERS:
         raise HTTPException(status_code=400, detail=f"Invalid gender. Must be one of: {', '.join(VALID_GENDERS)}")
@@ -157,12 +164,14 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
                 UPDATE registrations SET
                     animal_number = ?, mother_id = ?, father_id = ?, born_date = ?, weight = ?,
                     gender = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
+                    insemination_round_id = ?, insemination_identifier = ?,
                     updated_at = datetime('now')
                 WHERE id = ?
                 """,
                 (
                     animal, mother, father, body.bornDate, weight,
                     gender, status, color, notes, notes_mother,
+                    insemination_round_id, insemination_identifier,
                     animal_id
                 )
             )
@@ -212,7 +221,9 @@ def find_and_update_registration(created_by_or_key: str, body) -> bool:
                 status=body.status,
                 color=body.color,
                 notes=body.notes,
-                notesMother=body.notesMother
+                notesMother=body.notesMother,
+                inseminationRoundId=body.inseminationRoundId,
+                inseminationIdentifier=body.inseminationIdentifier
             )
             
             update_registration(created_by_or_key, animal_id, update_body)
@@ -240,7 +251,8 @@ def export_rows(created_by_or_key: str, date: str | None, start: str | None, end
     cur = conn.execute(
         f"""
         SELECT animal_number, born_date, mother_id, father_id,
-               weight, gender, status, color, notes, notes_mother, created_at
+               weight, gender, status, color, notes, notes_mother, created_at,
+               insemination_round_id, insemination_identifier
         FROM registrations
         WHERE {where_sql}
         ORDER BY id ASC

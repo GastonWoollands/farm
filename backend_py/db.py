@@ -79,6 +79,8 @@ for _col, _type in [
     ("short_id", "TEXT"),
     ("created_by", "TEXT"),
     ("updated_at", "TEXT DEFAULT (datetime('now'))"),
+    ("insemination_round_id", "TEXT"),
+    ("insemination_identifier", "TEXT"),
 ]:
     _add_column_if_missing(_col, _type)
 
@@ -124,6 +126,15 @@ def create_unique_index() -> None:
         pass
 
 create_unique_index()
+
+# Create indexes for new insemination tracking columns
+try:
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_registrations_insemination_round_id ON registrations(insemination_round_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_registrations_insemination_identifier ON registrations(insemination_identifier)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_registrations_mother_insemination ON registrations(mother_id, insemination_round_id, insemination_identifier)")
+    conn.commit()
+except sqlite3.Error as e:
+    print(f"Error creating insemination indexes: {e}")
 
 # Create trigger for automatic event tracking
 def create_events_trigger():
@@ -285,5 +296,228 @@ try:
     conn.commit()
 except sqlite3.OperationalError:
     pass  # Column doesn't exist, skip update
+
+# Initialize inseminations table
+def create_inseminations_table():
+    """Create the inseminations table and related structures"""
+    try:
+        # Create the inseminations table
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS inseminations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                insemination_identifier TEXT NOT NULL,
+                insemination_round_id TEXT NOT NULL,
+                mother_id TEXT NOT NULL,
+                mother_visual_id TEXT NOT NULL,
+                bull_id TEXT,
+                insemination_date DATE NOT NULL,
+                registration_date TEXT NOT NULL DEFAULT (datetime('now')),
+                animal_type TEXT,
+                notes TEXT,
+                created_by TEXT NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        
+        # Create unique constraint to prevent duplicate inseminations for same cow on same date
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_mother_insemination_date ON inseminations(mother_id, insemination_date)"
+        )
+        
+        # Create indexes for performance optimization
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_id ON inseminations(mother_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_visual_id ON inseminations(mother_visual_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_id ON inseminations(insemination_round_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_insemination_date ON inseminations(insemination_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_bull_id ON inseminations(bull_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_created_by ON inseminations(created_by)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_registration_date ON inseminations(registration_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_visual_date ON inseminations(mother_visual_id, insemination_date DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_date ON inseminations(insemination_round_id, insemination_date DESC)")
+        
+        # Create triggers for automatic event tracking
+        conn.execute("DROP TRIGGER IF EXISTS track_insemination_insert")
+        conn.execute("DROP TRIGGER IF EXISTS track_insemination_update")
+        conn.execute("DROP TRIGGER IF EXISTS track_insemination_delete")
+        
+        # Create INSERT trigger (insemination event)
+        conn.execute("""
+        CREATE TRIGGER track_insemination_insert
+        AFTER INSERT ON inseminations
+        FOR EACH ROW
+        BEGIN
+            INSERT INTO events_state (
+                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
+                user_id, event_date, notes
+            ) VALUES (
+                NEW.mother_id, 
+                NEW.mother_visual_id, 
+                'inseminacion', 
+                'insemination_date', 
+                NULL, 
+                NEW.insemination_date, 
+                NEW.created_by, 
+                datetime('now'), 
+                NEW.notes
+            );
+        END;
+        """)
+        
+        # Create UPDATE trigger (track field changes)
+        conn.execute("""
+        CREATE TRIGGER track_insemination_update
+        AFTER UPDATE ON inseminations
+        FOR EACH ROW
+        BEGIN
+            -- Track insemination date changes
+            INSERT INTO events_state (
+                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
+                user_id, event_date, notes
+            ) 
+            SELECT NEW.mother_id, NEW.mother_visual_id, 'correccion', 'insemination_date', 
+                   OLD.insemination_date, NEW.insemination_date, 
+                   NEW.created_by, datetime('now'), NEW.notes
+            WHERE OLD.insemination_date != NEW.insemination_date;
+            
+            -- Track bull_id changes
+            INSERT INTO events_state (
+                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
+                user_id, event_date, notes
+            ) 
+            SELECT NEW.mother_id, NEW.mother_visual_id, 'correccion', 'bull_id', 
+                   COALESCE(OLD.bull_id, 'NULL'), COALESCE(NEW.bull_id, 'NULL'), 
+                   NEW.created_by, datetime('now'), NEW.notes
+            WHERE (OLD.bull_id IS NULL AND NEW.bull_id IS NOT NULL) 
+               OR (OLD.bull_id IS NOT NULL AND NEW.bull_id IS NULL) 
+               OR (OLD.bull_id != NEW.bull_id);
+            
+            -- Track notes changes
+            INSERT INTO events_state (
+                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
+                user_id, event_date, notes
+            ) 
+            SELECT NEW.mother_id, NEW.mother_visual_id, 'correccion', 'insemination_notes', 
+                   OLD.notes, NEW.notes, 
+                   NEW.created_by, datetime('now'), NEW.notes
+            WHERE OLD.notes != NEW.notes;
+        END;
+        """)
+        
+        # Create DELETE trigger
+        conn.execute("""
+        CREATE TRIGGER track_insemination_delete
+        AFTER DELETE ON inseminations
+        FOR EACH ROW
+        BEGIN
+            INSERT INTO events_state (
+                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
+                user_id, event_date, notes
+            ) VALUES (
+                OLD.mother_id, 
+                OLD.mother_visual_id, 
+                'eliminacion_inseminacion', 
+                'insemination_date', 
+                OLD.insemination_date, 
+                NULL, 
+                OLD.created_by, 
+                datetime('now'), 
+                'Inseminación eliminada'
+            );
+        END;
+        """)
+        
+        conn.commit()
+        
+        # Add animal_type column to existing inseminations table if it doesn't exist
+        try:
+            conn.execute("ALTER TABLE inseminations ADD COLUMN animal_type TEXT")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        # Add insemination_round_id column to existing inseminations table if it doesn't exist
+        try:
+            conn.execute("ALTER TABLE inseminations ADD COLUMN insemination_round_id TEXT")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        # Migrate insemination_date from TEXT to DATE, mother_id from INTEGER to TEXT, and remove foreign key if needed
+        try:
+            # Check if insemination_date column exists and is TEXT type, or mother_id is INTEGER
+            cursor = conn.execute("PRAGMA table_info(inseminations)")
+            columns = cursor.fetchall()
+            insemination_date_col = next((col for col in columns if col[1] == 'insemination_date'), None)
+            mother_id_col = next((col for col in columns if col[1] == 'mother_id'), None)
+            
+            # Check if foreign key constraint exists
+            cursor = conn.execute("PRAGMA foreign_key_list(inseminations)")
+            fk_exists = len(cursor.fetchall()) > 0
+            
+            needs_migration = (
+                (insemination_date_col and insemination_date_col[2] == 'TEXT') or
+                (mother_id_col and mother_id_col[2] == 'INTEGER') or
+                fk_exists
+            )
+            
+            if needs_migration:
+                print("Migrating inseminations table to fix data types and remove foreign key...")
+                # Create a new table with correct types
+                conn.execute("""
+                CREATE TABLE inseminations_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    insemination_identifier TEXT NOT NULL,
+                    insemination_round_id TEXT NOT NULL,
+                    mother_id TEXT NOT NULL,
+                    mother_visual_id TEXT NOT NULL,
+                    bull_id TEXT,
+                    insemination_date DATE NOT NULL,
+                    registration_date TEXT NOT NULL DEFAULT (datetime('now')),
+                    animal_type TEXT,
+                    notes TEXT,
+                    created_by TEXT NOT NULL,
+                    updated_at TEXT DEFAULT (datetime('now'))
+                )
+                """)
+                
+                # Copy data from old table to new table
+                conn.execute("""
+                INSERT INTO inseminations_new 
+                SELECT id, insemination_identifier, 
+                       strftime('%Y%m', insemination_date) as insemination_round_id,
+                       CAST(mother_id AS TEXT) as mother_id, mother_visual_id, bull_id,
+                       date(insemination_date), registration_date, animal_type, notes, 
+                       created_by, updated_at
+                FROM inseminations
+                """)
+                
+                # Drop old table and rename new table
+                conn.execute("DROP TABLE inseminations")
+                conn.execute("ALTER TABLE inseminations_new RENAME TO inseminations")
+                
+                # Recreate indexes with updated constraints
+                conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uniq_mother_insemination_date ON inseminations(mother_id, insemination_date)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_id ON inseminations(mother_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_visual_id ON inseminations(mother_visual_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_id ON inseminations(insemination_round_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_insemination_date ON inseminations(insemination_date)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_bull_id ON inseminations(bull_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_created_by ON inseminations(created_by)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_registration_date ON inseminations(registration_date)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_date ON inseminations(mother_id, insemination_date DESC)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_date ON inseminations(insemination_round_id, insemination_date DESC)")
+                
+                conn.commit()
+                print("Migration completed successfully - Data types fixed, foreign key removed")
+        except sqlite3.Error as e:
+            print(f"Migration error (non-critical): {e}")
+            # Continue execution even if migration fails
+        
+    except sqlite3.Error as e:
+        print(f"Error creating inseminations table: {e}")
+
+create_inseminations_table()
 
 

@@ -1,32 +1,28 @@
-[project]
+[tool.poetry]
 name = "farm"
-version = "0.1.0"
 description = ""
-authors = [
-    {name = "Your Name",email = "you@example.com"}
-]
+authors = ["Gaston Woollands <contact@gwoollands.com>"]
 readme = "README.md"
-requires-python = ">=3.10,<4.0"
-dependencies = [
-    "fastapi (>=0.118.0,<0.119.0)",
-    "uvicorn (>=0.37.0,<0.38.0)",
-    "firebase-admin (>=7.1.0,<8.0.0)",
-    "google-cloud-storage (>=3.4.1,<4.0.0)"
-]
+package-mode = false
 
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+fastapi = ">=0.118.0,<0.119.0"
+uvicorn = ">=0.37.0,<0.38.0"
+firebase-admin = ">=7.1.0,<8.0.0"
+google-cloud-storage = ">=3.4.1,<4.0.0"
+pandas = "^2.3.3"
+openpyxl = "^3.1.5"
+
+[tool.poetry.group.dev.dependencies]
+commitizen = "^4.9.1"
+ipykernel = "^7.0.1"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.poetry.group.dev.dependencies]
-commitizen = "^4.9.1"
-
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.1.2"
-tag_format = "$version"
-version_files = [
-    "pyproject.toml:version"
-]
-update_changelog_on_bump = true
+version = "0.1.1"
+version_files = ["pyproject.toml:tool.poetry.version"]
