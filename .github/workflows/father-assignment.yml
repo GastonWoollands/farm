@@ -1,0 +1,22 @@
+name: Daily Father Assignment
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # Daily at 3 AM UTC
+  workflow_dispatch:      # Allow manual execution from GitHub
+
+jobs:
+  father-assignment:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Run Father Assignment
+      env:
+        API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
+        GESTATION_DAYS: ${{ secrets.GESTATION_DAYS || '300' }}
+      run: |
+        curl -X POST \
+          -H "X-Admin-Secret: $ADMIN_SECRET" \
+          -H "Content-Type: application/json" \
+          "$API_BASE_URL/father-assignment/process?dry_run=false&gestation_days=$GESTATION_DAYS"
