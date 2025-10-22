@@ -11,12 +11,14 @@ class RegisterBody(BaseModel):
     bornDate: str | None = None
     weight: float | None = None
     gender: str | None = None
+    animalType: int | None = None
     status: str | None = None
     color: str | None = None
     notes: str | None = None
     notesMother: str | None = None
     inseminationRoundId: str | None = None
     inseminationIdentifier: str | None = None
+    scrotalCircumference: float | None = None
 
 class UpdateBody(BaseModel):
     animalNumber: str
@@ -26,12 +28,14 @@ class UpdateBody(BaseModel):
     bornDate: str | None = None
     weight: float | None = None
     gender: str | None = None
+    animalType: int | None = None
     status: str | None = None
     color: str | None = None
     notes: str | None = None
     notesMother: str | None = None
     inseminationRoundId: str | None = None
     inseminationIdentifier: str | None = None
+    scrotalCircumference: float | None = None
     
     class Config:
         # Allow extra fields and be more lenient with validation

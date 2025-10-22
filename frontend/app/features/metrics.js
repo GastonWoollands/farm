@@ -54,7 +54,7 @@ export class MetricsCalculator {
     
     return {
       overview: this.calculateOverview(),
-      cows: this.calculateAnimalTypeMetrics(cows, 'Vacas'),
+      cows: this.calculateAnimalTypeMetrics(cows, 'Animales'),
       // pigs: this.calculateAnimalTypeMetrics(pigs, 'Cerdos'),
       objectives: this.calculateObjectiveMetrics()
     };
@@ -369,7 +369,7 @@ export class MetricsRenderer {
           </div>
           <div class="metric-card">
             <div class="metric-value">${overview.cows}</div>
-            <div class="metric-label">Vacas</div>
+            <div class="metric-label">Animales</div>
           </div>
           <div class="metric-card">
             <div class="metric-value">${overview.syncRate}%</div>
@@ -428,7 +428,7 @@ export class MetricsRenderer {
       <div class="metrics-section">
         <h3>Métricas por Tipo de Animal</h3>
         <div class="animal-type-tabs">
-          <button class="animal-tab active" data-type="cows">Vacas (${cows.count})</button>
+          <button class="animal-tab active" data-type="cows">Animales (${cows.count})</button>
         </div>
         <div class="animal-type-content">
           <div id="cows-metrics" class="animal-metrics active">

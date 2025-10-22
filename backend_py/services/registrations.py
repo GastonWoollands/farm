@@ -31,7 +31,26 @@ def insert_registration(created_by_or_key: str, body) -> None:
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="Invalid weight value")
 
+    scrotal_circumference = None
+    if body.scrotalCircumference is not None:
+        try:
+            scrotal_circumference = float(body.scrotalCircumference)
+            if not (0 <= scrotal_circumference <= 100):
+                raise HTTPException(status_code=400, detail="Scrotal circumference must be between 0 and 100 cm")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid scrotal circumference value")
+
     gender = _normalize_text(body.gender)
+    
+    # Determine animal_type based on gender
+    animal_type = None
+    if gender:
+        if gender == 'FEMALE':
+            animal_type = 1  # Cow
+        elif gender == 'MALE':
+            animal_type = 2  # Bull
+        # UNKNOWN gender will have animal_type = None
+    
     status = _normalize_text(body.status)
     color = _normalize_text(body.color)
     notes = _normalize_text(body.notes)
@@ -52,10 +71,10 @@ def insert_registration(created_by_or_key: str, body) -> None:
                 """
                 INSERT INTO registrations (
                     animal_number, created_at, user_key, created_by,
-                    mother_id, father_id, born_date, weight, gender, status, color, notes, notes_mother, short_id,
-                    insemination_round_id, insemination_identifier
+                    mother_id, father_id, born_date, weight, gender, animal_type, status, color, notes, notes_mother, short_id,
+                    insemination_round_id, insemination_identifier, scrotal_circumference
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?)
                 """,
                 (
                     animal,
@@ -67,12 +86,14 @@ def insert_registration(created_by_or_key: str, body) -> None:
                     body.bornDate,
                     weight,
                     gender,
+                    animal_type,
                     status,
                     color,
                     notes,
                     notes_mother,
                     insemination_round_id,
                     insemination_identifier,
+                    scrotal_circumference,
                 ),
             )
             # Return the ID of the inserted record
@@ -130,7 +151,26 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="Invalid weight value")
 
+    scrotal_circumference = None
+    if body.scrotalCircumference is not None:
+        try:
+            scrotal_circumference = float(body.scrotalCircumference)
+            if not (0 <= scrotal_circumference <= 100):
+                raise HTTPException(status_code=400, detail="Scrotal circumference must be between 0 and 100 cm")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid scrotal circumference value")
+
     gender = _normalize_text(body.gender)
+    
+    # Determine animal_type based on gender
+    animal_type = None
+    if gender:
+        if gender == 'FEMALE':
+            animal_type = 1  # Cow
+        elif gender == 'MALE':
+            animal_type = 2  # Bull
+        # UNKNOWN gender will have animal_type = None
+    
     status = _normalize_text(body.status)
     color = _normalize_text(body.color)
     notes = _normalize_text(body.notes)
@@ -163,15 +203,15 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
                 """
                 UPDATE registrations SET
                     animal_number = ?, mother_id = ?, father_id = ?, born_date = ?, weight = ?,
-                    gender = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
-                    insemination_round_id = ?, insemination_identifier = ?,
+                    gender = ?, animal_type = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
+                    insemination_round_id = ?, insemination_identifier = ?, scrotal_circumference = ?,
                     updated_at = datetime('now')
                 WHERE id = ?
                 """,
                 (
                     animal, mother, father, body.bornDate, weight,
-                    gender, status, color, notes, notes_mother,
-                    insemination_round_id, insemination_identifier,
+                    gender, animal_type, status, color, notes, notes_mother,
+                    insemination_round_id, insemination_identifier, scrotal_circumference,
                     animal_id
                 )
             )
@@ -223,7 +263,8 @@ def find_and_update_registration(created_by_or_key: str, body) -> bool:
                 notes=body.notes,
                 notesMother=body.notesMother,
                 inseminationRoundId=body.inseminationRoundId,
-                inseminationIdentifier=body.inseminationIdentifier
+                inseminationIdentifier=body.inseminationIdentifier,
+                scrotalCircumference=body.scrotalCircumference
             )
             
             update_registration(created_by_or_key, animal_id, update_body)
@@ -251,8 +292,8 @@ def export_rows(created_by_or_key: str, date: str | None, start: str | None, end
     cur = conn.execute(
         f"""
         SELECT animal_number, born_date, mother_id, father_id,
-               weight, gender, status, color, notes, notes_mother, created_at,
-               insemination_round_id, insemination_identifier
+               weight, gender, animal_type, status, color, notes, notes_mother, created_at,
+               insemination_round_id, insemination_identifier, scrotal_circumference
         FROM registrations
         WHERE {where_sql}
         ORDER BY id ASC

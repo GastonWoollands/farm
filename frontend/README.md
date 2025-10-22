@@ -65,7 +65,7 @@ frontend/
 
 ### Navigation Tabs
 - **Métricas** - Farm statistics and performance metrics
-- **Vacas** - Cow registration and management
+- **Animales** - Animal registration and management
 - **Buscar** - Search and edit animal records
 - **Configuración** - Objectives and user preferences
 

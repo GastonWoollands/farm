@@ -176,11 +176,12 @@ export async function upsertFromServer(serverItem) {
     bornDate: serverItem.born_date ?? null,
     weight: serverItem.weight ?? null,
     gender: serverItem.gender ?? null,
+    animalType: serverItem.animal_type ?? 1, // Use server value or default to cow
+    scrotalCircumference: serverItem.scrotal_circumference ?? null,
     status: serverItem.status ?? null,
     color: serverItem.color ?? null,
     notes: serverItem.notes ?? null,
     notesMother: serverItem.notes_mother ?? null,
-    animalType: 1, // default to cow; server currently exports only cows
     synced: true,
     syncedAt: new Date().toISOString(),
     backendId: serverItem.id, // Store the backend database ID

@@ -71,6 +71,10 @@ export class RegistrationPopup {
                 <option value="UNKNOWN">Desconocido</option>
               </select>
             </div>
+            <div class="form-field" id="reg-scrotal-circumference-field" style="display: none;">
+              <label for="reg-scrotal-circumference">Circunferencia Escrotal (cm)</label>
+              <input id="reg-scrotal-circumference" type="number" step="0.1" min="0" max="100" placeholder="e.g., 35.5" autocomplete="off">
+            </div>
             <div class="form-field">
               <label for="reg-status">Estado</label>
               <select id="reg-status">
@@ -197,7 +201,8 @@ export class RegistrationPopup {
         status: formData.get('reg-status')?.toUpperCase() || null,
         color: formData.get('reg-color')?.toUpperCase() || null,
         notes: formData.get('reg-notes')?.trim().toUpperCase() || null,
-        notesMother: formData.get('reg-notes-mother')?.trim().toUpperCase() || null
+        notesMother: formData.get('reg-notes-mother')?.trim().toUpperCase() || null,
+        scrotalCircumference: formData.get('reg-scrotal-circumference') ? parseFloat(formData.get('reg-scrotal-circumference')) : null
       });
 
       this.close();
@@ -227,13 +232,15 @@ export class RegistrationPopup {
       animalNumber: data.animalNumber,
       userKey,
       motherId: data.motherId,
+      fatherId: data.fatherId,
       bornDate: data.bornDate,
       weight: (data.weight !== null && !isNaN(data.weight) && isFinite(data.weight)) ? data.weight : null,
       gender: data.gender,
       status: data.status,
       color: data.color,
       notes: data.notes,
-      notesMother: data.notesMother
+      notesMother: data.notesMother,
+      scrotalCircumference: (data.scrotalCircumference !== null && !isNaN(data.scrotalCircumference) && isFinite(data.scrotalCircumference)) ? data.scrotalCircumference : null
     };
 
     await addRecord(record);

@@ -76,7 +76,7 @@
     <!-- Navigation Tabs -->
     <div class="nav-tabs">
       <button id="metrics-tab" class="nav-tab active">Métricas</button>
-      <button id="cows-tab" class="nav-tab">Vacas</button>
+      <button id="cows-tab" class="nav-tab">Animales</button>
       <!-- <button id="pigs-tab" class="nav-tab">Cerdos</button> -->
       <button id="search-tab" class="nav-tab">Buscar</button>
       <button id="objectives-tab" class="nav-tab">Configuración</button>
@@ -91,7 +91,7 @@
     <div id="cows-page" hidden>
       <section class="card">
         <div class="row space-between align-center">
-          <h2>Vacas</h2>
+          <h2>Animales</h2>
           <div class="row gap">
             <button id="register-cow-btn" class="btn primary">Registrar Nuevo Animal</button>
             <button id="manage-synced-cows" class="btn">Gestionar registros…</button>
@@ -104,7 +104,7 @@
           <form id="inline-add-cow" class="form-vertical" style="margin:8px 0 12px;">
             <input type="hidden" id="inline-animal-type" value="1">
             <div class="form-field">
-              <label for="inline-animal-cow">ID de la Vaca (requerido)</label>
+              <label for="inline-animal-cow">ID del animal (requerido)</label>
               <input id="inline-animal-cow" type="text" placeholder="e.g., 123-45" autocomplete="off" required>
             </div>
             <div class="form-field">
@@ -131,6 +131,10 @@
                 <option value="FEMALE">Hembra</option>
                 <option value="UNKNOWN">Desconocido</option>
               </select>
+            </div>
+            <div class="form-field" id="scrotal-circumference-field" style="display: none;">
+              <label for="inline-scrotal-circumference-cow">Circunferencia Escrotal (cm, opcional)</label>
+              <input id="inline-scrotal-circumference-cow" type="number" step="0.1" min="0" max="100" placeholder="e.g., 35.5" autocomplete="off">
             </div>
             <div class="form-field">
               <label for="inline-status-cow">Estado (opcional)</label>
@@ -159,7 +163,7 @@
               <input id="inline-notes-cow" type="text" placeholder="Cualquier nota" autocomplete="off">
             </div>
             <div class="row gap">
-              <button class="btn primary" id="inline-add-cow-btn" type="submit" aria-label="Registrar vaca">Registrar Vaca</button>
+              <button class="btn primary" id="inline-add-cow-btn" type="submit" aria-label="Registrar animal">Registrar Animal</button>
             </div>
           </form>
         </section>

@@ -36,6 +36,11 @@ export class AnimalSearch {
   init() {
     this.createSearchInterface();
     this.setupEventListeners();
+    
+    // Listen for data updates to refresh search results
+    window.addEventListener('dataUpdated', () => {
+      this.performSearch();
+    });
   }
 
   /**
@@ -71,8 +76,16 @@ export class AnimalSearch {
         </div>
         <div class="search-filters">
           <label class="filter-label">
-            <input type="radio" name="animal-type" value="1" checked>
+            <input type="radio" name="animal-type" value="all" checked>
+            <span>Todos los Animales</span>
+          </label>
+          <label class="filter-label">
+            <input type="radio" name="animal-type" value="cows">
             <span>Vacas</span>
+          </label>
+          <label class="filter-label">
+            <input type="radio" name="animal-type" value="bulls">
+            <span>Toros</span>
           </label>
         </div>
       </div>
@@ -169,7 +182,7 @@ export class AnimalSearch {
    */
   async performSearch() {
     const query = this.currentQuery.trim();
-    const selectedType = document.querySelector('input[name="animal-type"]:checked')?.value || '1'; // Default to cows
+    const selectedType = document.querySelector('input[name="animal-type"]:checked')?.value || 'all'; // Default to all animals
     
     try {
       const results = await this.searchAnimals(query, selectedType);
@@ -187,8 +200,17 @@ export class AnimalSearch {
    */
   async searchAnimals(query, animalType) {
     const allRecords = await getRecords();
-    // Always filter to cows only (animalType = 1)
+    // Filter by animal type (1 = cows/bulls) and then by gender
     let filteredRecords = allRecords.filter(r => r.animalType === 1);
+    
+    // Apply gender-based filtering
+    if (animalType === 'cows') {
+      filteredRecords = filteredRecords.filter(r => r.gender === 'FEMALE');
+    } else if (animalType === 'bulls') {
+      filteredRecords = filteredRecords.filter(r => r.gender === 'MALE');
+    }
+    // 'all' shows all animals (no additional filtering)
+
 
     const searchTerm = (query || '').toLowerCase().trim();
 
@@ -202,7 +224,8 @@ export class AnimalSearch {
         record.notesMother,
         record.gender,
         record.status,
-        record.color
+        record.color,
+        record.scrotalCircumference
       ].filter(field => field !== null && field !== undefined);
 
       return searchableFields.some(field => 
@@ -282,9 +305,10 @@ export class AnimalSearch {
    * @returns {string}
    */
   renderAnimalCard(record) {
-    const animalType = 'Vaca'; // Only cows are shown now
+    const animalType = this.getAnimalTypeName(record.animalType);
     const syncStatus = record.synced ? 'Sincronizado' : 'Pendiente';
     const syncClass = record.synced ? 'synced' : 'pending';
+    
 
     return `
       <div class="animal-card">
@@ -300,6 +324,7 @@ export class AnimalSearch {
             ${record.bornDate ? `<div class="detail-item"><span class="detail-label">Nacimiento:</span> ${this.formatDate(record.bornDate)}</div>` : ''}
             ${record.weight ? `<div class="detail-item"><span class="detail-label">Peso:</span> ${record.weight} kg</div>` : ''}
             ${record.gender ? `<div class="detail-item"><span class="detail-label">Sexo:</span> ${this.formatGender(record.gender)}</div>` : ''}
+            ${record.scrotalCircumference ? `<div class="detail-item"><span class="detail-label">Circunferencia Escrotal:</span> ${record.scrotalCircumference} cm</div>` : ''}
             ${record.status ? `<div class="detail-item"><span class="detail-label">Estado:</span> ${this.formatStatus(record.status)}</div>` : ''}
             ${record.color ? `<div class="detail-item"><span class="detail-label">Color:</span> ${this.formatColor(record.color)}</div>` : ''}
           </div>
@@ -446,12 +471,23 @@ export class AnimalSearch {
   }
 
   /**
+   * Get animal type name from ID
+   */
+  getAnimalTypeName(animalTypeId) {
+    const typeMap = {
+      1: 'Vaca',
+      2: 'Toro'
+    };
+    return typeMap[animalTypeId] || 'Animal';
+  }
+
+  /**
    * Open edit modal for a specific record
    * @param {number} recordId - Record ID to edit
    */
   async openEditModal(recordId) {
     try {
-      const records = await this.searchAnimals('', '1'); // Get all cow records only
+      const records = await this.searchAnimals('', 'all'); // Get all animal records
       const record = records.find(r => r.id === recordId);
       
       if (!record) {
@@ -492,7 +528,7 @@ export class AnimalSearch {
             </div>
             <div class="edit-form-field">
               <label>Tipo de Animal</label>
-              <input type="text" value="Vaca" readonly style="background-color: #f5f5f5; color: #666;">
+              <input type="text" value="${this.getAnimalTypeName(record.animalType)}" readonly style="background-color: #f5f5f5; color: #666;">
             </div>
             <div class="edit-form-field">
               <label for="edit-mother-id">ID de la Madre</label>
@@ -518,6 +554,10 @@ export class AnimalSearch {
                 <option value="FEMALE" ${record.gender === 'FEMALE' ? 'selected' : ''}>Hembra</option>
                 <option value="UNKNOWN" ${record.gender === 'UNKNOWN' ? 'selected' : ''}>Desconocido</option>
               </select>
+            </div>
+            <div class="edit-form-field" id="edit-scrotal-circumference-field" style="display: ${record.gender === 'MALE' ? 'block' : 'none'};">
+              <label for="edit-scrotal-circumference">Circunferencia Escrotal (cm)</label>
+              <input id="edit-scrotal-circumference" type="number" step="0.1" min="0" max="100" value="${record.scrotalCircumference || ''}" placeholder="e.g., 35.5" autocomplete="off">
             </div>
             <div class="edit-form-field">
               <label for="edit-status">Estado</label>
@@ -580,6 +620,20 @@ export class AnimalSearch {
     document.getElementById('close-edit-modal')?.addEventListener('click', () => this.closeEditModal());
     document.getElementById('cancel-edit')?.addEventListener('click', () => this.closeEditModal());
 
+    // Handle gender change to show/hide scrotal circumference field
+    document.getElementById('edit-gender')?.addEventListener('change', () => {
+      const gender = document.getElementById('edit-gender').value;
+      const scrotalField = document.getElementById('edit-scrotal-circumference-field');
+      const scrotalInput = document.getElementById('edit-scrotal-circumference');
+      
+      if (gender === 'MALE') {
+        scrotalField.style.display = 'block';
+      } else {
+        scrotalField.style.display = 'none';
+        scrotalInput.value = ''; // Clear value when hidden
+      }
+    });
+
     // Close on backdrop click
     modal?.addEventListener('click', (e) => {
       if (e.target === modal) {
@@ -616,6 +670,7 @@ export class AnimalSearch {
         bornDate: (document.getElementById('edit-born-date').value || '').trim() || null,
         weight: document.getElementById('edit-weight').value ? parseFloat(document.getElementById('edit-weight').value) : null,
         gender: normalizeString(document.getElementById('edit-gender').value),
+        scrotalCircumference: document.getElementById('edit-scrotal-circumference').value ? parseFloat(document.getElementById('edit-scrotal-circumference').value) : null,
         status: normalizeString(document.getElementById('edit-status').value),
         color: normalizeString(document.getElementById('edit-color').value),
         notes: normalizeString(document.getElementById('edit-notes').value),
@@ -625,6 +680,11 @@ export class AnimalSearch {
       // Validate weight if provided
       if (updatedData.weight !== null && (isNaN(updatedData.weight) || !isFinite(updatedData.weight))) {
         updatedData.weight = null;
+      }
+
+      // Validate scrotal circumference if provided
+      if (updatedData.scrotalCircumference !== null && (isNaN(updatedData.scrotalCircumference) || !isFinite(updatedData.scrotalCircumference))) {
+        updatedData.scrotalCircumference = null;
       }
 
       await this.updateRecord(recordId, updatedData);
@@ -729,6 +789,7 @@ export class AnimalSearch {
                 bornDate: data.bornDate || null,
                 weight: weight,
                 gender: data.gender || null,
+                scrotalCircumference: data.scrotalCircumference || null,
                 status: data.status || null,
                 color: data.color || null,
                 notes: data.notes || null,

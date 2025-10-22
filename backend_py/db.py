@@ -18,6 +18,26 @@ except PermissionError:
 # Initialize DB and table
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 
+# Create animal_types lookup table
+conn.execute(
+    """
+    CREATE TABLE IF NOT EXISTS animal_types (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT
+    )
+    """
+)
+
+# Insert default animal types
+conn.execute(
+    """
+    INSERT OR IGNORE INTO animal_types (id, name, description) VALUES 
+    (1, 'cow', 'Female cattle'),
+    (2, 'bull', 'Male cattle')
+    """
+)
+
 conn.execute(
     """
     CREATE TABLE IF NOT EXISTS registrations (
@@ -72,6 +92,7 @@ for _col, _type in [
     ("born_date", "TEXT"),
     ("weight", "REAL"),
     ("gender", "TEXT"),
+    ("animal_type", "INTEGER"),
     ("status", "TEXT"),
     ("color", "TEXT"),
     ("notes", "TEXT"),
@@ -81,6 +102,7 @@ for _col, _type in [
     ("updated_at", "TEXT DEFAULT (datetime('now'))"),
     ("insemination_round_id", "TEXT"),
     ("insemination_identifier", "TEXT"),
+    ("scrotal_circumference", "REAL"),
 ]:
     _add_column_if_missing(_col, _type)
 
@@ -282,6 +304,19 @@ def create_events_trigger():
                    COALESCE(NEW.created_by, NEW.user_key, 'system'), 
                    datetime('now'), NEW.notes
             WHERE OLD.notes_mother != NEW.notes_mother;
+            
+            INSERT INTO events_state (
+                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
+                user_id, event_date, notes
+            ) 
+            SELECT NEW.id, NEW.animal_number, 'correccion', 'scrotal_circumference', 
+                   COALESCE(CAST(OLD.scrotal_circumference AS TEXT), 'NULL'), 
+                   COALESCE(CAST(NEW.scrotal_circumference AS TEXT), 'NULL'), 
+                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
+                   datetime('now'), NEW.notes
+            WHERE (OLD.scrotal_circumference IS NULL AND NEW.scrotal_circumference IS NOT NULL) 
+               OR (OLD.scrotal_circumference IS NOT NULL AND NEW.scrotal_circumference IS NULL) 
+               OR (OLD.scrotal_circumference != NEW.scrotal_circumference);
         END;
         """)
         conn.commit()

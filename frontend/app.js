@@ -69,6 +69,8 @@ const $inlineStatusCow = document.getElementById('inline-status-cow');
 const $inlineColorCow = document.getElementById('inline-color-cow');
 const $inlineNotesCow = document.getElementById('inline-notes-cow');
 const $inlineNotesMotherCow = document.getElementById('inline-notes-mother-cow');
+const $inlineScrotalCircumferenceCow = document.getElementById('inline-scrotal-circumference-cow');
+const $scrotalCircumferenceField = document.getElementById('scrotal-circumference-field');
 
 // Pigs elements
 /*
@@ -258,6 +260,17 @@ $registerCowBtn?.addEventListener('click', () => {
   $inlineAnimalCow?.focus();
 });
 
+// Handle gender change to show/hide scrotal circumference field
+$inlineGenderCow?.addEventListener('change', () => {
+  const gender = $inlineGenderCow.value;
+  if (gender === 'MALE') {
+    $scrotalCircumferenceField.style.display = 'block';
+  } else {
+    $scrotalCircumferenceField.style.display = 'none';
+    $inlineScrotalCircumferenceCow.value = ''; // Clear value when hidden
+  }
+});
+
 // Toggle pig register form visibility
 /*
 $registerPigBtn?.addEventListener('click', () => {
@@ -279,19 +292,30 @@ async function handleAddCow(number) {
   if (!n) return;
   const userKey = getAuthToken(); // Use Firebase token instead of stored key
   
+  const gender = normalizeString($inlineGenderCow?.value);
+  
+  // Determine animal_type based on gender
+  let animalType = 1; // Default to cow
+  if (gender === 'FEMALE') {
+    animalType = 1; // Cow
+  } else if (gender === 'MALE') {
+    animalType = 2; // Bull
+  }
+  
   const record = {
     animalNumber: n,
-    animalType: 1, // 1 = cow
+    animalType: animalType,
     userKey,
     motherId: normalizeString($inlineMotherCow?.value),
     fatherId: normalizeString($inlineFatherCow?.value),
     bornDate: ($inlineBornCow?.value || '').trim() || null,
     weight: $inlineWeightCow?.value ? parseFloat($inlineWeightCow.value) : null,
-    gender: normalizeString($inlineGenderCow?.value),
+    gender: gender,
     status: normalizeString($inlineStatusCow?.value),
     color: normalizeString($inlineColorCow?.value),
     notes: normalizeString($inlineNotesCow?.value),
     notesMother: normalizeString($inlineNotesMotherCow?.value),
+    scrotalCircumference: $inlineScrotalCircumferenceCow?.value ? parseFloat($inlineScrotalCircumferenceCow.value) : null,
   };
   
   // Validate weight if provided
@@ -299,11 +323,19 @@ async function handleAddCow(number) {
     record.weight = null;
   }
   
+  // Validate scrotal circumference if provided
+  if (record.scrotalCircumference !== null && (isNaN(record.scrotalCircumference) || !isFinite(record.scrotalCircumference))) {
+    record.scrotalCircumference = null;
+  }
+  
   await addRecord(record);
   await renderCowsList();
   triggerSync();
   // Refresh metrics when new record is added
   window.refreshMetrics();
+  
+  // Dispatch event to notify search tab of data update
+  window.dispatchEvent(new CustomEvent('dataUpdated'));
 }
 
 // Save new pig record locally and attempt sync
@@ -526,6 +558,8 @@ async function triggerSync(force = false) {
               bornDate: r.bornDate ?? null,
               weight: r.weight ?? null,
               gender: r.gender ?? null,
+              animalType: r.animalType ?? null,
+              scrotalCircumference: r.scrotalCircumference ?? null,
               status: r.status ?? null,
               color: r.color ?? null,
               notes: r.notes ?? null,
@@ -549,6 +583,8 @@ async function triggerSync(force = false) {
               bornDate: r.bornDate ?? null,
               weight: r.weight ?? null,
               gender: r.gender ?? null,
+              animalType: r.animalType ?? null,
+              scrotalCircumference: r.scrotalCircumference ?? null,
               status: r.status ?? null,
               color: r.color ?? null,
               notes: r.notes ?? null,
@@ -617,6 +653,9 @@ async function triggerSync(force = false) {
         if (items.length) {
           await importFromServer(items);
           await renderList();
+          
+          // Dispatch event to notify search tab of data update
+          window.dispatchEvent(new CustomEvent('dataUpdated'));
         }
       } else {
         console.warn('Pull sync failed', res.status);
