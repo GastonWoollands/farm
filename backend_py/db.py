@@ -29,12 +29,35 @@ conn.execute(
     """
 )
 
+# Create inseminations_ids lookup table
+conn.execute(
+    """
+    CREATE TABLE IF NOT EXISTS inseminations_ids (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        insemination_round_id TEXT NOT NULL UNIQUE,
+        initial_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+    )
+    """
+)
+
 # Insert default animal types
 conn.execute(
     """
     INSERT OR IGNORE INTO animal_types (id, name, description) VALUES 
     (1, 'cow', 'Female cattle'),
     (2, 'bull', 'Male cattle')
+    """
+)
+
+# Insert initial insemination data
+conn.execute(
+    """
+    INSERT OR IGNORE INTO inseminations_ids (insemination_round_id, initial_date, end_date, notes) VALUES 
+    ('2024', '2024-10-31', '2024-11-18', 'initial insemination data')
     """
 )
 
@@ -613,5 +636,6 @@ def create_inseminations_table():
         print(f"Error creating inseminations table: {e}")
 
 create_inseminations_table()
+
 
 

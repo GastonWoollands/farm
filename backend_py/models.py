@@ -92,3 +92,27 @@ class DeleteInseminationBody(BaseModel):
     inseminationDate: str | None = None
 
 
+class InseminationId(BaseModel):
+    id: int
+    insemination_round_id: str
+    initial_date: str
+    end_date: str
+    notes: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class InseminationIdBody(BaseModel):
+    insemination_round_id: str
+    initial_date: str
+    end_date: str
+    notes: str | None = None
+
+
+class UpdateInseminationIdBody(BaseModel):
+    insemination_round_id: str | None = None
+    initial_date: str | None = None
+    end_date: str | None = None
+    notes: str | None = None
+
+

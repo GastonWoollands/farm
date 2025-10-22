@@ -17,6 +17,37 @@ function normalizeString(value) {
 }
 
 /**
+ * Load insemination IDs and populate dropdown
+ */
+async function loadInseminationIds() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/inseminations-ids/`);
+    if (!response.ok) {
+      console.error('Failed to load insemination IDs:', response.status);
+      return;
+    }
+    
+    const inseminationIds = await response.json();
+    
+    // Clear existing options except the first one
+    $inlineInseminationIdCow.innerHTML = '<option value="">— Seleccionar —</option>';
+    
+    // Add options for each insemination ID
+    inseminationIds.forEach(insemId => {
+      const option = document.createElement('option');
+      option.value = insemId.insemination_round_id; // Store the round_id as value
+      option.textContent = `${insemId.insemination_round_id} (${insemId.initial_date} - ${insemId.end_date})`;
+      option.dataset.inseminationRoundId = insemId.insemination_round_id; // Store the round ID
+      $inlineInseminationIdCow.appendChild(option);
+    });
+    
+    console.log('Insemination IDs loaded successfully');
+  } catch (error) {
+    console.error('Error loading insemination IDs:', error);
+  }
+}
+
+/**
  * Get user configuration from localStorage
  * @returns {Object} - User configuration object
  */
@@ -70,6 +101,7 @@ const $inlineColorCow = document.getElementById('inline-color-cow');
 const $inlineNotesCow = document.getElementById('inline-notes-cow');
 const $inlineNotesMotherCow = document.getElementById('inline-notes-mother-cow');
 const $inlineScrotalCircumferenceCow = document.getElementById('inline-scrotal-circumference-cow');
+const $inlineInseminationIdCow = document.getElementById('inline-insemination-id-cow');
 const $scrotalCircumferenceField = document.getElementById('scrotal-circumference-field');
 
 // Pigs elements
@@ -316,6 +348,7 @@ async function handleAddCow(number) {
     notes: normalizeString($inlineNotesCow?.value),
     notesMother: normalizeString($inlineNotesMotherCow?.value),
     scrotalCircumference: $inlineScrotalCircumferenceCow?.value ? parseFloat($inlineScrotalCircumferenceCow.value) : null,
+    inseminationRoundId: normalizeString($inlineInseminationIdCow?.value),
   };
   
   // Validate weight if provided
@@ -560,6 +593,7 @@ async function triggerSync(force = false) {
               gender: r.gender ?? null,
               animalType: r.animalType ?? null,
               scrotalCircumference: r.scrotalCircumference ?? null,
+              inseminationRoundId: r.inseminationRoundId ?? null,
               status: r.status ?? null,
               color: r.color ?? null,
               notes: r.notes ?? null,
@@ -585,6 +619,7 @@ async function triggerSync(force = false) {
               gender: r.gender ?? null,
               animalType: r.animalType ?? null,
               scrotalCircumference: r.scrotalCircumference ?? null,
+              inseminationRoundId: r.inseminationRoundId ?? null,
               status: r.status ?? null,
               color: r.color ?? null,
               notes: r.notes ?? null,
@@ -803,5 +838,10 @@ $exportConfirm?.addEventListener('click', (e) => {
 $exportCancel?.addEventListener('click', (e) => {
   e.preventDefault();
   $exportDialog?.close();
+});
+
+// Initialize the app
+document.addEventListener('DOMContentLoaded', () => {
+  loadInseminationIds();
 });
 

@@ -178,6 +178,7 @@ export async function upsertFromServer(serverItem) {
     gender: serverItem.gender ?? null,
     animalType: serverItem.animal_type ?? 1, // Use server value or default to cow
     scrotalCircumference: serverItem.scrotal_circumference ?? null,
+    inseminationRoundId: serverItem.insemination_round_id ?? null,
     status: serverItem.status ?? null,
     color: serverItem.color ?? null,
     notes: serverItem.notes ?? null,

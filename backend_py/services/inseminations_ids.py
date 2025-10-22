@@ -1,0 +1,130 @@
+"""
+Inseminations IDs Service
+Handles CRUD operations for insemination IDs lookup table
+"""
+
+import sqlite3
+from fastapi import HTTPException
+from ..db import conn
+from ..models import InseminationIdBody, UpdateInseminationIdBody
+
+
+def get_inseminations_ids() -> list[dict]:
+    """Get all insemination IDs"""
+    try:
+        cursor = conn.execute("""
+            SELECT id, insemination_round_id, initial_date, end_date, notes, created_at, updated_at
+            FROM inseminations_ids 
+            ORDER BY insemination_round_id ASC
+        """)
+        
+        columns = [description[0] for description in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+
+def get_insemination_id_by_round_id(insemination_round_id: str) -> dict:
+    """Get a specific insemination ID by its round ID"""
+    try:
+        cursor = conn.execute("""
+            SELECT id, insemination_round_id, initial_date, end_date, notes, created_at, updated_at
+            FROM inseminations_ids 
+            WHERE insemination_round_id = ?
+        """, (insemination_round_id,))
+        
+        columns = [description[0] for description in cursor.description]
+        result = cursor.fetchone()
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Insemination round ID not found")
+        
+        return dict(zip(columns, result))
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+
+def create_insemination_id(body: InseminationIdBody) -> int:
+    """Create a new insemination ID"""
+    try:
+        with conn:
+            cursor = conn.execute("""
+                INSERT INTO inseminations_ids (
+                    insemination_round_id, initial_date, end_date, notes
+                )
+                VALUES (?, ?, ?, ?)
+            """, (
+                body.insemination_round_id,
+                body.initial_date,
+                body.end_date,
+                body.notes
+            ))
+            
+            return cursor.lastrowid
+    except sqlite3.IntegrityError as e:
+        if "UNIQUE constraint failed" in str(e):
+            raise HTTPException(status_code=409, detail="Insemination round ID already exists")
+        raise HTTPException(status_code=500, detail=f"Database integrity error: {e}")
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+
+def update_insemination_id(insemination_round_id: str, body: UpdateInseminationIdBody) -> None:
+    """Update an existing insemination ID"""
+    try:
+        # Build dynamic UPDATE query
+        update_fields = []
+        params = []
+        
+        if body.insemination_round_id is not None:
+            update_fields.append("insemination_round_id = ?")
+            params.append(body.insemination_round_id)
+        
+        if body.initial_date is not None:
+            update_fields.append("initial_date = ?")
+            params.append(body.initial_date)
+        
+        if body.end_date is not None:
+            update_fields.append("end_date = ?")
+            params.append(body.end_date)
+        
+        if body.notes is not None:
+            update_fields.append("notes = ?")
+            params.append(body.notes)
+        
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        
+        update_fields.append("updated_at = datetime('now')")
+        params.append(insemination_round_id)
+        
+        with conn:
+            cursor = conn.execute(f"""
+                UPDATE inseminations_ids 
+                SET {', '.join(update_fields)}
+                WHERE insemination_round_id = ?
+            """, params)
+            
+            if cursor.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Insemination round ID not found")
+    except sqlite3.IntegrityError as e:
+        if "UNIQUE constraint failed" in str(e):
+            raise HTTPException(status_code=409, detail="Insemination round ID already exists")
+        raise HTTPException(status_code=500, detail=f"Database integrity error: {e}")
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+
+def delete_insemination_id(insemination_round_id: str) -> None:
+    """Delete an insemination ID"""
+    try:
+        with conn:
+            cursor = conn.execute("""
+                DELETE FROM inseminations_ids 
+                WHERE insemination_round_id = ?
+            """, (insemination_round_id,))
+            
+            if cursor.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Insemination round ID not found")
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
