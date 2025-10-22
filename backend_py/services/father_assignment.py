@@ -19,7 +19,7 @@ class FatherAssignmentService:
         """Get all registrations that don't have a father_id assigned"""
         try:
             cursor = conn.execute("""
-                SELECT id, animal_number, mother_id, born_date, father_id
+                SELECT id, animal_number, mother_id, born_date, father_id, insemination_identifier
                 FROM registrations 
                 WHERE mother_id IS NOT NULL 
                 AND born_date IS NOT NULL 
@@ -89,15 +89,15 @@ class FatherAssignmentService:
         # If no insemination within normal period, return closest (will be marked as REPASO)
         return best_match
     
-    def assign_father_id(self, registration_id: int, father_id: str) -> bool:
-        """Assign father_id to a registration"""
+    def assign_father_id(self, registration_id: int, father_id: str, insemination_identifier: str = None) -> bool:
+        """Assign father_id and insemination_identifier to a registration"""
         try:
             with conn:
                 cursor = conn.execute("""
                     UPDATE registrations 
-                    SET father_id = ?, updated_at = datetime('now')
+                    SET father_id = ?, insemination_identifier = ?, updated_at = datetime('now')
                     WHERE id = ?
-                """, (father_id, registration_id))
+                """, (father_id, insemination_identifier, registration_id))
                 
                 return cursor.rowcount > 0
         except sqlite3.Error as e:
@@ -143,8 +143,10 @@ class FatherAssignmentService:
                 result['status'] = 'repaso'
             
             # Update registration
-            if self.assign_father_id(registration['id'], assigned_father):
+            insemination_identifier = matching_insem.get('insemination_identifier')
+            if self.assign_father_id(registration['id'], assigned_father, insemination_identifier):
                 result['assigned_father'] = assigned_father
+                result['insemination_identifier'] = insemination_identifier
             else:
                 result['error'] = 'Failed to update registration'
                 result['status'] = 'error'

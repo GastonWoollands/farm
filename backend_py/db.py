@@ -344,7 +344,7 @@ def create_inseminations_table():
                 insemination_identifier TEXT NOT NULL,
                 insemination_round_id TEXT NOT NULL,
                 mother_id TEXT NOT NULL,
-                mother_visual_id TEXT NOT NULL,
+                mother_visual_id TEXT,
                 bull_id TEXT,
                 insemination_date DATE NOT NULL,
                 registration_date TEXT NOT NULL DEFAULT (datetime('now')),
@@ -478,6 +478,65 @@ def create_inseminations_table():
             conn.commit()
         except sqlite3.OperationalError:
             pass  # Column already exists
+        
+        # Make mother_visual_id nullable (migration for existing databases)
+        try:
+            # SQLite doesn't support ALTER COLUMN, so we need to recreate the table
+            # But first check if the column is already nullable by checking the schema
+            cursor = conn.execute("PRAGMA table_info(inseminations)")
+            columns = cursor.fetchall()
+            mother_visual_id_col = next((col for col in columns if col[1] == 'mother_visual_id'), None)
+            
+            if mother_visual_id_col and mother_visual_id_col[3] == 1:  # 1 means NOT NULL
+                print("Migrating mother_visual_id to nullable...")
+                # Create new table with nullable mother_visual_id
+                conn.execute("""
+                    CREATE TABLE inseminations_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        insemination_identifier TEXT NOT NULL,
+                        insemination_round_id TEXT NOT NULL,
+                        mother_id TEXT NOT NULL,
+                        mother_visual_id TEXT,
+                        bull_id TEXT,
+                        insemination_date DATE NOT NULL,
+                        registration_date TEXT NOT NULL DEFAULT (datetime('now')),
+                        animal_type TEXT,
+                        notes TEXT,
+                        created_by TEXT NOT NULL,
+                        updated_at TEXT DEFAULT (datetime('now'))
+                    )
+                """)
+                
+                # Copy data from old table to new table
+                conn.execute("""
+                    INSERT INTO inseminations_new 
+                    SELECT id, insemination_identifier, insemination_round_id, mother_id, 
+                           mother_visual_id, bull_id, insemination_date, registration_date, 
+                           animal_type, notes, created_by, updated_at
+                    FROM inseminations
+                """)
+                
+                # Drop old table and rename new one
+                conn.execute("DROP TABLE inseminations")
+                conn.execute("ALTER TABLE inseminations_new RENAME TO inseminations")
+                
+                # Recreate indexes
+                conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uniq_mother_insemination_date ON inseminations(mother_id, insemination_date)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_id ON inseminations(mother_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_visual_id ON inseminations(mother_visual_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_id ON inseminations(insemination_round_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_insemination_date ON inseminations(insemination_date)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_bull_id ON inseminations(bull_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_created_by ON inseminations(created_by)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_registration_date ON inseminations(registration_date)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_visual_date ON inseminations(mother_visual_id, insemination_date DESC)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_date ON inseminations(insemination_round_id, insemination_date DESC)")
+                
+                conn.commit()
+                print("Migration completed - mother_visual_id is now nullable")
+        except sqlite3.OperationalError as e:
+            print(f"Migration skipped: {e}")
+            pass  # Migration already applied or not needed
         
         # Migrate insemination_date from TEXT to DATE, mother_id from INTEGER to TEXT, and remove foreign key if needed
         try:

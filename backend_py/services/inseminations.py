@@ -104,7 +104,7 @@ def insert_insemination(created_by: str, body: InseminationBody) -> int:
             return cursor.lastrowid
     except sqlite3.IntegrityError as e:
         if "UNIQUE constraint failed" in str(e):
-            raise HTTPException(status_code=409, detail="Duplicate insemination for this cow (mother_id) on the same date")
+            raise HTTPException(status_code=409, detail="Duplicate insemination for this mother on the same date")
         raise HTTPException(status_code=500, detail=f"Database integrity error: {e}")
     except sqlite3.Error as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
@@ -161,7 +161,7 @@ def update_insemination(created_by: str, insemination_id: int, body: UpdateInsem
             )
     except sqlite3.IntegrityError as e:
         if "UNIQUE constraint failed" in str(e):
-            raise HTTPException(status_code=409, detail="Duplicate insemination for this cow (mother_id) on the same date")
+            raise HTTPException(status_code=409, detail="Duplicate insemination for this mother on the same date")
         raise HTTPException(status_code=500, detail=f"Database integrity error: {e}")
     except sqlite3.Error as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")

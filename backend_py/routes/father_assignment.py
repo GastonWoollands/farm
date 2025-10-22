@@ -145,7 +145,7 @@ async def validate_assignments(
         
         # Get all registrations with father IDs
         cursor = service.conn.execute("""
-            SELECT id, animal_number, mother_id, born_date, father_id
+            SELECT id, animal_number, mother_id, born_date, father_id, insemination_identifier
             FROM registrations 
             WHERE mother_id IS NOT NULL 
             AND born_date IS NOT NULL 
