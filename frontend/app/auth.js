@@ -63,9 +63,16 @@ export async function signUp(email, password) {
 // Send password reset email
 export async function sendPasswordReset(email) {
   try {
+    console.log('Sending password reset email to:', email);
+    console.log('Firebase Auth instance:', window.firebaseAuth);
+    
     await sendPasswordResetEmail(window.firebaseAuth, email);
+    console.log('Password reset email sent successfully');
     return { success: true };
   } catch (error) {
+    console.error('Password reset error:', error);
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
     return { success: false, error: error.message };
   }
 }

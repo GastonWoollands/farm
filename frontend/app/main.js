@@ -1,6 +1,6 @@
 import { formatDisplayText } from './format.js';
 import { setupExport } from './features/export.js';
-import { initAuth, signIn, signUp, signOutUser, getAuthToken, setAppFunctions } from './auth.js';
+import { initAuth, signIn, signUp, signOutUser, getAuthToken, setAppFunctions, sendPasswordReset } from './auth.js';
 import { initMetrics } from './features/metrics.js';
 import { initRegistrationPopup } from './features/registration.js';
 import { initAnimalSearch } from './features/animal-search.js';
@@ -21,17 +21,42 @@ function setupAuthUI() {
   const $authForm = document.getElementById('auth-form');
   const $signinBtn = document.getElementById('signin-btn');
   const $signupBtn = document.getElementById('signup-btn');
+  const $forgotPasswordBtn = document.getElementById('forgot-password-btn');
+  const $backToLoginBtn = document.getElementById('back-to-login-btn');
   const $authMessage = document.getElementById('auth-message');
 
   // Set up app functions for auth callbacks
   setAppFunctions(window.renderList, window.triggerSync);
 
   let isSignUp = false;
+  let isPasswordReset = false;
+  
+  // Initialize UI state
+  updateUI();
 
   // Toggle between sign in and sign up
   $signupBtn?.addEventListener('click', (e) => {
     e.preventDefault();
     isSignUp = !isSignUp;
+    isPasswordReset = false;
+    updateUI();
+    hideMessage();
+  });
+
+  // Toggle to password reset mode
+  $forgotPasswordBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    isPasswordReset = true;
+    isSignUp = false;
+    updateUI();
+    hideMessage();
+  });
+
+  // Back to login mode
+  $backToLoginBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    isPasswordReset = false;
+    isSignUp = false;
     updateUI();
     hideMessage();
   });
@@ -52,7 +77,29 @@ function setupAuthUI() {
     const email = document.getElementById('auth-email').value;
     const password = document.getElementById('auth-password').value;
     
-    if (!email || !password) {
+    if (!email) {
+      showMessage('Por favor ingresa tu email', 'error');
+      return;
+    }
+    
+    if (isPasswordReset) {
+      showMessage('Enviando email de recuperación...', 'info');
+      const result = await sendPasswordReset(email);
+      
+      if (result.success) {
+        showMessage('¡Email enviado! Revisa tu bandeja de entrada y sigue las instrucciones para restablecer tu contraseña.', 'success');
+        // Reset to login mode after successful password reset
+        setTimeout(() => {
+          isPasswordReset = false;
+          updateUI();
+        }, 3000);
+      } else {
+        showMessage(getErrorMessage(result.error), 'error');
+      }
+      return;
+    }
+    
+    if (!password && !isPasswordReset) {
       showMessage('Por favor completa todos los campos', 'error');
       return;
     }
@@ -69,12 +116,34 @@ function setupAuthUI() {
   });
 
   function updateUI() {
-    if (isSignUp) {
+    const $passwordField = document.getElementById('auth-password');
+    const $signupSection = $signupBtn?.parentElement;
+    const $forgotSection = $forgotPasswordBtn?.parentElement;
+    const $backToLoginSection = document.getElementById('back-to-login-section');
+    
+    if (isPasswordReset) {
+      $signinBtn.textContent = 'Enviar Email de Recuperación';
+      $passwordField.style.display = 'none';
+      $passwordField.removeAttribute('required'); // Remove required for password reset
+      $signupSection.style.display = 'none';
+      $forgotSection.style.display = 'none';
+      $backToLoginSection.style.display = 'block';
+    } else if (isSignUp) {
       $signinBtn.textContent = 'Crear Cuenta';
       $signupBtn.textContent = '¿Ya tienes cuenta? Inicia sesión';
+      $passwordField.style.display = 'block';
+      $passwordField.setAttribute('required', ''); // Add required for signup
+      $signupSection.style.display = 'block';
+      $forgotSection.style.display = 'block';
+      $backToLoginSection.style.display = 'none';
     } else {
       $signinBtn.textContent = 'Iniciar Sesión';
       $signupBtn.textContent = 'Regístrate aquí';
+      $passwordField.style.display = 'block';
+      $passwordField.setAttribute('required', ''); // Add required for login
+      $signupSection.style.display = 'block';
+      $forgotSection.style.display = 'block';
+      $backToLoginSection.style.display = 'none';
     }
   }
 
@@ -100,7 +169,12 @@ function setupAuthUI() {
       'auth/email-already-in-use': 'Ya existe una cuenta con este email',
       'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres',
       'auth/invalid-email': 'Email inválido',
-      'auth/too-many-requests': 'Demasiados intentos. Intenta más tarde'
+      'auth/too-many-requests': 'Demasiados intentos. Intenta más tarde',
+      'auth/user-disabled': 'Esta cuenta ha sido deshabilitada',
+      'auth/invalid-credential': 'Credenciales inválidas',
+      'auth/operation-not-allowed': 'Operación no permitida',
+      'auth/network-request-failed': 'Error de conexión. Verifica tu internet',
+      'auth/too-many-requests': 'Demasiados intentos de recuperación. Intenta más tarde'
     };
     return messages[error] || 'Error: ' + error;
   }
