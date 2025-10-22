@@ -1,4 +1,4 @@
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
 let currentUser = null;
 let authToken = null;
@@ -54,6 +54,16 @@ export async function signIn(email, password) {
 export async function signUp(email, password) {
   try {
     await createUserWithEmailAndPassword(window.firebaseAuth, email, password);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Send password reset email
+export async function sendPasswordReset(email) {
+  try {
+    await sendPasswordResetEmail(window.firebaseAuth, email);
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
