@@ -136,7 +136,7 @@ input[type="text"], input[type="password"] { width: 100%; padding: 10px 12px; bo
 #register-section .form-actions {
   grid-column: 1 / -1;
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 12px;
   margin-top: 16px;
   padding-top: 16px;
@@ -271,13 +271,24 @@ input[type="number"] { width:100%; padding:10px 12px; border-radius:10px; border
   border-radius: 8px;
   padding: 20px;
   margin: 0;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  isolation: isolate;
 }
 
 .form-actions {
   display: flex;
   gap: 12px;
-  justify-content: flex-end;
+  justify-content: center;
   margin-top: 16px;
+  padding: 16px 0;
+  border-top: 1px solid #334155;
+  background: #0b1220;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .records-section {
@@ -462,10 +473,13 @@ input[type="number"] { width:100%; padding:10px 12px; border-radius:10px; border
   overflow: hidden;
   transition: max-height 0.3s ease;
   background: #0b1220;
+  position: relative;
 }
 
 .dropdown-content.expanded {
-  max-height: 1000px;
+  max-height: 2000px;
+  overflow-y: auto;
+  position: relative;
 }
 
 .dropdown-actions {
@@ -755,11 +769,20 @@ input[type="number"] { width:100%; padding:10px 12px; border-radius:10px; border
   .registration-form {
     padding: 16px;
     margin: 0 16px 16px 16px;
+    max-height: 70vh;
   }
   
   .form-actions {
     flex-direction: column;
     gap: 8px;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    background: #0b1220;
+    padding: 12px 0;
+    margin: 12px 0 0 0;
+    width: 100%;
+    box-sizing: border-box;
   }
   
   .dropdown-records {
@@ -904,6 +927,20 @@ input[type="number"] { width:100%; padding:10px 12px; border-radius:10px; border
   .registration-form {
     margin: 0 12px 12px 12px;
     padding: 12px;
+    max-height: 65vh;
+  }
+  
+  .form-actions {
+    flex-direction: column;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    background: #0b1220;
+    padding: 8px 0;
+    margin: 8px 0 0 0;
+    width: 100%;
+    box-sizing: border-box;
   }
   
   .records-list-header {
@@ -1414,7 +1451,7 @@ dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; col
 
 .form-actions { 
   display: flex; 
-  justify-content: flex-end; 
+  justify-content: center; 
   gap: 12px; 
   padding-top: 16px; 
   border-top: 1px solid #1f2937; 
@@ -1458,12 +1495,20 @@ dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; col
   
   .registration-dialog { width: 95vw; }
   .form-grid { grid-template-columns: 1fr; }
-  .form-actions { flex-direction: column; }
+  .form-actions { 
+    flex-direction: column; 
+    justify-content: center;
+    align-items: center;
+  }
   .form-actions .btn { width: 100%; }
   
   /* Registration form mobile */
   #register-section .form-vertical { grid-template-columns: 1fr; }
-  #register-section .form-actions { flex-direction: column; }
+  #register-section .form-actions { 
+    flex-direction: column; 
+    justify-content: center;
+    align-items: center;
+  }
   #register-section .form-actions .btn { width: 100%; }
   
 }
