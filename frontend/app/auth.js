@@ -15,17 +15,29 @@ export function initAuth() {
     if (user) {
       authToken = await user.getIdToken();
       showApp();
+      
+      // Initialize company context after authentication
+      if (window.initCompanyContext) {
+        await window.initCompanyContext();
+      }
+      
       renderList();
       triggerSync();
-      // Show sign out button
+      
+      // Show sign out button and company info
       const $signoutBtn = document.getElementById('signout-btn');
+      const $companyInfo = document.getElementById('company-info');
       if ($signoutBtn) $signoutBtn.style.display = 'block';
+      if ($companyInfo) $companyInfo.style.display = 'block';
     } else {
       authToken = null;
       showAuth();
-      // Hide sign out button
+      
+      // Hide sign out button and company info
       const $signoutBtn = document.getElementById('signout-btn');
+      const $companyInfo = document.getElementById('company-info');
       if ($signoutBtn) $signoutBtn.style.display = 'none';
+      if ($companyInfo) $companyInfo.style.display = 'none';
     }
   });
 }

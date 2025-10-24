@@ -34,10 +34,21 @@
 </head>
 <body>
   <header class="app-header">
-    <h1>LiveStock <small id="pending-count" class="muted" style="font-size:12px; margin-left:8px;"></small></h1>
-    <div style="display:flex; align-items:center; gap:12px;">
+    <!-- Top-right status (absolute positioned) -->
+    <div class="header-status">
       <span class="badge" id="status-badge">Offline</span>
-      <button id="signout-btn" class="btn" style="display:none; padding:6px 12px; font-size:12px;">Cerrar Sesión</button>
+      <button id="signout-btn" class="btn signout-btn" style="display:none;">Cerrar Sesión</button>
+    </div>
+    
+    <!-- Centered content -->
+    <div class="header-center">
+      <h1>LiveStock <small id="pending-count" class="muted" style="font-size:12px; margin-left:8px;"></small></h1>
+      <div id="company-info" class="company-info" style="display:none;">
+        <span id="current-company-name">Personal Data</span>
+        <select id="company-switcher" class="company-switcher" style="display:none;">
+          <!-- Company options will be populated by JavaScript -->
+        </select>
+      </div>
     </div>
   </header>
 

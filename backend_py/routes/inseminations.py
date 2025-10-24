@@ -5,6 +5,9 @@ from ..services.inseminations import (
     get_inseminations_by_cow, get_inseminations_by_user, 
     get_insemination_statistics, export_inseminations
 )
+from ..services.inseminations_multi_tenant import (
+    get_inseminations_multi_tenant, get_insemination_statistics_multi_tenant
+)
 from ..services.firebase_auth import verify_bearer_id_token
 import csv
 import io
@@ -15,15 +18,22 @@ router = APIRouter()
 @router.post("/inseminations", status_code=201)
 def register_insemination(body: InseminationBody, request: Request, x_user_key: str | None = Header(default=None)):
     """Register a new insemination record"""
-    decoded = verify_bearer_id_token(request.headers.get('Authorization'))
-    user_id = decoded.get('uid') if decoded else None
-    if not user_id:
+    from ..services.auth_service import authenticate_user
+    
+    # Try new authentication first (creates user automatically)
+    user, company_id = authenticate_user(request)
+    if user:
+        user_id = user.get('firebase_uid')
+        # Pass company_id for multi-tenant data isolation
+        insemination_id = insert_insemination(user_id, body, company_id)
+        return {"ok": True, "id": insemination_id}
+    else:
+        # Fallback to legacy key if token missing
         if not x_user_key:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        user_id = x_user_key
-    
-    insemination_id = insert_insemination(user_id, body)
-    return {"ok": True, "id": insemination_id}
+        # Legacy users have no company (company_id = None)
+        insemination_id = insert_insemination(x_user_key, body, None)
+        return {"ok": True, "id": insemination_id}
 
 @router.put("/inseminations/{insemination_id}")
 def update_insemination_endpoint(insemination_id: int, body: UpdateInseminationBody, request: Request, x_user_key: str | None = Header(default=None)):
@@ -128,3 +138,30 @@ def export_insemination_records(
         )
     
     return {"count": len(records), "records": records}
+
+
+# Multi-tenant endpoints
+@router.get("/")
+def get_inseminations(request: Request, limit: int = 100):
+    """Get inseminations with multi-tenant filtering"""
+    from ..services.auth_service import authenticate_user
+    
+    user, company_id = authenticate_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    inseminations = get_inseminations_multi_tenant(user, limit)
+    return {"inseminations": inseminations, "count": len(inseminations)}
+
+
+@router.get("/stats")
+def get_insemination_stats(request: Request):
+    """Get insemination statistics with multi-tenant filtering"""
+    from ..services.auth_service import authenticate_user
+    
+    user, company_id = authenticate_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    stats = get_insemination_statistics_multi_tenant(user)
+    return stats

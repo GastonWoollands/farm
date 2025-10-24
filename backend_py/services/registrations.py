@@ -2,6 +2,7 @@ import sqlite3
 import datetime as _dt
 from fastapi import HTTPException
 from ..db import conn
+from .auth_service import get_data_filter_clause
 
 VALID_GENDERS = {"MALE", "FEMALE", "UNKNOWN"}
 VALID_STATUSES = {"ALIVE", "DEAD", "UNKNOWN"}
@@ -10,7 +11,7 @@ VALID_COLORS = {"COLORADO", "MARRON", "NEGRO", "OTHERS"}
 def _normalize_text(value: str | None) -> str | None:
     return (value or "").strip().upper() or None
 
-def insert_registration(created_by_or_key: str, body) -> None:
+def insert_registration(created_by_or_key: str, body, company_id: int = None) -> None:
     if not body.animalNumber:
         raise HTTPException(status_code=400, detail="animalNumber required")
 
@@ -70,17 +71,18 @@ def insert_registration(created_by_or_key: str, body) -> None:
             cursor = conn.execute(
                 """
                 INSERT INTO registrations (
-                    animal_number, created_at, user_key, created_by,
+                    animal_number, created_at, user_key, created_by, company_id,
                     mother_id, father_id, born_date, weight, gender, animal_type, status, color, notes, notes_mother, short_id,
                     insemination_round_id, insemination_identifier, scrotal_circumference
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?)
                 """,
                 (
                     animal,
                     created_at,
                     None,  # legacy user_key deprecated when using Firebase
                     created_by_or_key,
+                    company_id,  # company_id for multi-tenant filtering
                     mother,
                     father,
                     body.bornDate,
@@ -302,5 +304,154 @@ def export_rows(created_by_or_key: str, date: str | None, start: str | None, end
     )
     cols = [d[0] for d in cur.description]
     return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
+# Multi-tenant functions
+def get_registrations_multi_tenant(user: dict, limit: int = 100) -> list[dict]:
+    """Get registrations with multi-tenant filtering"""
+    try:
+        company_id = user.get('company_id')
+        firebase_uid = user.get('firebase_uid')
+        
+        where_clause, params = get_data_filter_clause(company_id, firebase_uid)
+        params.append(limit)
+        
+        cursor = conn.execute(
+            f"""
+            SELECT id, animal_number, created_at, mother_id, born_date, weight, 
+                   gender, status, color, notes, notes_mother, insemination_round_id,
+                   insemination_identifier, scrotal_circumference, animal_type
+            FROM registrations
+            WHERE {where_clause}
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            params
+        )
+        
+        rows = cursor.fetchall()
+        return [
+            {
+                "id": row[0],
+                "animalNumber": row[1],
+                "createdAt": row[2],
+                "motherId": row[3],
+                "bornDate": row[4],
+                "weight": row[5],
+                "gender": row[6],
+                "status": row[7],
+                "color": row[8],
+                "notes": row[9],
+                "notesMother": row[10],
+                "inseminationRoundId": row[11],
+                "inseminationIdentifier": row[12],
+                "scrotalCircumference": row[13],
+                "animalType": row[14]
+            }
+            for row in rows
+        ]
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"DB error: {e}")
+
+
+def export_rows_multi_tenant(user: dict, date: str = None, start: str = None, end: str = None) -> list[dict]:
+    """Export registrations with multi-tenant filtering"""
+    try:
+        company_id = user.get('company_id')
+        firebase_uid = user.get('firebase_uid')
+        
+        where_clause, params = get_data_filter_clause(company_id, firebase_uid)
+        
+        if date:
+            where_clause += " AND date(born_date) = date(?)"
+            params.append(date)
+        else:
+            if start:
+                where_clause += " AND date(born_date) >= date(?)"
+                params.append(start)
+            if end:
+                where_clause += " AND date(born_date) <= date(?)"
+                params.append(end)
+        
+        cursor = conn.execute(
+            f"""
+            SELECT animal_number, born_date, mother_id, father_id,
+                   weight, gender, animal_type, status, color, notes, notes_mother, 
+                   created_at, insemination_round_id, insemination_identifier, 
+                   scrotal_circumference
+            FROM registrations
+            WHERE {where_clause}
+            ORDER BY id ASC
+            """,
+            tuple(params)
+        )
+        
+        cols = [d[0] for d in cursor.description]
+        return [dict(zip(cols, r)) for r in cursor.fetchall()]
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"DB error: {e}")
+
+
+def get_registration_stats_multi_tenant(user: dict) -> dict:
+    """Get registration statistics with multi-tenant filtering"""
+    try:
+        company_id = user.get('company_id')
+        firebase_uid = user.get('firebase_uid')
+        
+        where_clause, params = get_data_filter_clause(company_id, firebase_uid)
+        
+        # Total registrations
+        cursor = conn.execute(
+            f"SELECT COUNT(*) FROM registrations WHERE {where_clause}",
+            params
+        )
+        total_registrations = cursor.fetchone()[0]
+        
+        # By gender
+        cursor = conn.execute(
+            f"""
+            SELECT gender, COUNT(*) 
+            FROM registrations 
+            WHERE {where_clause} AND gender IS NOT NULL
+            GROUP BY gender
+            """,
+            params
+        )
+        gender_stats = dict(cursor.fetchall())
+        
+        # By animal type
+        cursor = conn.execute(
+            f"""
+            SELECT animal_type, COUNT(*) 
+            FROM registrations 
+            WHERE {where_clause} AND animal_type IS NOT NULL
+            GROUP BY animal_type
+            """,
+            params
+        )
+        animal_type_stats = dict(cursor.fetchall())
+        
+        # Recent registrations (last 30 days)
+        cursor = conn.execute(
+            f"""
+            SELECT COUNT(*) 
+            FROM registrations 
+            WHERE {where_clause} 
+            AND date(created_at) >= date('now', '-30 days')
+            """,
+            params
+        )
+        recent_registrations = cursor.fetchone()[0]
+        
+        return {
+            "total_registrations": total_registrations,
+            "gender_stats": gender_stats,
+            "animal_type_stats": animal_type_stats,
+            "recent_registrations": recent_registrations,
+            "company_id": company_id,
+            "is_company_data": company_id is not None
+        }
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
 

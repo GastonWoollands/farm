@@ -3,6 +3,7 @@ import datetime as _dt
 from fastapi import HTTPException
 from ..db import conn
 from ..models import InseminationBody, UpdateInseminationBody
+from .auth_service import get_data_filter_clause
 
 def _normalize_text(value: str | None) -> str | None:
     """Normalize text input - strip whitespace and convert to uppercase"""
@@ -53,7 +54,7 @@ def _validate_date(date_str: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid date format: {str(e)}. Use YYYY-MM-DD format")
 
-def insert_insemination(created_by: str, body: InseminationBody) -> int:
+def insert_insemination(created_by: str, body: InseminationBody, company_id: int = None) -> int:
     """Insert a new insemination record"""
     if not body.inseminationIdentifier:
         raise HTTPException(status_code=400, detail="inseminationIdentifier is required")
@@ -85,9 +86,9 @@ def insert_insemination(created_by: str, body: InseminationBody) -> int:
                 """
                 INSERT INTO inseminations (
                     insemination_identifier, insemination_round_id, mother_id, mother_visual_id, bull_id,
-                    insemination_date, animal_type, notes, created_by
+                    insemination_date, animal_type, notes, created_by, company_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     insemination_id,
@@ -98,7 +99,8 @@ def insert_insemination(created_by: str, body: InseminationBody) -> int:
                     insemination_date,
                     animal_type,
                     notes,
-                    created_by
+                    created_by,
+                    company_id
                 )
             )
             return cursor.lastrowid

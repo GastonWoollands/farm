@@ -5,6 +5,7 @@ import { initMetrics } from './features/metrics.js';
 import { initRegistrationPopup } from './features/registration.js';
 import { initAnimalSearch } from './features/animal-search.js';
 import { initObjectives } from './features/objectives.js';
+import { initCompanyContext, updateCompanyUI } from './company-context.js';
 
 // Load existing application logic (initialization, UI, sync, listeners)
 import '../app.js';
@@ -15,6 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
   setupAuthUI();
   setupNavigation();
   initAuth();
+  
+  // Expose company context functions globally
+  window.initCompanyContext = initCompanyContext;
+  window.updateCompanyUI = updateCompanyUI;
 });
 
 function setupAuthUI() {

@@ -70,14 +70,21 @@ conn.execute(
         created_at TEXT NOT NULL,
         user_key TEXT,
         created_by TEXT,
+        company_id INTEGER,
         mother_id TEXT,
+        father_id TEXT,
         born_date TEXT,
         weight REAL,
         gender TEXT,
+        animal_type INTEGER,
         status TEXT,
         color TEXT,
         notes TEXT,
-        notes_mother TEXT
+        notes_mother TEXT,
+        insemination_round_id TEXT,
+        insemination_identifier TEXT,
+        scrotal_circumference REAL,
+        FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE SET NULL
     )
     """
 )
@@ -94,40 +101,31 @@ conn.execute(
         old_value TEXT,
         new_value TEXT,
         user_id TEXT NOT NULL,
+        company_id INTEGER,
         event_date TEXT NOT NULL DEFAULT (datetime('now')),
         notes TEXT,
-        FOREIGN KEY (animal_id) REFERENCES registrations (id) ON DELETE CASCADE
+        FOREIGN KEY (animal_id) REFERENCES registrations (id) ON DELETE CASCADE,
+        FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE SET NULL
     )
     """
 )
 conn.commit()
 
-def _add_column_if_missing(column: str, coltype: str) -> None:
+def _add_column_safely(table_name: str, column_name: str, column_type: str) -> None:
+    """Safely add a column to a table if it doesn't exist"""
     try:
-        conn.execute(f"ALTER TABLE registrations ADD COLUMN {column} {coltype}")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
-
-for _col, _type in [
-    ("mother_id", "TEXT"),
-    ("father_id", "TEXT"),
-    ("born_date", "TEXT"),
-    ("weight", "REAL"),
-    ("gender", "TEXT"),
-    ("animal_type", "INTEGER"),
-    ("status", "TEXT"),
-    ("color", "TEXT"),
-    ("notes", "TEXT"),
-    ("notes_mother", "TEXT"),
-    ("short_id", "TEXT"),
-    ("created_by", "TEXT"),
-    ("updated_at", "TEXT DEFAULT (datetime('now'))"),
-    ("insemination_round_id", "TEXT"),
-    ("insemination_identifier", "TEXT"),
-    ("scrotal_circumference", "REAL"),
-]:
-    _add_column_if_missing(_col, _type)
+        # Check if column already exists
+        cursor = conn.execute(f"PRAGMA table_info({table_name})")
+        columns = [row[1] for row in cursor.fetchall()]
+        
+        if column_name not in columns:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+            conn.commit()
+            print(f"Added {column_name} to {table_name} table")
+        else:
+            print(f"Column {column_name} already exists in {table_name} table")
+    except sqlite3.Error as e:
+        print(f"Error adding {column_name} to {table_name}: {e}")
 
 # Add animal_number column to existing events_state table if it doesn't exist
 try:
@@ -374,7 +372,9 @@ def create_inseminations_table():
                 animal_type TEXT,
                 notes TEXT,
                 created_by TEXT NOT NULL,
-                updated_at TEXT DEFAULT (datetime('now'))
+                company_id INTEGER,
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE SET NULL
             )
             """
         )
@@ -637,5 +637,110 @@ def create_inseminations_table():
 
 create_inseminations_table()
 
+# Multi-tenant migration
+def migrate_to_multi_tenant():
+    """Migrate from single-user to multi-tenant architecture"""
+    try:
+        # Create companies table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS companies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                is_active BOOLEAN DEFAULT 1
+            )
+        """)
+        
+        # Create users table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                firebase_uid TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL UNIQUE,
+                display_name TEXT,
+                company_id INTEGER,
+                role TEXT DEFAULT 'admin',
+                is_active BOOLEAN DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE SET NULL
+            )
+        """)
+        
+        # Create roles table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS roles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT,
+                permissions TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        
+        # Insert default roles
+        conn.execute("""
+            INSERT OR IGNORE INTO roles (id, name, description) VALUES 
+            (1, 'admin', 'Full access to company data'),
+            (2, 'manager', 'Manage data but limited admin functions'),
+            (3, 'viewer', 'Read-only access to company data')
+        """)
+        
+        # Add company_id columns to existing tables if they don't exist
+        _add_column_safely("registrations", "company_id", "INTEGER")
+        _add_column_safely("events_state", "company_id", "INTEGER")
+        _add_column_safely("inseminations", "company_id", "INTEGER")
+        
+        # Create indexes
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_registrations_company_id ON registrations(company_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_company_id ON inseminations(company_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_events_state_company_id ON events_state(company_id)")
+        
+        conn.commit()
+        print("Multi-tenant migration completed successfully")
+        
+    except sqlite3.Error as e:
+        print(f"Multi-tenant migration error: {e}")
+
+
+def migrate_add_email_unique_constraint():
+    """Add unique constraint to email column in users table"""
+    try:
+        # Check if email unique constraint already exists
+        cursor = conn.execute("PRAGMA index_list(users)")
+        indexes = cursor.fetchall()
+        email_unique_exists = any('email' in str(index) for index in indexes)
+        
+        if not email_unique_exists:
+            # First, remove any duplicate emails (keep the first one)
+            conn.execute("""
+                DELETE FROM users 
+                WHERE id NOT IN (
+                    SELECT MIN(id) 
+                    FROM users 
+                    GROUP BY email
+                )
+            """)
+            
+            # Add unique constraint to email
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email)")
+            conn.commit()
+            print("Email unique constraint added successfully")
+        else:
+            print("Email unique constraint already exists")
+            
+    except sqlite3.Error as e:
+        print(f"Email unique constraint migration error: {e}")
+
+
+# Multi-tenant migration for existing production databases
+migrate_to_multi_tenant()
+migrate_add_email_unique_constraint()
 
 

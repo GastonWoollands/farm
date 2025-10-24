@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional, List
 
 class ValidateKeyBody(BaseModel):
     key: str
@@ -114,5 +115,49 @@ class UpdateInseminationIdBody(BaseModel):
     initial_date: str | None = None
     end_date: str | None = None
     notes: str | None = None
+
+
+# Multi-tenant models
+class CompanyBody(BaseModel):
+    name: str
+    description: str | None = None
+
+class UserBody(BaseModel):
+    firebase_uid: str
+    email: str
+    display_name: str | None = None
+    company_id: int | None = None
+    role: str = "admin"
+
+class AssignUserToCompanyBody(BaseModel):
+    user_id: int
+    company_id: int
+
+class UpdateUserRoleBody(BaseModel):
+    user_id: int
+    role: str
+
+class UserResponse(BaseModel):
+    id: int
+    firebase_uid: str
+    email: str
+    display_name: str | None
+    company_id: int | None
+    role: str
+    company_name: str | None = None
+
+class CompanyResponse(BaseModel):
+    id: int
+    name: str
+    description: str | None
+    created_at: str
+    is_active: bool
+    user_count: int = 0
+
+class AuthContextResponse(BaseModel):
+    user: UserResponse
+    company_id: int | None
+    has_company: bool
+    permissions: dict
 
 
