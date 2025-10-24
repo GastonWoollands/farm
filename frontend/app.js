@@ -679,9 +679,9 @@ async function triggerSync(force = false) {
         console.warn('Network error during sync for record', r.id, err);
       }
     }
-    // After pushing, pull latest records from server for this user
+    // After pushing, pull latest records from server for this user's company
     try {
-      const url = API_BASE_URL + '/export';
+      const url = API_BASE_URL + '/export-multi-tenant';
             const res = await fetch(url, { headers: {
               'Authorization': `Bearer ${userKey}`
             }});
@@ -792,7 +792,7 @@ async function exportData(format) {
   const endDate = ($exportEndModal && $exportEndModal.value) ? $exportEndModal.value : '';
   if (startDate) params.set('start', startDate);
   if (endDate) params.set('end', endDate);
-  const url = API_BASE_URL + '/export' + (params.toString() ? `?${params}` : '');
+  const url = API_BASE_URL + '/export-multi-tenant' + (params.toString() ? `?${params}` : '');
   const res = await fetch(url, { headers: { 'Authorization': `Bearer ${userKey}` } });
   if (!res.ok) {
     withUndo(async()=>{}, async()=>{}, `Export failed (${res.status})`);

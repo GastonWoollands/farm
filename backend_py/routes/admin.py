@@ -46,6 +46,12 @@ def admin_exec_sql(body: ExecSqlBody, request: Request, x_admin_secret: str | No
     params = tuple(body.params or [])
     return admin_svc.exec_sql(sql, params)
 
+@router.post("/admin/migrate-legacy-data")
+def migrate_legacy_data(company_id: int, request: Request, x_admin_secret: str | None = Header(default=None)):
+    """Migrate legacy data (company_id = NULL) to specified company"""
+    _require_admin(x_admin_secret, request)
+    return admin_svc.migrate_legacy_data(company_id)
+
 @router.post("/admin/backup")
 def admin_backup(request: Request, authorization: str = Header(alias="Authorization")):
     """Create a backup of the database and upload to Google Cloud Storage"""
