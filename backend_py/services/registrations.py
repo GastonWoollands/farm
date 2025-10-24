@@ -285,9 +285,12 @@ def find_and_update_registration(created_by_or_key: str, body) -> bool:
             update_body = RegisterBody(
                 animalNumber=body.animalNumber,
                 motherId=body.motherId,
+                rpAnimal=body.rpAnimal,
+                rpMother=body.rpMother,
                 fatherId=body.fatherId,
                 bornDate=body.bornDate,
                 weight=body.weight,
+                motherWeight=body.motherWeight,
                 gender=body.gender,
                 status=body.status,
                 color=body.color,

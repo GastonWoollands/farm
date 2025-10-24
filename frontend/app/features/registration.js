@@ -51,6 +51,14 @@ export class RegistrationPopup {
               <input id="reg-mother" type="text" placeholder="e.g., 67890" autocomplete="off">
             </div>
             <div class="form-field">
+              <label for="reg-rp-animal">RP Animal</label>
+              <input id="reg-rp-animal" type="text" placeholder="e.g., RP-12345" autocomplete="off">
+            </div>
+            <div class="form-field">
+              <label for="reg-rp-mother">RP Madre</label>
+              <input id="reg-rp-mother" type="text" placeholder="e.g., RP-67890" autocomplete="off">
+            </div>
+            <div class="form-field">
               <label for="reg-father">ID del Padre</label>
               <input id="reg-father" type="text" placeholder="e.g., Repaso, 2399" autocomplete="off">
             </div>
@@ -61,6 +69,10 @@ export class RegistrationPopup {
             <div class="form-field">
               <label for="reg-weight">Peso (kg)</label>
               <input id="reg-weight" type="number" step="0.01" min="0" placeholder="e.g., 250.5" autocomplete="off">
+            </div>
+            <div class="form-field">
+              <label for="reg-mother-weight">Peso de la Madre (kg)</label>
+              <input id="reg-mother-weight" type="number" step="0.01" min="0" placeholder="e.g., 450.0" autocomplete="off">
             </div>
             <div class="form-field">
               <label for="reg-gender">Sexo</label>
@@ -194,9 +206,12 @@ export class RegistrationPopup {
       await this.registerAnimal({
         animalNumber,
         motherId: formData.get('reg-mother')?.trim().toUpperCase() || null,
+        rpAnimal: formData.get('reg-rp-animal')?.trim().toUpperCase() || null,
+        rpMother: formData.get('reg-rp-mother')?.trim().toUpperCase() || null,
         fatherId: formData.get('reg-father')?.trim().toUpperCase() || null,
         bornDate: this.formatDate(formData.get('reg-born')?.trim()),
         weight: formData.get('reg-weight') ? parseFloat(formData.get('reg-weight')) : null,
+        motherWeight: formData.get('reg-mother-weight') ? parseFloat(formData.get('reg-mother-weight')) : null,
         gender: formData.get('reg-gender')?.toUpperCase() || null,
         status: formData.get('reg-status')?.toUpperCase() || null,
         color: formData.get('reg-color')?.toUpperCase() || null,
@@ -232,9 +247,12 @@ export class RegistrationPopup {
       animalNumber: data.animalNumber,
       userKey,
       motherId: data.motherId,
+      rpAnimal: data.rpAnimal,
+      rpMother: data.rpMother,
       fatherId: data.fatherId,
       bornDate: data.bornDate,
       weight: (data.weight !== null && !isNaN(data.weight) && isFinite(data.weight)) ? data.weight : null,
+      motherWeight: (data.motherWeight !== null && !isNaN(data.motherWeight) && isFinite(data.motherWeight)) ? data.motherWeight : null,
       gender: data.gender,
       status: data.status,
       color: data.color,

@@ -320,9 +320,12 @@ export class AnimalSearch {
         <div class="animal-card-body">
           <div class="animal-details">
             ${record.motherId ? `<div class="detail-item"><span class="detail-label">Madre:</span> ${this.formatDisplayText(record.motherId)}</div>` : ''}
+            ${record.rpAnimal ? `<div class="detail-item"><span class="detail-label">RP Animal:</span> ${this.formatDisplayText(record.rpAnimal)}</div>` : ''}
+            ${record.rpMother ? `<div class="detail-item"><span class="detail-label">RP Madre:</span> ${this.formatDisplayText(record.rpMother)}</div>` : ''}
             ${record.fatherId ? `<div class="detail-item"><span class="detail-label">Padre:</span> ${this.formatDisplayText(record.fatherId)}</div>` : ''}
             ${record.bornDate ? `<div class="detail-item"><span class="detail-label">Nacimiento:</span> ${this.formatDate(record.bornDate)}</div>` : ''}
             ${record.weight ? `<div class="detail-item"><span class="detail-label">Peso:</span> ${record.weight} kg</div>` : ''}
+            ${record.motherWeight ? `<div class="detail-item"><span class="detail-label">Peso Madre:</span> ${record.motherWeight} kg</div>` : ''}
             ${record.gender ? `<div class="detail-item"><span class="detail-label">Sexo:</span> ${this.formatGender(record.gender)}</div>` : ''}
             ${record.scrotalCircumference ? `<div class="detail-item"><span class="detail-label">Circunferencia Escrotal:</span> ${record.scrotalCircumference} cm</div>` : ''}
             ${record.status ? `<div class="detail-item"><span class="detail-label">Estado:</span> ${this.formatStatus(record.status)}</div>` : ''}
@@ -535,6 +538,14 @@ export class AnimalSearch {
               <input id="edit-mother-id" type="text" value="${record.motherId || ''}" autocomplete="off">
             </div>
             <div class="edit-form-field">
+              <label for="edit-rp-animal">RP Animal</label>
+              <input id="edit-rp-animal" type="text" value="${record.rpAnimal || ''}" placeholder="e.g., RP-12345" autocomplete="off">
+            </div>
+            <div class="edit-form-field">
+              <label for="edit-rp-mother">RP Madre</label>
+              <input id="edit-rp-mother" type="text" value="${record.rpMother || ''}" placeholder="e.g., RP-67890" autocomplete="off">
+            </div>
+            <div class="edit-form-field">
               <label for="edit-father-id">ID del Padre</label>
               <input id="edit-father-id" type="text" value="${record.fatherId || ''}" placeholder="e.g., Repaso, 2399" autocomplete="off">
             </div>
@@ -545,6 +556,10 @@ export class AnimalSearch {
             <div class="edit-form-field">
               <label for="edit-weight">Peso (kg)</label>
               <input id="edit-weight" type="number" step="0.01" min="0" value="${record.weight || ''}" placeholder="e.g., 250.5" autocomplete="off">
+            </div>
+            <div class="edit-form-field">
+              <label for="edit-mother-weight">Peso de la Madre (kg)</label>
+              <input id="edit-mother-weight" type="number" step="0.01" min="0" value="${record.motherWeight || ''}" placeholder="e.g., 450.0" autocomplete="off">
             </div>
             <div class="edit-form-field">
               <label for="edit-gender">Sexo</label>
@@ -666,9 +681,12 @@ export class AnimalSearch {
         animalNumber,
         animalType: parseInt(document.getElementById('edit-animal-type').value),
         motherId: normalizeString(document.getElementById('edit-mother-id').value),
+        rpAnimal: normalizeString(document.getElementById('edit-rp-animal').value),
+        rpMother: normalizeString(document.getElementById('edit-rp-mother').value),
         fatherId: normalizeString(document.getElementById('edit-father-id').value),
         bornDate: (document.getElementById('edit-born-date').value || '').trim() || null,
         weight: document.getElementById('edit-weight').value ? parseFloat(document.getElementById('edit-weight').value) : null,
+        motherWeight: document.getElementById('edit-mother-weight').value ? parseFloat(document.getElementById('edit-mother-weight').value) : null,
         gender: normalizeString(document.getElementById('edit-gender').value),
         scrotalCircumference: document.getElementById('edit-scrotal-circumference').value ? parseFloat(document.getElementById('edit-scrotal-circumference').value) : null,
         status: normalizeString(document.getElementById('edit-status').value),
@@ -685,6 +703,11 @@ export class AnimalSearch {
       // Validate scrotal circumference if provided
       if (updatedData.scrotalCircumference !== null && (isNaN(updatedData.scrotalCircumference) || !isFinite(updatedData.scrotalCircumference))) {
         updatedData.scrotalCircumference = null;
+      }
+
+      // Validate mother weight if provided
+      if (updatedData.motherWeight !== null && (isNaN(updatedData.motherWeight) || !isFinite(updatedData.motherWeight))) {
+        updatedData.motherWeight = null;
       }
 
       await this.updateRecord(recordId, updatedData);
