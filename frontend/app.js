@@ -1,5 +1,5 @@
-// const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'https://farm-production-d087.up.railway.app';
+// const API_BASE_URL = 'http://localhost:8000';
 
 // Make API_BASE_URL available globally
 window.API_BASE_URL = API_BASE_URL;
