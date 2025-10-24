@@ -94,9 +94,9 @@ const $registerCowBtn = document.getElementById('register-cow-btn');
 const $registerCowSection = document.getElementById('register-cow-section');
 const $inlineAddCow = document.getElementById('inline-add-cow');
 const $inlineAnimalCow = document.getElementById('inline-animal-cow');
-const $inlinePrAnimalCow = document.getElementById('inline-pr-animal-cow');
+const $inlineRpAnimalCow = document.getElementById('inline-rp-animal-cow');
 const $inlineMotherCow = document.getElementById('inline-mother-cow');
-const $inlinePrMotherCow = document.getElementById('inline-pr-mother-cow');
+const $inlineRpMotherCow = document.getElementById('inline-rp-mother-cow');
 const $inlineFatherCow = document.getElementById('inline-father-cow');
 const $inlineBornCow = document.getElementById('inline-born-cow');
 const $inlineWeightCow = document.getElementById('inline-weight-cow');
@@ -241,8 +241,8 @@ async function init() {
         if (form) {
           form.reset();
           // Reset new fields explicitly
-          if ($inlinePrAnimalCow) $inlinePrAnimalCow.value = '';
-          if ($inlinePrMotherCow) $inlinePrMotherCow.value = '';
+          if ($inlineRpAnimalCow) $inlineRpAnimalCow.value = '';
+          if ($inlineRpMotherCow) $inlineRpMotherCow.value = '';
           if ($inlineMotherWeightCow) $inlineMotherWeightCow.value = '';
         }
       }
@@ -328,8 +328,8 @@ $registerCowBtn?.addEventListener('click', () => {
     if (form) {
       form.reset();
       // Reset new fields explicitly
-      if ($inlinePrAnimalCow) $inlinePrAnimalCow.value = '';
-      if ($inlinePrMotherCow) $inlinePrMotherCow.value = '';
+      if ($inlineRpAnimalCow) $inlineRpAnimalCow.value = '';
+      if ($inlineRpMotherCow) $inlineRpMotherCow.value = '';
       if ($inlineMotherWeightCow) $inlineMotherWeightCow.value = '';
     }
     return;
@@ -393,9 +393,9 @@ async function handleAddCow(number) {
     animalNumber: n,
     animalType: animalType,
     userKey,
-    prAnimal: normalizeString($inlinePrAnimalCow?.value),
+    rpAnimal: normalizeString($inlineRpAnimalCow?.value),
     motherId: normalizeString($inlineMotherCow?.value),
-    prMother: normalizeString($inlinePrMotherCow?.value),
+    rpMother: normalizeString($inlineRpMotherCow?.value),
     fatherId: normalizeString($inlineFatherCow?.value),
     bornDate: ($inlineBornCow?.value || '').trim() || null,
     weight: $inlineWeightCow?.value ? parseFloat($inlineWeightCow.value) : null,
@@ -474,9 +474,9 @@ $inlineAddCow?.addEventListener('submit', async (e) => {
   
   // Always restore suggested prefixes for rapid multiple entries
   $inlineAnimalCow.value = userConfig.animalIdPrefix;
-  if ($inlinePrAnimalCow) $inlinePrAnimalCow.value = '';
+  if ($inlineRpAnimalCow) $inlineRpAnimalCow.value = '';
   if ($inlineMotherCow) $inlineMotherCow.value = userConfig.motherIdPrefix;
-  if ($inlinePrMotherCow) $inlinePrMotherCow.value = '';
+  if ($inlineRpMotherCow) $inlineRpMotherCow.value = '';
   if ($inlineFatherCow) $inlineFatherCow.value = userConfig.fatherIdPrefix;
   if ($inlineMotherWeightCow) $inlineMotherWeightCow.value = '';
   if ($inlineBornCow) $inlineBornCow.value = new Date().toISOString().split('T')[0];

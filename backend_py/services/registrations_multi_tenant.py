@@ -91,7 +91,7 @@ def get_registrations_multi_tenant(user: Dict, limit: int = 100) -> List[Dict]:
             SELECT id, animal_number, created_at, mother_id, born_date, weight, 
                    gender, status, color, notes, notes_mother, insemination_round_id,
                    insemination_identifier, scrotal_circumference, animal_type,
-                   pr_animal, pr_mother, mother_weight
+                   rp_animal, rp_mother, mother_weight
             FROM registrations
             WHERE {where_clause}
             ORDER BY id DESC
@@ -156,7 +156,7 @@ def export_rows_multi_tenant(
             SELECT animal_number, born_date, mother_id, father_id,
                    weight, gender, animal_type, status, color, notes, notes_mother, 
                    created_at, insemination_round_id, insemination_identifier, 
-                   scrotal_circumference, pr_animal, pr_mother, mother_weight
+                   scrotal_circumference, rp_animal, rp_mother, mother_weight
             FROM registrations
             WHERE {where_clause}
             ORDER BY id ASC

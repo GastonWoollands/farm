@@ -58,8 +58,8 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
     notes_mother = _normalize_text(body.notesMother)
     insemination_round_id = _normalize_text(body.inseminationRoundId)
     insemination_identifier = _normalize_text(body.inseminationIdentifier)
-    pr_animal = _normalize_text(body.prAnimal)
-    pr_mother = _normalize_text(body.prMother)
+    rp_animal = _normalize_text(body.rpAnimal)
+    rp_mother = _normalize_text(body.rpMother)
 
     # Handle mother_weight validation
     mother_weight = None
@@ -85,7 +85,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                 INSERT INTO registrations (
                     animal_number, created_at, user_key, created_by, company_id,
                     mother_id, father_id, born_date, weight, gender, animal_type, status, color, notes, notes_mother, short_id,
-                    insemination_round_id, insemination_identifier, scrotal_circumference, pr_animal, pr_mother, mother_weight
+                    insemination_round_id, insemination_identifier, scrotal_circumference, rp_animal, rp_mother, mother_weight
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?)
                 """,
@@ -108,8 +108,8 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                     insemination_round_id,
                     insemination_identifier,
                     scrotal_circumference,
-                    pr_animal,
-                    pr_mother,
+                    rp_animal,
+                    rp_mother,
                     mother_weight,
                 ),
             )
@@ -194,8 +194,8 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
     notes_mother = _normalize_text(body.notesMother)
     insemination_round_id = _normalize_text(body.inseminationRoundId)
     insemination_identifier = _normalize_text(body.inseminationIdentifier)
-    pr_animal = _normalize_text(body.prAnimal)
-    pr_mother = _normalize_text(body.prMother)
+    rp_animal = _normalize_text(body.rpAnimal)
+    rp_mother = _normalize_text(body.rpMother)
 
     # Handle mother_weight validation
     mother_weight = None
@@ -234,7 +234,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
                     animal_number = ?, mother_id = ?, father_id = ?, born_date = ?, weight = ?,
                     gender = ?, animal_type = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
                     insemination_round_id = ?, insemination_identifier = ?, scrotal_circumference = ?,
-                    pr_animal = ?, pr_mother = ?, mother_weight = ?,
+                    rp_animal = ?, rp_mother = ?, mother_weight = ?,
                     updated_at = datetime('now')
                 WHERE id = ?
                 """,
@@ -242,7 +242,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
                     animal, mother, father, body.bornDate, weight,
                     gender, animal_type, status, color, notes, notes_mother,
                     insemination_round_id, insemination_identifier, scrotal_circumference,
-                    pr_animal, pr_mother, mother_weight,
+                    rp_animal, rp_mother, mother_weight,
                     animal_id
                 )
             )
@@ -325,7 +325,7 @@ def export_rows(created_by_or_key: str, date: str | None, start: str | None, end
         SELECT animal_number, born_date, mother_id, father_id,
                weight, gender, animal_type, status, color, notes, notes_mother, created_at,
                insemination_round_id, insemination_identifier, scrotal_circumference,
-               pr_animal, pr_mother, mother_weight
+               rp_animal, rp_mother, mother_weight
         FROM registrations
         WHERE {where_sql}
         ORDER BY id ASC
@@ -351,7 +351,7 @@ def get_registrations_multi_tenant(user: dict, limit: int = 100) -> list[dict]:
             SELECT id, animal_number, created_at, mother_id, born_date, weight, 
                    gender, status, color, notes, notes_mother, insemination_round_id,
                    insemination_identifier, scrotal_circumference, animal_type,
-                   pr_animal, pr_mother, mother_weight
+                   rp_animal, rp_mother, mother_weight
             FROM registrations
             WHERE {where_clause}
             ORDER BY id DESC
@@ -409,7 +409,7 @@ def export_rows_multi_tenant(user: dict, date: str = None, start: str = None, en
             SELECT animal_number, born_date, mother_id, father_id,
                    weight, gender, animal_type, status, color, notes, notes_mother, 
                    created_at, insemination_round_id, insemination_identifier, 
-                   scrotal_circumference, pr_animal, pr_mother, mother_weight
+                   scrotal_circumference, rp_animal, rp_mother, mother_weight
             FROM registrations
             WHERE {where_clause}
             ORDER BY id ASC

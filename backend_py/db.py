@@ -748,38 +748,38 @@ def migrate_add_registration_fields():
     """Add new fields to registrations table"""
     try:
         # Add new columns to registrations table
-        _add_column_safely("registrations", "pr_animal", "TEXT")
-        _add_column_safely("registrations", "pr_mother", "TEXT")
+        _add_column_safely("registrations", "rp_animal", "TEXT")
+        _add_column_safely("registrations", "rp_mother", "TEXT")
         _add_column_safely("registrations", "mother_weight", "REAL")
         
         # Add triggers for tracking changes to new fields
         conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS track_pr_animal_changes
+            CREATE TRIGGER IF NOT EXISTS track_rp_animal_changes
             AFTER UPDATE ON registrations
-            WHEN OLD.pr_animal != NEW.pr_animal
+            WHEN OLD.rp_animal != NEW.rp_animal
             BEGIN
                 INSERT INTO events_state (animal_id, animal_number, event_type, modified_field, old_value, new_value, user_id, event_date, notes)
-                SELECT NEW.id, NEW.animal_number, 'correccion', 'pr_animal', 
-                       COALESCE(OLD.pr_animal, 'NULL'), 
-                       COALESCE(NEW.pr_animal, 'NULL'), 
+                SELECT NEW.id, NEW.animal_number, 'correccion', 'rp_animal', 
+                       COALESCE(OLD.rp_animal, 'NULL'), 
+                       COALESCE(NEW.rp_animal, 'NULL'), 
                        COALESCE(NEW.created_by, NEW.user_key, 'system'), 
                        datetime('now'), NEW.notes
-                WHERE OLD.pr_animal != NEW.pr_animal;
+                WHERE OLD.rp_animal != NEW.rp_animal;
             END
         """)
         
         conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS track_pr_mother_changes
+            CREATE TRIGGER IF NOT EXISTS track_rp_mother_changes
             AFTER UPDATE ON registrations
-            WHEN OLD.pr_mother != NEW.pr_mother
+            WHEN OLD.rp_mother != NEW.rp_mother
             BEGIN
                 INSERT INTO events_state (animal_id, animal_number, event_type, modified_field, old_value, new_value, user_id, event_date, notes)
-                SELECT NEW.id, NEW.animal_number, 'correccion', 'pr_mother', 
-                       COALESCE(OLD.pr_mother, 'NULL'), 
-                       COALESCE(NEW.pr_mother, 'NULL'), 
+                SELECT NEW.id, NEW.animal_number, 'correccion', 'rp_mother', 
+                       COALESCE(OLD.rp_mother, 'NULL'), 
+                       COALESCE(NEW.rp_mother, 'NULL'), 
                        COALESCE(NEW.created_by, NEW.user_key, 'system'), 
                        datetime('now'), NEW.notes
-                WHERE OLD.pr_mother != NEW.pr_mother;
+                WHERE OLD.rp_mother != NEW.rp_mother;
             END
         """)
         
