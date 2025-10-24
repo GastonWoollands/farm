@@ -58,6 +58,18 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
     notes_mother = _normalize_text(body.notesMother)
     insemination_round_id = _normalize_text(body.inseminationRoundId)
     insemination_identifier = _normalize_text(body.inseminationIdentifier)
+    pr_animal = _normalize_text(body.prAnimal)
+    pr_mother = _normalize_text(body.prMother)
+
+    # Handle mother_weight validation
+    mother_weight = None
+    if body.motherWeight is not None:
+        try:
+            mother_weight = float(body.motherWeight)
+            if not (0 <= mother_weight <= 10000):
+                raise HTTPException(status_code=400, detail="Mother weight must be between 0 and 10000 kg")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid mother weight value")
 
     if gender and gender not in VALID_GENDERS:
         raise HTTPException(status_code=400, detail=f"Invalid gender. Must be one of: {', '.join(VALID_GENDERS)}")
@@ -73,9 +85,9 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                 INSERT INTO registrations (
                     animal_number, created_at, user_key, created_by, company_id,
                     mother_id, father_id, born_date, weight, gender, animal_type, status, color, notes, notes_mother, short_id,
-                    insemination_round_id, insemination_identifier, scrotal_circumference
+                    insemination_round_id, insemination_identifier, scrotal_circumference, pr_animal, pr_mother, mother_weight
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     animal,
@@ -96,6 +108,9 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                     insemination_round_id,
                     insemination_identifier,
                     scrotal_circumference,
+                    pr_animal,
+                    pr_mother,
+                    mother_weight,
                 ),
             )
             # Return the ID of the inserted record
@@ -179,6 +194,18 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
     notes_mother = _normalize_text(body.notesMother)
     insemination_round_id = _normalize_text(body.inseminationRoundId)
     insemination_identifier = _normalize_text(body.inseminationIdentifier)
+    pr_animal = _normalize_text(body.prAnimal)
+    pr_mother = _normalize_text(body.prMother)
+
+    # Handle mother_weight validation
+    mother_weight = None
+    if body.motherWeight is not None:
+        try:
+            mother_weight = float(body.motherWeight)
+            if not (0 <= mother_weight <= 10000):
+                raise HTTPException(status_code=400, detail="Mother weight must be between 0 and 10000 kg")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid mother weight value")
 
     if gender and gender not in VALID_GENDERS:
         raise HTTPException(status_code=400, detail=f"Invalid gender. Must be one of: {', '.join(VALID_GENDERS)}")
@@ -207,6 +234,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
                     animal_number = ?, mother_id = ?, father_id = ?, born_date = ?, weight = ?,
                     gender = ?, animal_type = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
                     insemination_round_id = ?, insemination_identifier = ?, scrotal_circumference = ?,
+                    pr_animal = ?, pr_mother = ?, mother_weight = ?,
                     updated_at = datetime('now')
                 WHERE id = ?
                 """,
@@ -214,6 +242,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
                     animal, mother, father, body.bornDate, weight,
                     gender, animal_type, status, color, notes, notes_mother,
                     insemination_round_id, insemination_identifier, scrotal_circumference,
+                    pr_animal, pr_mother, mother_weight,
                     animal_id
                 )
             )
@@ -295,7 +324,8 @@ def export_rows(created_by_or_key: str, date: str | None, start: str | None, end
         f"""
         SELECT animal_number, born_date, mother_id, father_id,
                weight, gender, animal_type, status, color, notes, notes_mother, created_at,
-               insemination_round_id, insemination_identifier, scrotal_circumference
+               insemination_round_id, insemination_identifier, scrotal_circumference,
+               pr_animal, pr_mother, mother_weight
         FROM registrations
         WHERE {where_sql}
         ORDER BY id ASC
@@ -320,7 +350,8 @@ def get_registrations_multi_tenant(user: dict, limit: int = 100) -> list[dict]:
             f"""
             SELECT id, animal_number, created_at, mother_id, born_date, weight, 
                    gender, status, color, notes, notes_mother, insemination_round_id,
-                   insemination_identifier, scrotal_circumference, animal_type
+                   insemination_identifier, scrotal_circumference, animal_type,
+                   pr_animal, pr_mother, mother_weight
             FROM registrations
             WHERE {where_clause}
             ORDER BY id DESC
@@ -378,7 +409,7 @@ def export_rows_multi_tenant(user: dict, date: str = None, start: str = None, en
             SELECT animal_number, born_date, mother_id, father_id,
                    weight, gender, animal_type, status, color, notes, notes_mother, 
                    created_at, insemination_round_id, insemination_identifier, 
-                   scrotal_circumference
+                   scrotal_circumference, pr_animal, pr_mother, mother_weight
             FROM registrations
             WHERE {where_clause}
             ORDER BY id ASC

@@ -20,6 +20,9 @@ class RegisterBody(BaseModel):
     inseminationRoundId: str | None = None
     inseminationIdentifier: str | None = None
     scrotalCircumference: float | None = None
+    prAnimal: str | None = None
+    prMother: str | None = None
+    motherWeight: float | None = None
 
 class UpdateBody(BaseModel):
     animalNumber: str
@@ -37,6 +40,9 @@ class UpdateBody(BaseModel):
     inseminationRoundId: str | None = None
     inseminationIdentifier: str | None = None
     scrotalCircumference: float | None = None
+    prAnimal: str | None = None
+    prMother: str | None = None
+    motherWeight: float | None = None
     
     class Config:
         # Allow extra fields and be more lenient with validation

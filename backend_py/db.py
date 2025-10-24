@@ -743,4 +743,67 @@ def migrate_add_email_unique_constraint():
 migrate_to_multi_tenant()
 migrate_add_email_unique_constraint()
 
+# Add new registration fields migration
+def migrate_add_registration_fields():
+    """Add new fields to registrations table"""
+    try:
+        # Add new columns to registrations table
+        _add_column_safely("registrations", "pr_animal", "TEXT")
+        _add_column_safely("registrations", "pr_mother", "TEXT")
+        _add_column_safely("registrations", "mother_weight", "REAL")
+        
+        # Add triggers for tracking changes to new fields
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS track_pr_animal_changes
+            AFTER UPDATE ON registrations
+            WHEN OLD.pr_animal != NEW.pr_animal
+            BEGIN
+                INSERT INTO events_state (animal_id, animal_number, event_type, modified_field, old_value, new_value, user_id, event_date, notes)
+                SELECT NEW.id, NEW.animal_number, 'correccion', 'pr_animal', 
+                       COALESCE(OLD.pr_animal, 'NULL'), 
+                       COALESCE(NEW.pr_animal, 'NULL'), 
+                       COALESCE(NEW.created_by, NEW.user_key, 'system'), 
+                       datetime('now'), NEW.notes
+                WHERE OLD.pr_animal != NEW.pr_animal;
+            END
+        """)
+        
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS track_pr_mother_changes
+            AFTER UPDATE ON registrations
+            WHEN OLD.pr_mother != NEW.pr_mother
+            BEGIN
+                INSERT INTO events_state (animal_id, animal_number, event_type, modified_field, old_value, new_value, user_id, event_date, notes)
+                SELECT NEW.id, NEW.animal_number, 'correccion', 'pr_mother', 
+                       COALESCE(OLD.pr_mother, 'NULL'), 
+                       COALESCE(NEW.pr_mother, 'NULL'), 
+                       COALESCE(NEW.created_by, NEW.user_key, 'system'), 
+                       datetime('now'), NEW.notes
+                WHERE OLD.pr_mother != NEW.pr_mother;
+            END
+        """)
+        
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS track_mother_weight_changes
+            AFTER UPDATE ON registrations
+            WHEN OLD.mother_weight != NEW.mother_weight
+            BEGIN
+                INSERT INTO events_state (animal_id, animal_number, event_type, modified_field, old_value, new_value, user_id, event_date, notes)
+                SELECT NEW.id, NEW.animal_number, 'correccion', 'mother_weight', 
+                       COALESCE(CAST(OLD.mother_weight AS TEXT), 'NULL'), 
+                       COALESCE(CAST(NEW.mother_weight AS TEXT), 'NULL'), 
+                       COALESCE(NEW.created_by, NEW.user_key, 'system'), 
+                       datetime('now'), NEW.notes
+                WHERE OLD.mother_weight != NEW.mother_weight;
+            END
+        """)
+        
+        conn.commit()
+        print("Registration fields migration completed successfully")
+    except sqlite3.Error as e:
+        print(f"Registration fields migration error: {e}")
+
+# Run the migration
+migrate_add_registration_fields()
+
 
