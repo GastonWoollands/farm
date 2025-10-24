@@ -130,7 +130,7 @@ function getRecordsElement() {
 }
 
 function getCowsRecordsElement() {
-  return document.getElementById('cows-records');
+  return document.getElementById('animals-records');
 }
 
 /*
@@ -208,6 +208,37 @@ init();
 async function init() {
   // Auth is now handled by Firebase auth state listener in auth.js
   // This function is kept for compatibility but auth.js will control the flow
+  
+  // Initialize the animals dropdown to be expanded by default
+  const content = document.getElementById('animals-content');
+  const arrow = document.getElementById('animals-arrow');
+  if (content && arrow) {
+    content.classList.add('expanded');
+    arrow.classList.add('rotated');
+  }
+  
+  // Initialize the records list to be collapsed by default for cleaner UI
+  const recordsContent = document.getElementById('animals-records');
+  const recordsArrow = document.getElementById('records-list-arrow');
+  if (recordsContent && recordsArrow) {
+    // Start collapsed - user can expand if needed
+    recordsContent.classList.remove('expanded');
+    recordsArrow.classList.remove('rotated');
+  }
+  
+  // Add cancel registration functionality
+  const cancelBtn = document.getElementById('cancel-registration');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      const formSection = document.getElementById('register-cow-section');
+      if (formSection) {
+        formSection.hidden = true;
+        // Reset form
+        const form = document.getElementById('inline-add-cow');
+        if (form) form.reset();
+      }
+    });
+  }
 }
 
 function showAuth() {
@@ -281,7 +312,13 @@ $toggleKey?.addEventListener('click', () => {
 $registerCowBtn?.addEventListener('click', () => {
   const isHidden = $registerCowSection.hidden;
   $registerCowSection.hidden = !isHidden;
-  if (!isHidden) return;
+  if (!isHidden) {
+    // Hide the form and reset it
+    $registerCowSection.hidden = true;
+    const form = document.getElementById('inline-add-cow');
+    if (form) form.reset();
+    return;
+  }
   
   // Get user configuration
   const userConfig = getUserConfig();
@@ -479,60 +516,74 @@ function setupFormNavigation(form) {
 setupFormNavigation($inlineAddCow);
 // setupFormNavigation($inlineAddPig);
 
-// Render cows list from DB
+// Render cows list from DB (optimized: last 10 or unsynced/pending)
 async function renderCowsList() {
   const all = await getRecords();
   const cows = all.filter(r => r.animalType === 1);
-  const $records = getCowsRecordsElement();
+  
+  // Get unsynced/pending records first
+  const unsynced = cows.filter(r => !r.synced);
+  
+  // Get last 10 synced records
+  const synced = cows.filter(r => r.synced).sort((a,b) => (b.id||0)-(a.id||0)).slice(0, 10);
+  
+  // Combine: unsynced first, then last 10 synced
+  const displayCows = [...unsynced, ...synced];
+  
+  // Update the summary stats
+  const $animalsTotal = document.getElementById('animals-total');
+  const $animalsPending = document.getElementById('animals-pending');
+  const $animalsCount = document.getElementById('animals-count');
+  const $recordsCount = document.getElementById('records-count');
+  
+  if ($animalsTotal) $animalsTotal.textContent = cows.length;
+  if ($animalsPending) {
+    $animalsPending.textContent = unsynced.length;
+    $animalsPending.className = `value pending ${unsynced.length > 0 ? 'has-pending' : ''}`;
+  }
+  if ($animalsCount) $animalsCount.textContent = cows.length;
+  if ($recordsCount) $recordsCount.textContent = displayCows.length;
+  
+  const $records = document.getElementById('animals-records');
   if (!$records) {
-    console.error('Cows records element not found!');
+    console.error('Animals records element not found!');
     return;
   }
   
   $records.innerHTML = '';
-  for (const r of cows.sort((a,b) => (b.id||0)-(a.id||0))) {
-    const li = document.createElement('li');
-    li.dataset.id = r.id;
-    const left = document.createElement('div');
-    left.textContent = formatDisplayText(r.animalNumber) + '';
-    const right = document.createElement('div');
-    right.textContent = r.synced ? 'Synced' : 'Pending';
-    const del = document.createElement('button');
-    del.className = 'btn';
-    del.textContent = '×';
-    del.title = 'Delete';
-    del.setAttribute('aria-label', 'Delete');
-    del.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const id = r.id;
-      // If synced, attempt server delete first
-      const userKey = await getAuthToken();
-      const legacyKey = (()=>{ try { return localStorage.getItem(LS_USER_KEY); } catch { return null; } })();
-      if (r.synced && (userKey || legacyKey)) {
-        try {
-          await fetch(API_BASE_URL + '/register', {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(userKey ? { 'Authorization': `Bearer ${userKey}` } : {}),
-              ...(!userKey && legacyKey ? { 'x-user-key': legacyKey } : {})
-            },
-            body: JSON.stringify({ animalNumber: r.animalNumber, createdAt: r.createdAt })
-          });
-        } catch (e) { /* ignore network errors, still remove locally */ }
-      }
-      await withUndo(async () => deleteRecord(id), async () => {}, `Deleted ${r.animalNumber}`);
-      await renderCowsList();
-      // Refresh metrics when record is deleted
-      window.refreshMetrics();
-    });
-    const rightWrap = document.createElement('div');
-    rightWrap.className = 'row gap';
-    rightWrap.appendChild(right);
-    rightWrap.appendChild(del);
-    li.appendChild(left);
-    li.appendChild(rightWrap);
-    $records.appendChild(li);
+  
+  for (const r of displayCows) {
+    const row = document.createElement('div');
+    row.className = 'record-row';
+    row.dataset.id = r.id;
+    
+    const status = r.synced ? 'synced' : 'pending';
+    const statusText = r.synced ? 'Sincronizado' : 'Pendiente';
+    const statusIcon = r.synced ? '✓' : '⏳';
+    
+    row.innerHTML = `
+      <div class="record-main">
+        <div class="record-info">
+          <div class="record-id">${formatDisplayText(r.animalNumber)}</div>
+          <div class="record-details">
+            <span class="record-gender">${r.gender === 'M' ? 'Macho' : 'Hembra'}</span>
+            ${r.weight ? `<span class="record-weight">${r.weight}kg</span>` : ''}
+            ${r.bornDate ? `<span class="record-born">${r.bornDate}</span>` : ''}
+          </div>
+        </div>
+        <div class="record-actions">
+          <div class="record-status ${status}">
+            <span class="status-icon">${statusIcon}</span>
+            <span class="status-text">${statusText}</span>
+          </div>
+          <button class="record-delete" onclick="deleteRecord('${r.id}')" title="Eliminar">
+            ×
+          </button>
+        </div>
+      </div>
+    `;
+    
+    $records.appendChild(row);
   }
   const pending = all.filter(r => !r.synced).length;
   $pendingCount.textContent = pending > 0 ? `(pending: ${pending})` : '';
@@ -549,6 +600,39 @@ async function renderPigsList() {
 async function renderList() {
   await renderCowsList();
 }
+
+
+// Animals dropdown toggle functionality
+function toggleAnimalsDropdown() {
+  const content = document.getElementById('animals-content');
+  const arrow = document.getElementById('animals-arrow');
+  
+  if (content.classList.contains('expanded')) {
+    content.classList.remove('expanded');
+    arrow.classList.remove('rotated');
+  } else {
+    content.classList.add('expanded');
+    arrow.classList.add('rotated');
+  }
+}
+
+// Records list toggle functionality
+function toggleRecordsList() {
+  const content = document.getElementById('animals-records');
+  const arrow = document.getElementById('records-list-arrow');
+  
+  if (content.classList.contains('expanded')) {
+    content.classList.remove('expanded');
+    arrow.classList.remove('rotated');
+  } else {
+    content.classList.add('expanded');
+    arrow.classList.add('rotated');
+  }
+}
+
+// Make functions globally available
+window.toggleAnimalsDropdown = toggleAnimalsDropdown;
+window.toggleRecordsList = toggleRecordsList;
 
 // Sync logic: send unsynced to backend when online
 async function triggerSync(force = false) {

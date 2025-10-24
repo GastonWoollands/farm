@@ -110,94 +110,160 @@
       <div id="metrics-container"></div>
     </div>
 
-    <!-- Cows Page -->
+    <!-- Animals Page -->
     <div id="cows-page" hidden>
       <section class="card">
-        <div class="row space-between align-center">
+        <div class="animals-header">
           <h2>Animales</h2>
-          <div class="row gap">
-            <button id="register-cow-btn" class="btn primary">Registrar Nuevo Animal</button>
-            <button id="manage-synced-cows" class="btn">Gestionar registros…</button>
-            <button id="export-csv-cows" class="btn">Exportar CSV</button>
+          <p class="muted">Gestiona todos los registros de animales</p>
+        </div>
+
+        <!-- Animals Section -->
+        <div class="animals-dropdown">
+          <div class="dropdown-header" onclick="toggleAnimalsDropdown()">
+            <div class="dropdown-title">
+              <span class="dropdown-icon">A</span>
+              <span>Animales</span>
+              <span class="dropdown-count" id="animals-count">0</span>
+            </div>
+            <div class="dropdown-arrow" id="animals-arrow">▼</div>
+          </div>
+          
+          <div class="dropdown-content" id="animals-content">
+            <!-- Summary Stats -->
+            <div class="summary-section">
+              <div class="summary-stats">
+                <div class="summary-item">
+                  <span class="label">Total:</span>
+                  <span class="value" id="animals-total">0</span>
+                </div>
+                <div class="summary-item">
+                  <span class="label">Pendientes:</span>
+                  <span class="value pending" id="animals-pending">0</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="dropdown-actions">
+              <button id="register-cow-btn" class="action-btn primary">
+                <span class="action-icon">+</span>
+                <span>Registrar Nuevo Animal</span>
+              </button>
+              <button id="manage-synced-cows" class="action-btn">
+                <span class="action-icon">≡</span>
+                <span>Gestionar registros…</span>
+              </button>
+              <button id="export-csv-cows" class="action-btn">
+                <span class="action-icon">↓</span>
+                <span>Exportar CSV</span>
+              </button>
+            </div>
+
+            <!-- Registration Form (shown when registering) -->
+            <div id="register-cow-section" class="registration-form" hidden>
+              <form id="inline-add-cow" class="form-vertical">
+                <input type="hidden" id="inline-animal-type" value="1">
+                <div class="form-field">
+                  <label for="inline-animal-cow">ID del animal (requerido)</label>
+                  <input id="inline-animal-cow" type="text" placeholder="e.g., 123-45" autocomplete="off" required>
+                </div>
+                <div class="form-field">
+                  <label for="inline-mother-cow">Madre ID (opcional)</label>
+                  <input id="inline-mother-cow" type="text" placeholder="e.g., 67890" autocomplete="off">
+                </div>
+                <div class="form-field">
+                  <label for="inline-father-cow">Padre ID (opcional)</label>
+                  <input id="inline-father-cow" type="text" placeholder="e.g., Repaso, 2399" autocomplete="off">
+                </div>
+                <div class="form-field">
+                  <label for="inline-born-cow">Nacimiento (opcional)</label>
+                  <input id="inline-born-cow" type="date" autocomplete="off">
+                </div>
+                <div class="form-field">
+                  <label for="inline-weight-cow">Peso (kg, opcional)</label>
+                  <input id="inline-weight-cow" type="number" step="0.01" min="0" placeholder="e.g., 250.5" autocomplete="off">
+                </div>
+                <div class="form-field">
+                  <label for="inline-gender-cow">Sexo (opcional)</label>
+                  <select id="inline-gender-cow">
+                    <option value="">— Seleccionar —</option>
+                    <option value="MALE">Macho</option>
+                    <option value="FEMALE">Hembra</option>
+                    <option value="UNKNOWN">Desconocido</option>
+                  </select>
+                </div>
+                <div class="form-field" id="scrotal-circumference-field" style="display: none;">
+                  <label for="inline-scrotal-circumference-cow">Circunferencia Escrotal (cm, opcional)</label>
+                  <input id="inline-scrotal-circumference-cow" type="number" step="0.1" min="0" max="100" placeholder="e.g., 35.5" autocomplete="off">
+                </div>
+                <div class="form-field">
+                  <label for="inline-insemination-id-cow">ID de Inseminación (opcional)</label>
+                  <select id="inline-insemination-id-cow">
+                    <option value="">— Seleccionar —</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="inline-status-cow">Estado (opcional)</label>
+                  <select id="inline-status-cow">
+                    <option value="">— Seleccionar —</option>
+                    <option value="ALIVE" selected>Vivo</option>
+                    <option value="DEAD">Muerto</option>
+                    <option value="UNKNOWN">Desconocido</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="inline-color-cow">Color (opcional)</label>
+                  <select id="inline-color-cow">
+                    <option value="">— Seleccionar —</option>
+                    <option value="COLORADO">Colorado</option>
+                    <option value="NEGRO">Negro</option>
+                    <option value="OTHERS">Otros</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="inline-notes-mother-cow">Notas de la madre (opcional)</label>
+                  <input id="inline-notes-mother-cow" type="text" placeholder="Cualquier nota sobre la madre" autocomplete="off">
+                </div>
+                <div class="form-field">
+                  <label for="inline-notes-cow">Notas (opcional)</label>
+                  <input id="inline-notes-cow" type="text" placeholder="Cualquier nota" autocomplete="off">
+                </div>
+                <div class="form-actions">
+                  <button class="btn primary" id="inline-add-cow-btn" type="submit">Registrar Animal</button>
+                  <button class="btn" type="button" id="cancel-registration">Cancelar</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Records List (Collapsible) -->
+            <div class="records-list-section">
+              <div class="records-list-header" onclick="toggleRecordsList()">
+                <div class="records-list-title">
+                  <span class="records-list-icon">📋</span>
+                  <span>Registros Recientes</span>
+                  <span class="records-list-count" id="records-count">0</span>
+                </div>
+                <div class="records-list-arrow" id="records-list-arrow">▼</div>
+              </div>
+              <div class="records-list-content" id="animals-records">
+                <!-- Records will be populated here -->
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Registration form -->
-        <section id="register-cow-section" hidden>
-          <form id="inline-add-cow" class="form-vertical" style="margin:8px 0 12px;">
-            <input type="hidden" id="inline-animal-type" value="1">
-            <div class="form-field">
-              <label for="inline-animal-cow">ID del animal (requerido)</label>
-              <input id="inline-animal-cow" type="text" placeholder="e.g., 123-45" autocomplete="off" required>
+        <!-- Inseminaciones Section -->
+        <div class="animals-dropdown" style="opacity: 0.5;">
+          <div class="dropdown-header disabled">
+            <div class="dropdown-title">
+              <span class="dropdown-icon">I</span>
+              <span>Inseminaciones</span>
+              <span class="dropdown-status">Próximamente</span>
             </div>
-            <div class="form-field">
-              <label for="inline-mother-cow">Madre ID (opcional)</label>
-              <input id="inline-mother-cow" type="text" placeholder="e.g., 67890" autocomplete="off">
-            </div>
-            <div class="form-field">
-              <label for="inline-father-cow">Padre ID (opcional)</label>
-              <input id="inline-father-cow" type="text" placeholder="e.g., Repaso, 2399" autocomplete="off">
-            </div>
-            <div class="form-field">
-              <label for="inline-born-cow">Nacimiento (opcional)</label>
-              <input id="inline-born-cow" type="date" autocomplete="off">
-            </div>
-            <div class="form-field">
-              <label for="inline-weight-cow">Peso (kg, opcional)</label>
-              <input id="inline-weight-cow" type="number" step="0.01" min="0" placeholder="e.g., 250.5" autocomplete="off">
-            </div>
-            <div class="form-field">
-              <label for="inline-gender-cow">Sexo (opcional)</label>
-              <select id="inline-gender-cow">
-                <option value="">— Seleccionar —</option>
-                <option value="MALE">Macho</option>
-                <option value="FEMALE">Hembra</option>
-                <option value="UNKNOWN">Desconocido</option>
-              </select>
-            </div>
-            <div class="form-field" id="scrotal-circumference-field" style="display: none;">
-              <label for="inline-scrotal-circumference-cow">Circunferencia Escrotal (cm, opcional)</label>
-              <input id="inline-scrotal-circumference-cow" type="number" step="0.1" min="0" max="100" placeholder="e.g., 35.5" autocomplete="off">
-            </div>
-            <div class="form-field">
-              <label for="inline-insemination-id-cow">ID de Inseminación (opcional)</label>
-              <select id="inline-insemination-id-cow">
-                <option value="">— Seleccionar —</option>
-              </select>
-            </div>
-            <div class="form-field">
-              <label for="inline-status-cow">Estado (opcional)</label>
-              <select id="inline-status-cow">
-                <option value="">— Seleccionar —</option>
-                <option value="ALIVE" selected>Vivo</option>
-                <option value="DEAD">Muerto</option>
-                <option value="UNKNOWN">Desconocido</option>
-              </select>
-            </div>
-            <div class="form-field">
-              <label for="inline-color-cow">Color (opcional)</label>
-              <select id="inline-color-cow">
-                <option value="">— Seleccionar —</option>
-                <option value="COLORADO">Colorado</option>
-                <option value="NEGRO">Negro</option>
-                <option value="OTHERS">Otros</option>
-              </select>
-            </div>
-            <div class="form-field">
-              <label for="inline-notes-mother-cow">Notas de la madre (opcional)</label>
-              <input id="inline-notes-mother-cow" type="text" placeholder="Cualquier nota sobre la madre" autocomplete="off">
-            </div>
-            <div class="form-field">
-              <label for="inline-notes-cow">Notas (opcional)</label>
-              <input id="inline-notes-cow" type="text" placeholder="Cualquier nota" autocomplete="off">
-            </div>
-            <div class="row gap">
-              <button class="btn primary" id="inline-add-cow-btn" type="submit" aria-label="Registrar animal">Registrar Animal</button>
-            </div>
-          </form>
-        </section>
+          </div>
+        </div>
 
-        <ul id="cows-records" class="list"></ul>
       </section>
     </div>
 

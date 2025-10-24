@@ -148,6 +148,818 @@ input[type="number"] { width:100%; padding:10px 12px; border-radius:10px; border
 .error { color: var(--danger); margin-top: 8px; }
 .list { list-style: none; padding: 0; margin: 12px 0 0; }
 .list li { display:flex; justify-content:space-between; padding:10px 12px; border:1px solid #1f2937; border-radius:10px; background:#0b1220; margin-top:8px; }
+
+/* Records summary styles */
+.records-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border: 1px solid #334155;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.summary-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary-item .label {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.summary-item .value {
+  color: var(--text);
+  font-weight: 600;
+  padding: 4px 10px;
+  background: rgba(15, 23, 42, 0.8);
+  border-radius: 6px;
+  border: 1px solid #334155;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+  min-width: 24px;
+  text-align: center;
+  display: inline-block;
+}
+
+.summary-item .value.pending {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  border-color: #10b981;
+}
+
+/* When there are pending records, make it more prominent */
+.summary-item .value.pending.has-pending {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 11px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid #475569;
+  color: var(--text);
+  transition: all 0.2s ease;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.btn-sm:hover {
+  background: rgba(15, 23, 42, 1);
+  border-color: #64748b;
+  transform: translateY(-1px);
+}
+
+/* Mobile responsive for summary */
+@media (max-width: 600px) {
+  .records-summary {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  
+  .summary-item {
+    justify-content: space-between;
+  }
+}
+
+/* Animals Section Styles */
+.animals-header {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #334155;
+}
+
+.animals-header h2 {
+  margin: 0 0 8px 0;
+  color: var(--accent);
+}
+
+.summary-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid #334155;
+  background: #1e293b;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+}
+
+.registration-form {
+  background: #0b1220;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 0;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.records-section {
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0b1220;
+  overflow: hidden;
+}
+
+.records-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #1e293b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.records-header:hover {
+  background: #334155;
+}
+
+.records-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.records-icon {
+  font-size: 12px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-2);
+  background: transparent;
+}
+
+.records-count {
+  background: rgba(15, 118, 110, 0.15);
+  color: var(--accent-2);
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 500;
+  border: none;
+}
+
+.records-arrow {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  transition: transform 0.3s ease;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.records-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+.records-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  background: #0b1220;
+}
+
+.records-content.expanded {
+  max-height: 1000px;
+}
+
+.animals-dropdown {
+  margin-bottom: 16px;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  background: #0b1220;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.animals-dropdown:hover {
+  border-color: #475569;
+}
+
+.dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  background: #1e293b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.dropdown-header:hover {
+  background: #334155;
+}
+
+.dropdown-header.disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.dropdown-header.disabled:hover {
+  background: #1e293b;
+}
+
+.dropdown-header.disabled .dropdown-icon {
+  color: #64748b;
+}
+
+.dropdown-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dropdown-icon {
+  font-size: 12px;
+  font-weight: 600;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-2);
+  background: transparent;
+}
+
+.dropdown-count {
+  background: rgba(15, 118, 110, 0.15);
+  color: var(--accent-2);
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 500;
+  border: none;
+}
+
+.dropdown-status {
+  background: rgba(100, 116, 139, 0.1);
+  color: #94a3b8;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 400;
+  border: none;
+}
+
+.dropdown-arrow {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  transition: transform 0.3s ease;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.dropdown-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+.dropdown-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  background: #0b1220;
+}
+
+.dropdown-content.expanded {
+  max-height: 1000px;
+}
+
+.dropdown-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #334155;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.action-btn:hover {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: #475569;
+}
+
+.action-btn.primary {
+  background: rgba(15, 118, 110, 0.15);
+  border-color: var(--accent);
+  color: var(--accent-2);
+}
+
+.action-btn.primary:hover {
+  background: rgba(15, 118, 110, 0.25);
+  border-color: var(--accent-2);
+}
+
+.action-icon {
+  font-size: 12px;
+  font-weight: 500;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--muted);
+}
+
+.dropdown-records {
+  padding: 16px 20px;
+  background: #0b1220;
+}
+
+/* Records List Section (Collapsible) */
+.records-list-section {
+  border-top: 1px solid #334155;
+  background: #0b1220;
+}
+
+.records-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #1e293b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  border-bottom: 1px solid #334155;
+}
+
+.records-list-header:hover {
+  background: #334155;
+}
+
+.records-list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.records-list-icon {
+  font-size: 12px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-2);
+  background: transparent;
+}
+
+.records-list-count {
+  background: rgba(15, 118, 110, 0.15);
+  color: var(--accent-2);
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 500;
+  border: none;
+}
+
+.records-list-arrow {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  transition: transform 0.3s ease;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.records-list-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+.records-list-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  background: #0b1220;
+}
+
+.records-list-content.expanded {
+  max-height: 1000px;
+}
+
+/* Record Row Styles */
+.record-row {
+  margin-bottom: 8px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.3);
+  transition: all 0.2s ease;
+}
+
+.record-row:hover {
+  border-color: #475569;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.record-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 12px;
+}
+
+.record-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.record-id {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.record-details {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.record-details span {
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(71, 85, 105, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.record-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.record-row:hover .record-actions {
+  opacity: 1;
+}
+
+.record-status {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 400;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(71, 85, 105, 0.1);
+  border: 1px solid rgba(71, 85, 105, 0.2);
+}
+
+.record-status.synced {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.record-status.pending {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.status-icon {
+  font-size: 8px;
+}
+
+.record-delete {
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.record-delete:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* Mobile responsive for animals section */
+@media (max-width: 768px) {
+  .animals-header {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+  }
+  
+  .animals-header h2 {
+    font-size: 20px;
+  }
+  
+  .animals-header p {
+    font-size: 13px;
+  }
+  
+  .summary-section {
+    padding: 12px 16px;
+  }
+  
+  .summary-stats {
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .dropdown-actions {
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+  }
+  
+  .action-btn {
+    flex: 1;
+    min-width: 120px;
+  }
+  
+  .registration-form {
+    padding: 16px;
+    margin: 0 16px 16px 16px;
+  }
+  
+  .form-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .dropdown-records {
+    padding: 12px 16px;
+  }
+  
+  .records-list-header {
+    padding: 10px 12px;
+  }
+  
+  .records-list-title {
+    gap: 6px;
+    font-size: 12px;
+  }
+  
+  .records-list-icon {
+    width: 14px;
+    height: 14px;
+    font-size: 10px;
+  }
+  
+  .records-list-arrow {
+    width: 12px;
+    height: 12px;
+    font-size: 8px;
+  }
+  
+  .dropdown-header {
+    padding: 12px 16px;
+  }
+  
+  .dropdown-title {
+    gap: 10px;
+    font-size: 14px;
+  }
+  
+  .dropdown-icon {
+    width: 14px;
+    height: 14px;
+    font-size: 10px;
+  }
+  
+  .dropdown-count {
+    font-size: 10px;
+    padding: 1px 6px;
+  }
+  
+  .dropdown-actions {
+    gap: 6px;
+    padding: 12px 16px;
+  }
+  
+  .action-btn {
+    padding: 10px 12px;
+    font-size: 13px;
+    gap: 10px;
+  }
+  
+  .action-icon {
+    width: 14px;
+    height: 14px;
+    font-size: 10px;
+  }
+  
+  .dropdown-records {
+    padding: 12px 16px;
+  }
+  
+  .dropdown-arrow {
+    width: 12px;
+    height: 12px;
+    font-size: 8px;
+  }
+  
+  .record-main {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  
+  .record-id {
+    font-size: 13px;
+  }
+  
+  .record-details {
+    gap: 6px;
+  }
+  
+  .record-details span {
+    font-size: 10px;
+    padding: 1px 4px;
+  }
+  
+  .record-actions {
+    gap: 4px;
+  }
+  
+  .record-status {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+  
+  .record-delete {
+    width: 14px;
+    height: 14px;
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 480px) {
+  .summary-section {
+    padding: 10px 12px;
+  }
+  
+  .summary-stats {
+    gap: 8px;
+  }
+  
+  .dropdown-actions {
+    padding: 10px 12px;
+    flex-direction: column;
+  }
+  
+  .action-btn {
+    padding: 8px 10px;
+    font-size: 12px;
+    width: 100%;
+  }
+  
+  .dropdown-header {
+    padding: 10px 12px;
+  }
+  
+  .dropdown-records {
+    padding: 10px 12px;
+  }
+  
+  .dropdown-title {
+    gap: 8px;
+    font-size: 13px;
+  }
+  
+  .registration-form {
+    margin: 0 12px 12px 12px;
+    padding: 12px;
+  }
+  
+  .records-list-header {
+    padding: 8px 10px;
+  }
+  
+  .records-list-title {
+    gap: 4px;
+    font-size: 11px;
+  }
+  
+  .records-list-icon {
+    width: 12px;
+    height: 12px;
+    font-size: 9px;
+  }
+  
+  .records-list-arrow {
+    width: 10px;
+    height: 10px;
+    font-size: 7px;
+  }
+  
+  .record-main {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  
+  .record-id {
+    font-size: 12px;
+  }
+  
+  .record-details {
+    gap: 4px;
+  }
+  
+  .record-details span {
+    font-size: 9px;
+    padding: 1px 3px;
+  }
+  
+  .record-actions {
+    gap: 3px;
+  }
+  
+  .record-status {
+    font-size: 8px;
+    padding: 1px 3px;
+  }
+  
+  .record-delete {
+    width: 12px;
+    height: 12px;
+    font-size: 8px;
+  }
+}
 dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; color:var(--text); }
 .list{max-width:100%}
 #manage-synced-dialog{ width:min(720px,95vw); max-height:80vh; overflow:auto; }
