@@ -325,7 +325,7 @@ $registerPigBtn?.addEventListener('click', () => {
 async function handleAddCow(number) {
   const n = normalizeString(number);
   if (!n) return;
-  const userKey = getAuthToken(); // Use Firebase token instead of stored key
+  const userKey = await getAuthToken(); // Use Firebase token instead of stored key
   
   const gender = normalizeString($inlineGenderCow?.value);
   
@@ -379,7 +379,7 @@ async function handleAddCow(number) {
 async function handleAddPig(number) {
   const n = (number || '').trim().toUpperCase();
   if (!n) return;
-  const userKey = getAuthToken(); // Use Firebase token instead of stored key
+  const userKey = await getAuthToken(); // Use Firebase token instead of stored key
   const motherVal = ($inlineMotherPig?.value || '').trim().toUpperCase() || null;
   const bornVal = ($inlineBornPig?.value || '').trim() || null;
   const weightVal = $inlineWeightPig?.value ? parseFloat($inlineWeightPig.value) : null;
@@ -506,7 +506,7 @@ async function renderCowsList() {
       e.stopPropagation();
       const id = r.id;
       // If synced, attempt server delete first
-      const userKey = getAuthToken();
+      const userKey = await getAuthToken();
       const legacyKey = (()=>{ try { return localStorage.getItem(LS_USER_KEY); } catch { return null; } })();
       if (r.synced && (userKey || legacyKey)) {
         try {
@@ -561,7 +561,7 @@ async function triggerSync(force = false) {
     console.log('Offline and not forced, skipping sync');
     return;
   }
-  const userKey = getAuthToken(); // Firebase token
+  const userKey = await getAuthToken(); // Firebase token
   console.log('Auth token:', { userKey: !!userKey });
   if (!userKey) {
     console.log('No Firebase token available, skipping sync');
@@ -682,12 +682,19 @@ async function triggerSync(force = false) {
     // After pushing, pull latest records from server for this user's company
     try {
       const url = API_BASE_URL + '/export-multi-tenant';
-            const res = await fetch(url, { headers: {
-              'Authorization': `Bearer ${userKey}`
-            }});
+      console.log('Sync - URL:', url);
+      console.log('Sync - Auth token:', userKey ? 'Present' : 'Missing');
+      
+      const res = await fetch(url, { headers: {
+        'Authorization': `Bearer ${userKey}`
+      }});
+      
+      console.log('Sync - Response status:', res.status);
+      
       if (res.ok) {
         const data = await res.json();
         const items = Array.isArray(data?.items) ? data.items : [];
+        console.log('Sync - Imported items:', items.length);
         if (items.length) {
           await importFromServer(items);
           await renderList();
@@ -696,7 +703,8 @@ async function triggerSync(force = false) {
           window.dispatchEvent(new CustomEvent('dataUpdated'));
         }
       } else {
-        console.warn('Pull sync failed', res.status);
+        const errorText = await res.text();
+        console.warn('Pull sync failed', res.status, errorText);
       }
     } catch (e) {
       console.warn('Network error during pull sync', e);
@@ -784,8 +792,13 @@ function hideToast() {
 }
 
 async function exportData(format) {
-  const userKey = getAuthToken();
-  if (!userKey) return;
+  const userKey = await getAuthToken();
+  console.log('Export - Auth token:', userKey ? 'Present' : 'Missing');
+  if (!userKey) {
+    withUndo(async()=>{}, async()=>{}, 'Export failed: No authentication token');
+    return;
+  }
+  
   const params = new URLSearchParams();
   if (format === 'csv') params.set('format', 'csv');
   const startDate = ($exportStartModal && $exportStartModal.value) ? $exportStartModal.value : '';
@@ -793,9 +806,17 @@ async function exportData(format) {
   if (startDate) params.set('start', startDate);
   if (endDate) params.set('end', endDate);
   const url = API_BASE_URL + '/export-multi-tenant' + (params.toString() ? `?${params}` : '');
+  
+  console.log('Export - URL:', url);
+  console.log('Export - Headers:', { 'Authorization': `Bearer ${userKey}` });
+  
   const res = await fetch(url, { headers: { 'Authorization': `Bearer ${userKey}` } });
+  console.log('Export - Response status:', res.status);
+  
   if (!res.ok) {
-    withUndo(async()=>{}, async()=>{}, `Export failed (${res.status})`);
+    const errorText = await res.text();
+    console.log('Export - Error response:', errorText);
+    withUndo(async()=>{}, async()=>{}, `Export failed (${res.status}): ${errorText}`);
     return;
   }
   const blob = await res.blob();

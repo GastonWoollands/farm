@@ -223,7 +223,7 @@ export class RegistrationPopup {
    * Register animal in database
    */
   async registerAnimal(data) {
-    const userKey = getAuthToken();
+    const userKey = await getAuthToken();
     if (!userKey) {
       throw new Error('No hay sesión activa');
     }

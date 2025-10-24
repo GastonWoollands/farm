@@ -352,7 +352,7 @@ export class AnimalSearch {
     // If synced, attempt server delete first
     if (synced) {
       try {
-        const token = getAuthToken();
+        const token = await getAuthToken();
         const legacyKey = (() => { try { return localStorage.getItem('farm:userKey'); } catch { return null; } })();
         const apiBaseEl = document.getElementById('api-base');
         const apiBase = apiBaseEl ? apiBaseEl.textContent.trim() : '';
@@ -799,7 +799,7 @@ export class AnimalSearch {
               console.log('Sending update request with data:', requestData);
               
               // Use Firebase authentication consistently
-              const firebaseToken = getAuthToken();
+              const firebaseToken = await getAuthToken();
               
               const headers = {
                 'Content-Type': 'application/json'
@@ -886,7 +886,7 @@ export class AnimalSearch {
    * @param {Object} data - Updated data
    */
   async syncUpdateToBackend(recordId, data) {
-    const firebaseToken = getAuthToken();
+    const firebaseToken = await getAuthToken();
     
     if (!firebaseToken) {
       throw new Error('Authentication required. Please sign in again.');

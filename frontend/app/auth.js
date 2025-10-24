@@ -43,8 +43,20 @@ export function initAuth() {
 }
 
 // Get current auth token for API calls
-export function getAuthToken() {
-  return authToken;
+export async function getAuthToken() {
+  if (!currentUser) {
+    return null;
+  }
+  
+  try {
+    // Refresh the token to ensure it's valid
+    const token = await currentUser.getIdToken(true); // Force refresh
+    authToken = token;
+    return token;
+  } catch (error) {
+    console.error('Error getting auth token:', error);
+    return null;
+  }
 }
 
 // Get current user
