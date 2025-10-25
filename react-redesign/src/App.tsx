@@ -60,16 +60,22 @@ function AppContent() {
             
             // Load user context and data
             try {
+              console.log('Loading user context...')
               const context = await apiService.getUserContext()
+              console.log('User context loaded:', context)
+              
               const [animalsData, statsData] = await Promise.all([
                 apiService.getRegistrations(100),
                 apiService.getStats()
               ])
               
+              console.log('Animals data loaded:', animalsData)
+              console.log('Stats data loaded:', statsData)
+              
               setAppState(prev => ({
                 ...prev,
                 currentCompany: context.company?.name || 'Personal Data',
-                animals: animalsData.registrations,
+                animals: animalsData.registrations || [],
                 stats: statsData,
                 pendingCount: statsData.pending || 0
               }))

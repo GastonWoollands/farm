@@ -188,7 +188,7 @@ class ApiService {
 
   // User Context
   async getUserContext(): Promise<{ user: User, company: Company | null }> {
-    return this.request<{ user: User, company: Company | null }>(`${API_ENDPOINTS.USER_CONTEXT}/me`)
+    return this.request<{ user: User, company: Company | null }>(`${API_ENDPOINTS.USER_CONTEXT}/context`)
   }
 }
 

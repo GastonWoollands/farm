@@ -38,21 +38,23 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
   const [error, setError] = useState<string | null>(null)
 
   // Filter and search animals
-  const filteredAnimals = animals.filter(animal => {
-    const matchesSearch = 
-      animal.animal_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      animal.rp_animal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      animal.mother_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      animal.rp_mother?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      animal.father_id?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredAnimals = (() => {
+    try {
+      return animals.filter(animal => {
+        const matchesSearch = 
+          (animal.animal_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (animal.rp_animal || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (animal.mother_id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (animal.rp_mother || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (animal.father_id || '').toLowerCase().includes(searchTerm.toLowerCase())
 
-    const matchesGender = !filters.gender || animal.gender === filters.gender
-    const matchesStatus = !filters.status || animal.status === filters.status
-    const matchesColor = !filters.color || animal.color === filters.color
-    const matchesRound = !filters.inseminationRound || animal.insemination_round_id === filters.inseminationRound
+        const matchesGender = !filters.gender || animal.gender === filters.gender
+        const matchesStatus = !filters.status || animal.status === filters.status
+        const matchesColor = !filters.color || animal.color === filters.color
+        const matchesRound = !filters.inseminationRound || animal.insemination_round_id === filters.inseminationRound
 
-    return matchesSearch && matchesGender && matchesStatus && matchesColor && matchesRound
-  }).sort((a, b) => {
+        return matchesSearch && matchesGender && matchesStatus && matchesColor && matchesRound
+      }).sort((a, b) => {
     let aValue = a[sortBy as keyof typeof a]
     let bValue = b[sortBy as keyof typeof b]
 
@@ -71,6 +73,12 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
       return aValue > bValue ? -1 : aValue < bValue ? 1 : 0
     }
   })
+    } catch (err) {
+      console.error('Error filtering animals:', err)
+      setError('Error al filtrar animales')
+      return []
+    }
+  })()
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({
