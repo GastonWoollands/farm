@@ -119,36 +119,27 @@
     @apply text-blue-400;
   }
   
-  /* Subtle background variations for better hierarchy */
-  .bg-muted\/30 {
-    @apply bg-slate-800/30;
-  }
-  
-  .bg-muted\/50 {
-    @apply bg-slate-800/50;
-  }
-  
-  /* Professional border styling */
-  .border-muted-foreground\/20 {
-    @apply border-slate-600/20;
-  }
-  
-  .border-muted-foreground\/30 {
-    @apply border-slate-600/30;
-  }
-  
   /* Enhanced focus states for better accessibility */
   .focus-visible:focus {
     @apply ring-2 ring-blue-500/50 ring-offset-2 ring-offset-slate-900;
   }
   
-  /* Professional hover states */
-  .hover\:bg-muted\/50:hover {
-    @apply bg-slate-800/50;
+  /* Professional background variations using CSS custom properties */
+  .bg-muted-30 {
+    background-color: hsl(var(--muted) / 0.3);
   }
   
-  .hover\:bg-muted\/30:hover {
-    @apply bg-slate-800/30;
+  .bg-muted-50 {
+    background-color: hsl(var(--muted) / 0.5);
+  }
+  
+  /* Professional border variations */
+  .border-muted-20 {
+    border-color: hsl(var(--muted-foreground) / 0.2);
+  }
+  
+  .border-muted-30 {
+    border-color: hsl(var(--muted-foreground) / 0.3);
   }
   
   /* Better contrast for form elements */
