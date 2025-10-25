@@ -91,6 +91,13 @@ class ApiService {
 
   constructor() {
     this.baseURL = API_BASE_URL
+    console.log('API Service initialized with URL:', this.baseURL)
+    console.log('Environment variables:', {
+      VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
+      MODE: import.meta.env.MODE,
+      DEV: import.meta.env.DEV,
+      PROD: import.meta.env.PROD
+    })
   }
 
   setAuthToken(token: string | null) {
