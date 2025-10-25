@@ -13,10 +13,10 @@ export const FIREBASE_CONFIG = {
 
 // API Endpoints
 export const API_ENDPOINTS = {
-  REGISTRATIONS: '/registrations',
-  REGISTER: '/register',
-  EXPORT: '/export-multi-tenant',
-  STATS: '/stats',
+  REGISTRATIONS: '/registrations/',
+  REGISTER: '/registrations/register',
+  EXPORT: '/registrations/export-multi-tenant',
+  STATS: '/registrations/stats',
   USERS: '/users',
   COMPANIES: '/companies',
   USER_CONTEXT: '/user-context'
