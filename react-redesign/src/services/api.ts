@@ -180,7 +180,7 @@ class ApiService {
   }
 
   async deleteAnimal(animalNumber: string, createdAt: string): Promise<{ ok: boolean }> {
-    return this.request<{ ok: boolean }>(`${API_ENDPOINTS.REGISTRATIONS}/register`, {
+    return this.request<{ ok: boolean }>(API_ENDPOINTS.REGISTER, {
       method: 'DELETE',
       body: JSON.stringify({ animalNumber, createdAt })
     })
