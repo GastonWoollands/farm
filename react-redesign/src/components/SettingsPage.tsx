@@ -15,8 +15,18 @@ import {
   Trash2,
   AlertTriangle
 } from 'lucide-react'
+import { Animal, RegistrationStats } from '@/services/api'
+import { usePrefixes } from '@/contexts/PrefixesContext'
 
-export function SettingsPage() {
+interface SettingsPageProps {
+  animals: Animal[]
+  stats: RegistrationStats
+}
+
+export function SettingsPage({ animals, stats }: SettingsPageProps) {
+  // stats parameter is available for future use in system information
+  // Suppress unused parameter warning
+  void stats
   const [objectives, setObjectives] = useState({
     targetRegistrations: 200,
     targetWeight: 300,
@@ -24,6 +34,7 @@ export function SettingsPage() {
     targetMothers: 50
   })
 
+  const { prefixes, updatePrefix } = usePrefixes()
   const [isLoading, setIsLoading] = useState(false)
 
   const handleObjectiveChange = (key: string, value: string) => {
@@ -32,6 +43,7 @@ export function SettingsPage() {
       [key]: parseInt(value) || 0
     }))
   }
+
 
   const handleSave = async () => {
     setIsLoading(true)
@@ -147,6 +159,78 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Prefixes Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            Configuración de Prefijos
+          </CardTitle>
+          <CardDescription>
+            Configura los prefijos que se usarán al registrar nuevos animales
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="animalPrefix">Prefijo ID Animal</Label>
+              <Input
+                id="animalPrefix"
+                type="text"
+                value={prefixes.animalPrefix}
+                onChange={(e) => updatePrefix('animalPrefix', e.target.value)}
+                placeholder="e.g., AC988"
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                Prefijo usado para nuevos registros de animales
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="motherPrefix">Prefijo ID Madre</Label>
+              <Input
+                id="motherPrefix"
+                type="text"
+                value={prefixes.motherPrefix}
+                onChange={(e) => updatePrefix('motherPrefix', e.target.value)}
+                placeholder="e.g., AC988"
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                Prefijo usado para el campo Madre ID
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="fatherPrefix">Prefijo ID Padre</Label>
+              <Input
+                id="fatherPrefix"
+                type="text"
+                value={prefixes.fatherPrefix}
+                onChange={(e) => updatePrefix('fatherPrefix', e.target.value)}
+                placeholder="e.g., REPASO"
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                Prefijo usado para el campo Padre ID (opcional)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-center sm:justify-end">
+            <Button onClick={handleSave} disabled={isLoading} className="gap-2 w-full sm:w-auto">
+              {isLoading ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {isLoading ? 'Guardando...' : 'Guardar Prefijos'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Data Management */}
       <Card>
         <CardHeader>
@@ -251,7 +335,7 @@ export function SettingsPage() {
             
             <div className="space-y-2">
               <Label>Registros Totales</Label>
-              <p className="text-sm text-muted-foreground">156 animales</p>
+              <p className="text-sm text-muted-foreground">{animals.length} animales</p>
             </div>
           </div>
         </CardContent>

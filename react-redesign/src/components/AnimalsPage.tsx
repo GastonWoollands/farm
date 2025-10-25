@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { formatDate, getGenderName } from '@/lib/utils'
 import { apiService, Animal, RegisterBody } from '@/services/api'
+import { usePrefixes } from '@/contexts/PrefixesContext'
 
 interface AnimalsPageProps {
   animals: Animal[]
@@ -32,6 +33,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isRegistering, setIsRegistering] = useState(false)
+  const { prefixes } = usePrefixes()
   const [isRecordsExpanded, setIsRecordsExpanded] = useState(false)
   const [formData, setFormData] = useState({
     animalNumber: '',
@@ -284,7 +286,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         name="animalNumber"
                         value={formData.animalNumber}
                         onChange={handleInputChange}
-                        placeholder="e.g., A001-24"
+                        placeholder={`e.g., ${prefixes.animalPrefix}001-24`}
                         required
                       />
                     </div>
@@ -305,7 +307,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         name="motherId"
                         value={formData.motherId}
                         onChange={handleInputChange}
-                        placeholder="e.g., M001"
+                        placeholder={`e.g., ${prefixes.motherPrefix}001`}
                       />
                     </div>
                     <div className="space-y-2">
@@ -325,7 +327,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         name="fatherId"
                         value={formData.fatherId}
                         onChange={handleInputChange}
-                        placeholder="e.g., F001"
+                        placeholder={`e.g., ${prefixes.fatherPrefix}`}
                       />
                     </div>
                     <div className="space-y-2">

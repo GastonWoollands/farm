@@ -22,6 +22,7 @@ import { AnimalsPage } from './components/AnimalsPage'
 import { SearchPage } from './components/SearchPage'
 import { SettingsPage } from './components/SettingsPage'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
+import { PrefixesProvider } from './contexts/PrefixesContext'
 import { authService, AuthUser } from './services/auth'
 import { apiService, Animal, RegistrationStats } from './services/api'
 
@@ -406,7 +407,7 @@ function AppContent() {
           </TabsContent>
 
           <TabsContent value="settings" className="mt-0">
-            <SettingsPage />
+            <SettingsPage animals={appState.animals} stats={appState.stats || { totalAnimals: 0, aliveAnimals: 0, deadAnimals: 0, maleAnimals: 0, femaleAnimals: 0, avgWeight: 0, minWeight: 0, maxWeight: 0 }} />
           </TabsContent>
         </Tabs>
       </main>
@@ -426,7 +427,9 @@ function AppContent() {
 function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <PrefixesProvider>
+        <AppContent />
+      </PrefixesProvider>
     </ThemeProvider>
   )
 }
