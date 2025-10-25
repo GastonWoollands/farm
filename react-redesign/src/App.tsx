@@ -47,6 +47,7 @@ function AppContent() {
 
   const [activeTab, setActiveTab] = useState('metrics')
   const [isLoading, setIsLoading] = useState(true)
+  const [backendError] = useState<string | null>(null)
   const { theme, toggleTheme } = useTheme()
 
   // Real authentication and data loading
@@ -64,23 +65,72 @@ function AppContent() {
               const context = await apiService.getUserContext()
               console.log('User context loaded:', context)
               
-              console.log('Loading animals data...')
-              const animalsData = await apiService.getRegistrations(100)
-              console.log('Animals data loaded:', animalsData)
-              
-              console.log('Loading stats data...')
-              const statsData = await apiService.getStats()
-              console.log('Stats data loaded:', statsData)
-              
               setAppState(prev => ({
                 ...prev,
-                currentCompany: context.company?.name || 'Personal Data',
-                animals: animalsData.registrations || [],
-                stats: statsData,
-                pendingCount: statsData.pending || 0
+                currentCompany: context.company?.name || 'Personal Data'
               }))
+              
+              // Load local records (unsynced first, then last 10 synced)
+              try {
+                console.log('Loading local records...')
+                const localRecords = await apiService.getDisplayRecords(5)
+                console.log('Local records loaded:', localRecords)
+                
+                setAppState(prev => ({
+                  ...prev,
+                  animals: localRecords
+                }))
+              } catch (localError) {
+                console.warn('Could not load local records:', localError)
+                setAppState(prev => ({
+                  ...prev,
+                  animals: []
+                }))
+              }
+              
+              // Get pending count and load stats
+              try {
+                console.log('Getting pending count...')
+                const pendingCount = await apiService.getPendingCount()
+                console.log('Pending count:', pendingCount)
+                
+                const statsData = await apiService.getStats()
+                console.log('Stats data loaded:', statsData)
+                
+                setAppState(prev => ({
+                  ...prev,
+                  stats: statsData,
+                  pendingCount
+                }))
+              } catch (statsError) {
+                console.warn('Could not load stats data:', statsError)
+                setAppState(prev => ({
+                  ...prev,
+                  stats: null,
+                  pendingCount: 0
+                }))
+              }
+
+              // Trigger sync in background
+              try {
+                console.log('Starting background sync...')
+                const syncResult = await apiService.syncLocalRecords()
+                console.log('Sync completed:', syncResult)
+                
+                // Reload data after sync
+                const updatedRecords = await apiService.getDisplayRecords(10)
+                const updatedPendingCount = await apiService.getPendingCount()
+                
+                setAppState(prev => ({
+                  ...prev,
+                  animals: updatedRecords,
+                  pendingCount: updatedPendingCount
+                }))
+              } catch (syncError) {
+                console.warn('Sync failed:', syncError)
+              }
             } catch (error) {
-              console.error('Error loading data:', error)
+              console.error('Error loading user context:', error)
               console.error('Error details:', {
                 message: error instanceof Error ? error.message : 'Unknown error',
                 stack: error instanceof Error ? error.stack : undefined
@@ -260,6 +310,23 @@ function AppContent() {
 
       {/* Main content */}
       <main className="container mx-auto px-4 py-8">
+        {backendError && (
+          <div className="mb-6 p-4 bg-yellow-100 border border-yellow-400 rounded-lg">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-yellow-700">
+                  <strong>Backend Issue:</strong> {backendError}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Navigation - Clean tab design */}
           <TabsList className="grid w-full grid-cols-4 mb-8">
@@ -284,12 +351,14 @@ function AppContent() {
           {/* Page content */}
           <TabsContent value="metrics" className="mt-0">
             <MetricsPage animals={appState.animals} stats={appState.stats || { 
-              total: 0, 
-              synced: 0, 
-              pending: 0, 
-              by_gender: {}, 
-              by_status: {}, 
-              by_color: {} 
+              totalAnimals: 0, 
+              aliveAnimals: 0, 
+              deadAnimals: 0, 
+              maleAnimals: 0, 
+              femaleAnimals: 0, 
+              avgWeight: 0, 
+              minWeight: 0, 
+              maxWeight: 0 
             }} />
           </TabsContent>
 
@@ -303,7 +372,7 @@ function AppContent() {
                   setAppState(prev => ({ 
                     ...prev, 
                     stats, 
-                    pendingCount: stats.pending || 0 
+                    pendingCount: 0 // Not available in new stats structure 
                   }))
                 } catch (error) {
                   console.error('Error refreshing stats:', error)

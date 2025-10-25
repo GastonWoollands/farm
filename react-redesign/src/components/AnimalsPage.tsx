@@ -86,11 +86,34 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         inseminationRoundId: '2024' // Default value
       }
 
-      await apiService.registerAnimal(registerData)
+      // Add to local storage (replicates original frontend behavior)
+      const animalData: Omit<Animal, 'id'> = {
+        animal_number: registerData.animalNumber,
+        born_date: registerData.bornDate,
+        mother_id: registerData.motherId,
+        father_id: registerData.fatherId,
+        weight: registerData.weight,
+        gender: registerData.gender,
+        animal_type: registerData.animalType,
+        status: registerData.status,
+        color: registerData.color,
+        notes: registerData.notes,
+        notes_mother: registerData.notesMother,
+        created_at: new Date().toISOString(),
+        insemination_round_id: registerData.inseminationRoundId,
+        insemination_identifier: registerData.inseminationIdentifier,
+        scrotal_circumference: registerData.scrotalCircumference,
+        rp_animal: registerData.rpAnimal,
+        rp_mother: registerData.rpMother,
+        mother_weight: registerData.motherWeight
+      }
+      await apiService.addLocalRecord(animalData)
       
-      // Refresh data
-      const updatedAnimals = await apiService.getRegistrations(100)
-      onAnimalsChange(updatedAnimals.registrations)
+      // Refresh local data
+      const updatedAnimals = await apiService.getDisplayRecords(10)
+      onAnimalsChange(updatedAnimals)
+      
+      // Update stats
       onStatsChange()
       
       // Reset form
@@ -127,11 +150,16 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
     setError(null)
 
     try {
-      await apiService.deleteAnimal(animal.animal_number, animal.created_at)
+      // Delete from local storage
+      if (animal.id) {
+        await apiService.deleteLocalRecord(animal.id)
+      }
       
-      // Refresh data
-      const updatedAnimals = await apiService.getRegistrations(100)
-      onAnimalsChange(updatedAnimals.registrations)
+      // Refresh local data
+      const updatedAnimals = await apiService.getDisplayRecords(10)
+      onAnimalsChange(updatedAnimals)
+      
+      // Update stats
       onStatsChange()
     } catch (err: any) {
       setError(err.message || 'Error al eliminar el animal')
@@ -142,8 +170,44 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
 
   const handleExport = async () => {
     try {
-      const blob = await apiService.exportData('csv')
-      const url = window.URL.createObjectURL(blob as Blob)
+      // Export local records as CSV
+      const localRecords = await apiService.getDisplayRecords(1000) // Get more records for export
+      
+      // Convert to CSV format
+      const csvHeaders = [
+        'Animal Number', 'Born Date', 'Mother ID', 'Father ID', 'Weight', 
+        'Gender', 'Status', 'Color', 'Notes', 'Notes Mother', 'Created At',
+        'Insemination Round ID', 'Insemination Identifier', 'Scrotal Circumference',
+        'RP Animal', 'RP Mother', 'Mother Weight', 'Synced'
+      ]
+      
+      const csvRows = localRecords.map(record => [
+        record.animal_number || '',
+        record.born_date || '',
+        record.mother_id || '',
+        record.father_id || '',
+        record.weight || '',
+        record.gender || '',
+        record.status || '',
+        record.color || '',
+        record.notes || '',
+        record.notes_mother || '',
+        record.created_at || '',
+        record.insemination_round_id || '',
+        record.insemination_identifier || '',
+        record.scrotal_circumference || '',
+        record.rp_animal || '',
+        record.rp_mother || '',
+        record.mother_weight || '',
+        record.synced ? 'Yes' : 'No'
+      ])
+      
+      const csvContent = [csvHeaders, ...csvRows]
+        .map(row => row.map(field => `"${field}"`).join(','))
+        .join('\n')
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `animales_${new Date().toISOString().split('T')[0]}.csv`
@@ -430,8 +494,8 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                     No hay registros de animales
                   </p>
                 ) : (
-                  animals.map(animal => (
-                    <div key={animal.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-muted/30 rounded-lg space-y-3 sm:space-y-0">
+                  animals.map((animal, index) => (
+                    <div key={animal.id || index} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-muted/30 rounded-lg space-y-3 sm:space-y-0">
                       <div className="flex-1">
                         <div className="flex flex-wrap items-center gap-2 mb-2">
                           <span className="font-medium">{animal.animal_number}</span>

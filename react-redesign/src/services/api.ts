@@ -1,24 +1,27 @@
 import { API_BASE_URL, API_ENDPOINTS } from '@/config/api'
+import { localStorageService, LocalRecord } from './localStorage'
 
 // Types
 export interface Animal {
-  id: number
+  id?: number  // Optional since export-multi-tenant doesn't return id
   animal_number: string
-  rp_animal?: string
-  mother_id?: string
-  rp_mother?: string
-  father_id?: string
   born_date?: string
+  mother_id?: string
+  father_id?: string
   weight?: number
-  mother_weight?: number
   gender?: string
-  status: string
+  animal_type?: number
+  status?: string
   color?: string
   notes?: string
   notes_mother?: string
-  scrotal_circumference?: number
+  created_at?: string
   insemination_round_id?: string
-  created_at: string
+  insemination_identifier?: string
+  scrotal_circumference?: number
+  rp_animal?: string
+  rp_mother?: string
+  mother_weight?: number
   synced?: boolean
 }
 
@@ -32,12 +35,14 @@ export interface RegisterBody {
   weight?: number
   motherWeight?: number
   gender?: string
+  animalType?: number
   status: string
   color?: string
   notes?: string
   notesMother?: string
   scrotalCircumference?: number
   inseminationRoundId?: string
+  inseminationIdentifier?: string
 }
 
 export interface UpdateBody {
@@ -60,12 +65,14 @@ export interface UpdateBody {
 }
 
 export interface RegistrationStats {
-  total: number
-  synced: number
-  pending: number
-  by_gender: Record<string, number>
-  by_status: Record<string, number>
-  by_color: Record<string, number>
+  totalAnimals: number
+  aliveAnimals: number
+  deadAnimals: number
+  maleAnimals: number
+  femaleAnimals: number
+  avgWeight: number
+  minWeight: number
+  maxWeight: number
 }
 
 export interface User {
@@ -149,9 +156,12 @@ class ApiService {
     })
   }
 
-  // Registrations
+  // Registrations - using export-multi-tenant endpoint
   async getRegistrations(limit: number = 100): Promise<{ registrations: Animal[], count: number }> {
-    return this.request<{ registrations: Animal[], count: number }>(`${API_ENDPOINTS.REGISTRATIONS}?limit=${limit}`)
+    const data = await this.request<Animal[]>(`${API_ENDPOINTS.REGISTRATIONS}?format=json`)
+    // Limit the results to the requested limit
+    const limitedData = data.slice(0, limit)
+    return { registrations: limitedData, count: limitedData.length }
   }
 
   async registerAnimal(animal: RegisterBody): Promise<{ ok: boolean, id: number }> {
@@ -176,11 +186,36 @@ class ApiService {
   }
 
   async getStats(): Promise<RegistrationStats> {
-    return this.request<RegistrationStats>(`${API_ENDPOINTS.REGISTRATIONS}/stats`)
+    // Get all data from export-multi-tenant and calculate stats
+    const data = await this.request<Animal[]>(`${API_ENDPOINTS.STATS}?format=json`)
+    
+    // Calculate stats from the data
+    const totalAnimals = data.length
+    const aliveAnimals = data.filter(animal => animal.status === 'ALIVE').length
+    const deadAnimals = data.filter(animal => animal.status === 'DEAD').length
+    const maleAnimals = data.filter(animal => animal.gender === 'MALE').length
+    const femaleAnimals = data.filter(animal => animal.gender === 'FEMALE').length
+    
+    // Calculate weight statistics
+    const weights = data.filter(animal => animal.weight && animal.weight > 0).map(animal => animal.weight!)
+    const avgWeight = weights.length > 0 ? weights.reduce((sum, weight) => sum + weight, 0) / weights.length : 0
+    const minWeight = weights.length > 0 ? Math.min(...weights) : 0
+    const maxWeight = weights.length > 0 ? Math.max(...weights) : 0
+    
+    return {
+      totalAnimals,
+      aliveAnimals,
+      deadAnimals,
+      maleAnimals,
+      femaleAnimals,
+      avgWeight: Math.round(avgWeight * 100) / 100,
+      minWeight,
+      maxWeight
+    }
   }
 
   async exportData(format: 'json' | 'csv' = 'json'): Promise<Blob | { count: number, items: Animal[] }> {
-    const response = await fetch(`${this.baseURL}${API_ENDPOINTS.REGISTRATIONS}/export-multi-tenant?format=${format}`, {
+    const response = await fetch(`${this.baseURL}${API_ENDPOINTS.EXPORT}?format=${format}`, {
       headers: this.authToken ? { 'Authorization': `Bearer ${this.authToken}` } : {}
     })
 
@@ -198,6 +233,144 @@ class ApiService {
   // User Context
   async getUserContext(): Promise<{ user: User, company: Company | null }> {
     return this.request<{ user: User, company: Company | null }>(`${API_ENDPOINTS.USER_CONTEXT}/context`)
+  }
+
+  // Sync functionality - replicates original frontend behavior
+  async syncLocalRecords(): Promise<{ synced: number, imported: number }> {
+    if (!this.authToken) {
+      throw new Error('No authentication token available')
+    }
+
+    const unsyncedRecords = await localStorageService.getRecords({ unsyncedOnly: true })
+    console.log('Found unsynced records:', unsyncedRecords.length)
+
+    let syncedCount = 0
+
+    // Sync each unsynced record
+    for (const record of unsyncedRecords) {
+      try {
+        let response: Response
+
+        if (record.backendId) {
+          // This is an edited record - use PUT
+          console.log('Using PUT for edited record:', record.backendId)
+          response = await fetch(`${this.baseURL}/register/${record.backendId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.authToken}`
+            },
+            body: JSON.stringify({
+              animalNumber: record.animal_number,
+              motherId: record.mother_id ?? null,
+              fatherId: record.father_id ?? null,
+              bornDate: record.born_date ?? null,
+              weight: record.weight ?? null,
+              gender: record.gender ?? null,
+              animalType: record.animal_type ?? null,
+              scrotalCircumference: record.scrotal_circumference ?? null,
+              inseminationRoundId: record.insemination_round_id ?? null,
+              status: record.status ?? null,
+              color: record.color ?? null,
+              notes: record.notes ?? null,
+              notesMother: record.notes_mother ?? null,
+              rpAnimal: record.rp_animal ?? null,
+              rpMother: record.rp_mother ?? null,
+              motherWeight: record.mother_weight ?? null
+            })
+          })
+        } else {
+          // This is a new record - use POST
+          console.log('Using POST for new record')
+          response = await fetch(`${this.baseURL}${API_ENDPOINTS.REGISTER}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.authToken}`
+            },
+            body: JSON.stringify({
+              animalNumber: record.animal_number,
+              createdAt: record.created_at,
+              motherId: record.mother_id ?? null,
+              fatherId: record.father_id ?? null,
+              bornDate: record.born_date ?? null,
+              weight: record.weight ?? null,
+              gender: record.gender ?? null,
+              animalType: record.animal_type ?? null,
+              scrotalCircumference: record.scrotal_circumference ?? null,
+              inseminationRoundId: record.insemination_round_id ?? null,
+              status: record.status ?? null,
+              color: record.color ?? null,
+              notes: record.notes ?? null,
+              notesMother: record.notes_mother ?? null,
+              rpAnimal: record.rp_animal ?? null,
+              rpMother: record.rp_mother ?? null,
+              motherWeight: record.mother_weight ?? null
+            })
+          })
+        }
+
+        if (response.ok) {
+          if (record.backendId) {
+            // For updates, just mark as synced
+            await localStorageService.markAsSynced(record.id)
+          } else {
+            // For new records, get the backend ID from the response
+            const responseData = await response.json()
+            const backendId = responseData?.id
+            if (backendId) {
+              await localStorageService.markAsSynced(record.id, backendId)
+            } else {
+              await localStorageService.markAsSynced(record.id)
+            }
+          }
+          syncedCount++
+        } else {
+          console.warn('Sync failed for record', record.id, response.status, response.statusText)
+        }
+      } catch (error) {
+        console.warn('Network error during sync for record', record.id, error)
+      }
+    }
+
+    // After pushing, pull latest records from server
+    let importedCount = 0
+    try {
+      const response = await fetch(`${this.baseURL}${API_ENDPOINTS.EXPORT}?format=json`, {
+        headers: { 'Authorization': `Bearer ${this.authToken}` }
+      })
+
+      if (response.ok) {
+        const serverRecords = await response.json()
+        await localStorageService.importFromServer(serverRecords)
+        importedCount = serverRecords.length
+        console.log('Imported from server:', importedCount)
+      }
+    } catch (error) {
+      console.warn('Error importing from server:', error)
+    }
+
+    return { synced: syncedCount, imported: importedCount }
+  }
+
+  // Get pending count from local storage
+  async getPendingCount(): Promise<number> {
+    return await localStorageService.getPendingCount()
+  }
+
+  // Get display records (unsynced first, then last 10 synced)
+  async getDisplayRecords(limit: number = 10): Promise<LocalRecord[]> {
+    return await localStorageService.getDisplayRecords(limit)
+  }
+
+  // Add local record (replicates original frontend behavior)
+  async addLocalRecord(record: Omit<Animal, 'id'>): Promise<LocalRecord> {
+    return await localStorageService.addRecord(record)
+  }
+
+  // Delete local record
+  async deleteLocalRecord(id: number): Promise<void> {
+    return await localStorageService.deleteRecord(id)
   }
 }
 

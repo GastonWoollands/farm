@@ -11,12 +11,12 @@ export const FIREBASE_CONFIG = {
   appId: "1:81361761765:web:2a786a669687c29b3867cc"
 }
 
-// API Endpoints
+// API Endpoints - using same endpoints as working old version
 export const API_ENDPOINTS = {
-  REGISTRATIONS: '/registrations/',
-  REGISTER: '/registrations/register',
-  EXPORT: '/registrations/export-multi-tenant',
-  STATS: '/registrations/stats',
+  REGISTRATIONS: '/export-multi-tenant',  // Use export-multi-tenant for data loading
+  REGISTER: '/register',                  // Use legacy register endpoint
+  EXPORT: '/export-multi-tenant',         // Use export-multi-tenant for export
+  STATS: '/export-multi-tenant',          // Use export-multi-tenant for stats (will calculate from data)
   USERS: '/users',
   COMPANIES: '/companies',
   USER_CONTEXT: '/user-context'

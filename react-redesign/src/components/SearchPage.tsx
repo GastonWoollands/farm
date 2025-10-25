@@ -140,14 +140,11 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
       setIsLoading(true)
       setError(null)
       
-      // Call API to delete animal
-      const animalToDelete = animals.find(a => a.id === id)
-      if (animalToDelete) {
-        await apiService.deleteAnimal(animalToDelete.animal_number, animalToDelete.created_at)
-      }
+      // Delete from local storage
+      await apiService.deleteLocalRecord(id)
       
       // Update parent component
-      onAnimalsChange(animals.filter(animal => animal.id !== id))
+      onAnimalsChange(animals.filter(animal => (animal.id || 0) !== id))
     } catch (err) {
       setError('Error al eliminar el animal')
       console.error('Delete error:', err)
@@ -433,8 +430,8 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredAnimals.map(animal => (
-                <Card key={animal.id} className="hover:shadow-md transition-shadow">
+              {filteredAnimals.map((animal, index) => (
+                <Card key={animal.id || index} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div>
@@ -501,7 +498,7 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
 
                       <div className="flex items-center gap-2">
                         <span className="text-muted-foreground">Estado:</span>
-                        <span>{getStatusName(animal.status)}</span>
+                        <span>{getStatusName(animal.status || '')}</span>
                       </div>
 
                       {animal.color && (
@@ -542,7 +539,7 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                       <Button 
                         size="sm" 
                         variant="ghost" 
-                        onClick={() => handleDelete(animal.id)}
+                        onClick={() => handleDelete(animal.id || 0)}
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
