@@ -17,73 +17,14 @@ import {
   Calendar
 } from 'lucide-react'
 import { formatDate, getGenderName, getStatusName } from '@/lib/utils'
+import { Animal, apiService } from '@/services/api'
 
-// Mock data - same as AnimalsPage
-const mockAnimals = [
-  {
-    id: 1,
-    animalNumber: 'A001-24',
-    rpAnimal: 'RP-12345',
-    motherId: 'M001',
-    rpMother: 'RP-67890',
-    fatherId: 'F001',
-    bornDate: '2024-01-15',
-    weight: 285.5,
-    motherWeight: 450.0,
-    gender: 'FEMALE',
-    status: 'ALIVE',
-    color: 'COLORADO',
-    notes: 'Primera cría',
-    notesMother: 'Madre joven',
-    scrotalCircumference: null,
-    inseminationRoundId: '2024',
-    createdAt: '2024-01-15T10:30:00Z',
-    synced: true
-  },
-  {
-    id: 2,
-    animalNumber: 'A002-24',
-    rpAnimal: 'RP-12346',
-    motherId: 'M002',
-    rpMother: 'RP-67891',
-    fatherId: 'F002',
-    bornDate: '2024-01-20',
-    weight: 320.0,
-    motherWeight: 480.0,
-    gender: 'MALE',
-    status: 'ALIVE',
-    color: 'NEGRO',
-    notes: 'Excelente peso',
-    notesMother: 'Madre experimentada',
-    scrotalCircumference: 35.5,
-    inseminationRoundId: '2024',
-    createdAt: '2024-01-20T14:15:00Z',
-    synced: false
-  },
-  {
-    id: 3,
-    animalNumber: 'A003-24',
-    rpAnimal: 'RP-12347',
-    motherId: 'M003',
-    rpMother: 'RP-67892',
-    fatherId: 'F001',
-    bornDate: '2024-02-01',
-    weight: 275.0,
-    motherWeight: 420.0,
-    gender: 'FEMALE',
-    status: 'ALIVE',
-    color: 'COLORADO',
-    notes: 'Segunda cría',
-    notesMother: 'Madre joven',
-    scrotalCircumference: null,
-    inseminationRoundId: '2024',
-    createdAt: '2024-02-01T09:45:00Z',
-    synced: true
-  }
-]
+interface SearchPageProps {
+  animals: Animal[]
+  onAnimalsChange: (animals: Animal[]) => void
+}
 
-export function SearchPage() {
-  const [animals, setAnimals] = useState(mockAnimals)
+export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filters, setFilters] = useState({
     gender: '',
@@ -91,7 +32,7 @@ export function SearchPage() {
     color: '',
     inseminationRound: ''
   })
-  const [sortBy, setSortBy] = useState('createdAt')
+  const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -99,16 +40,16 @@ export function SearchPage() {
   // Filter and search animals
   const filteredAnimals = animals.filter(animal => {
     const matchesSearch = 
-      animal.animalNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      animal.rpAnimal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      animal.motherId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      animal.rpMother?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      animal.fatherId?.toLowerCase().includes(searchTerm.toLowerCase())
+      animal.animal_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      animal.rp_animal?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      animal.mother_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      animal.rp_mother?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      animal.father_id?.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesGender = !filters.gender || animal.gender === filters.gender
     const matchesStatus = !filters.status || animal.status === filters.status
     const matchesColor = !filters.color || animal.color === filters.color
-    const matchesRound = !filters.inseminationRound || animal.inseminationRoundId === filters.inseminationRound
+    const matchesRound = !filters.inseminationRound || animal.insemination_round_id === filters.inseminationRound
 
     return matchesSearch && matchesGender && matchesStatus && matchesColor && matchesRound
   }).sort((a, b) => {
@@ -119,7 +60,7 @@ export function SearchPage() {
     if (aValue == null) aValue = 0
     if (bValue == null) bValue = 0
 
-    if (sortBy === 'createdAt' || sortBy === 'bornDate') {
+    if (sortBy === 'created_at' || sortBy === 'born_date') {
       aValue = new Date(aValue as string).getTime()
       bValue = new Date(bValue as string).getTime()
     }
@@ -153,10 +94,14 @@ export function SearchPage() {
       setIsLoading(true)
       setError(null)
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // Call API to delete animal
+      const animalToDelete = animals.find(a => a.id === id)
+      if (animalToDelete) {
+        await apiService.deleteAnimal(animalToDelete.animal_number, animalToDelete.created_at)
+      }
       
-      setAnimals(prev => prev.filter(animal => animal.id !== id))
+      // Update parent component
+      onAnimalsChange(animals.filter(animal => animal.id !== id))
     } catch (err) {
       setError('Error al eliminar el animal')
       console.error('Delete error:', err)
@@ -286,9 +231,9 @@ export function SearchPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="createdAt">Fecha de registro</SelectItem>
-                    <SelectItem value="bornDate">Fecha de nacimiento</SelectItem>
-                    <SelectItem value="animalNumber">ID del animal</SelectItem>
+                    <SelectItem value="created_at">Fecha de registro</SelectItem>
+                    <SelectItem value="born_date">Fecha de nacimiento</SelectItem>
+                    <SelectItem value="animal_number">ID del animal</SelectItem>
                     <SelectItem value="weight">Peso</SelectItem>
                   </SelectContent>
                 </Select>
@@ -344,10 +289,10 @@ export function SearchPage() {
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h3 className="font-semibold text-lg">{animal.animalNumber}</h3>
-                        {animal.rpAnimal && (
+                        <h3 className="font-semibold text-lg">{animal.animal_number}</h3>
+                        {animal.rp_animal && (
                           <Badge variant="outline" className="mt-1">
-                            {animal.rpAnimal}
+                            {animal.rp_animal}
                           </Badge>
                         )}
                       </div>
@@ -362,22 +307,22 @@ export function SearchPage() {
                     </div>
 
                     <div className="space-y-2 text-sm">
-                      {animal.motherId && (
+                      {animal.mother_id && (
                         <div className="flex items-center gap-2">
                           <Users className="h-4 w-4 text-muted-foreground" />
-                          <span>Madre: {animal.motherId}</span>
-                          {animal.rpMother && (
+                          <span>Madre: {animal.mother_id}</span>
+                          {animal.rp_mother && (
                             <Badge variant="outline" className="text-xs">
-                              {animal.rpMother}
+                              {animal.rp_mother}
                             </Badge>
                           )}
                         </div>
                       )}
                       
-                      {animal.fatherId && (
+                      {animal.father_id && (
                         <div className="flex items-center gap-2">
                           <Users className="h-4 w-4 text-muted-foreground" />
-                          <span>Padre: {animal.fatherId}</span>
+                          <span>Padre: {animal.father_id}</span>
                         </div>
                       )}
 
@@ -385,24 +330,24 @@ export function SearchPage() {
                         <div className="flex items-center gap-2">
                           <Weight className="h-4 w-4 text-muted-foreground" />
                           <span>{animal.weight} kg</span>
-                          {animal.motherWeight && (
+                          {animal.mother_weight && (
                             <span className="text-muted-foreground">
-                              (Madre: {animal.motherWeight} kg)
+                              (Madre: {animal.mother_weight} kg)
                             </span>
                           )}
                         </div>
                       )}
 
-                      {animal.bornDate && (
+                      {animal.born_date && (
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <span>Nacimiento: {formatDate(animal.bornDate)}</span>
+                          <span>Nacimiento: {formatDate(animal.born_date)}</span>
                         </div>
                       )}
 
                       <div className="flex items-center gap-2">
                         <span className="text-muted-foreground">Sexo:</span>
-                        <span>{getGenderName(animal.gender)}</span>
+                        <span>{getGenderName(animal.gender || '')}</span>
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -417,10 +362,10 @@ export function SearchPage() {
                         </div>
                       )}
 
-                      {animal.scrotalCircumference && (
+                      {animal.scrotal_circumference && (
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">CE:</span>
-                          <span>{animal.scrotalCircumference} cm</span>
+                          <span>{animal.scrotal_circumference} cm</span>
                         </div>
                       )}
 
@@ -432,10 +377,10 @@ export function SearchPage() {
                         </div>
                       )}
 
-                      {animal.notesMother && (
+                      {animal.notes_mother && (
                         <div>
                           <p className="text-xs text-muted-foreground">
-                            <strong>Notas Madre:</strong> {animal.notesMother}
+                            <strong>Notas Madre:</strong> {animal.notes_mother}
                           </p>
                         </div>
                       )}

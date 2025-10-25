@@ -4,123 +4,147 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 // Icons removed - not currently used in this component
 import { formatWeight, formatPercentage } from '@/lib/utils'
+import { Animal, RegistrationStats } from '@/services/api'
 
-// Mock data - replace with actual API calls
-const mockMetrics = {
-  overview: {
-    total: 156,
-    synced: 142,
-    pending: 14,
-    syncRate: 91,
-    cows: 156
-  },
-  inseminationRounds: {
-    '2024': {
-      roundId: '2024',
-      count: 45,
-      gender: [
-        { gender: 'FEMALE', count: 23 },
-        { gender: 'MALE', count: 22 }
-      ],
-      status: [
-        { status: 'ALIVE', count: 42 },
-        { status: 'DEAD', count: 3 }
-      ],
+interface MetricsPageProps {
+  animals: Animal[]
+  stats: RegistrationStats
+}
+
+// Calculate metrics from real data
+const calculateMetrics = (animals: Animal[], stats: RegistrationStats) => {
+  // Group animals by insemination round
+  const animalsByRound = animals.reduce((acc, animal) => {
+    const roundId = animal.insemination_round_id || 'Sin Ronda'
+    if (!acc[roundId]) {
+      acc[roundId] = []
+    }
+    acc[roundId].push(animal)
+    return acc
+  }, {} as Record<string, Animal[]>)
+
+  // Calculate metrics for each round
+  const inseminationRounds: Record<string, any> = {}
+  
+  Object.entries(animalsByRound).forEach(([roundId, roundAnimals]) => {
+    const weights = roundAnimals.filter(a => a.weight).map(a => a.weight!)
+    const weightsSorted = [...weights].sort((a, b) => a - b)
+    
+    // Gender distribution
+    const genderCount = roundAnimals.reduce((acc, animal) => {
+      const gender = animal.gender || 'UNKNOWN'
+      acc[gender] = (acc[gender] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+
+    // Status distribution
+    const statusCount = roundAnimals.reduce((acc, animal) => {
+      const status = animal.status || 'UNKNOWN'
+      acc[status] = (acc[status] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+
+    // Mother analysis
+    const mothers = roundAnimals.filter(a => a.mother_id).map(a => a.mother_id!)
+    const motherCount = new Set(mothers).size
+    const motherOffspring = mothers.reduce((acc, motherId) => {
+      acc[motherId] = (acc[motherId] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+
+    const topMothers = Object.entries(motherOffspring)
+      .map(([motherId, count]) => ({ motherId, offspring: count }))
+      .sort((a, b) => b.offspring - a.offspring)
+      .slice(0, 5)
+
+    // Gain calculation (mother weight vs newborn weight)
+    const gainData = roundAnimals.filter(a => a.weight && a.mother_weight).map(animal => ({
+      motherId: animal.mother_id || '',
+      gain: (animal.weight! / animal.mother_weight!) * 100
+    }))
+
+    const gains = gainData.map(d => d.gain)
+    const gainsSorted = [...gains].sort((a, b) => a - b)
+
+    inseminationRounds[roundId] = {
+      roundId,
+      count: roundAnimals.length,
+      gender: Object.entries(genderCount).map(([gender, count]) => ({ gender, count })),
+      status: Object.entries(statusCount).map(([status, count]) => ({ status, count })),
       weight: {
-        count: 40,
-        average: 285.5,
-        min: 180,
-        max: 420,
-        median: 275
+        count: weights.length,
+        average: weights.length > 0 ? weights.reduce((a, b) => a + b, 0) / weights.length : 0,
+        min: weights.length > 0 ? Math.min(...weights) : 0,
+        max: weights.length > 0 ? Math.max(...weights) : 0,
+        median: weightsSorted.length > 0 ? 
+          weightsSorted.length % 2 === 0 ? 
+            (weightsSorted[weightsSorted.length / 2 - 1] + weightsSorted[weightsSorted.length / 2]) / 2 :
+            weightsSorted[Math.floor(weightsSorted.length / 2)] : 0
       },
       mothers: {
-        totalMothers: 18,
-        totalOffspring: 45,
-        averageOffspring: 2.5,
-        topMothers: [
-          { motherId: 'M001', offspring: 4 },
-          { motherId: 'M002', offspring: 3 }
-        ],
-        mothersWithMultipleOffspring: 12
+        totalMothers: motherCount,
+        totalOffspring: mothers.length,
+        averageOffspring: motherCount > 0 ? mothers.length / motherCount : 0,
+        topMothers,
+        mothersWithMultipleOffspring: Object.values(motherOffspring).filter(count => count > 1).length
       },
       gain: {
-        totalRecords: 35,
-        averageGain: 65.2,
-        minGain: 45.1,
-        maxGain: 89.3,
-        medianGain: 64.8,
-        byInseminationRound: [
-          { roundId: '2024', averageGain: 65.2, count: 35 }
-        ],
-        topPerformers: [
-          { motherId: 'M001', averageGain: 78.5, count: 4 },
-          { motherId: 'M002', averageGain: 75.2, count: 3 }
-        ],
-        bottomPerformers: [
-          { motherId: 'M015', averageGain: 52.1, count: 2 },
-          { motherId: 'M018', averageGain: 48.9, count: 1 }
-        ]
-      }
-    },
-    '2023': {
-      roundId: '2023',
-      count: 38,
-      gender: [
-        { gender: 'FEMALE', count: 20 },
-        { gender: 'MALE', count: 18 }
-      ],
-      status: [
-        { status: 'ALIVE', count: 35 },
-        { status: 'DEAD', count: 3 }
-      ],
-      weight: {
-        count: 35,
-        average: 272.3,
-        min: 165,
-        max: 395,
-        median: 268
-      },
-      mothers: {
-        totalMothers: 15,
-        totalOffspring: 38,
-        averageOffspring: 2.5,
-        topMothers: [
-          { motherId: 'M003', offspring: 3 },
-          { motherId: 'M004', offspring: 3 }
-        ],
-        mothersWithMultipleOffspring: 10
-      },
-      gain: {
-        totalRecords: 30,
-        averageGain: 62.8,
-        minGain: 42.3,
-        maxGain: 85.1,
-        medianGain: 61.5,
-        byInseminationRound: [
-          { roundId: '2023', averageGain: 62.8, count: 30 }
-        ],
-        topPerformers: [
-          { motherId: 'M003', averageGain: 76.8, count: 3 },
-          { motherId: 'M004', averageGain: 74.2, count: 3 }
-        ],
-        bottomPerformers: [
-          { motherId: 'M012', averageGain: 50.2, count: 2 },
-          { motherId: 'M016', averageGain: 47.8, count: 1 }
-        ]
+        totalRecords: gainData.length,
+        averageGain: gains.length > 0 ? gains.reduce((a, b) => a + b, 0) / gains.length : 0,
+        minGain: gains.length > 0 ? Math.min(...gains) : 0,
+        maxGain: gains.length > 0 ? Math.max(...gains) : 0,
+        medianGain: gainsSorted.length > 0 ? 
+          gainsSorted.length % 2 === 0 ? 
+            (gainsSorted[gainsSorted.length / 2 - 1] + gainsSorted[gainsSorted.length / 2]) / 2 :
+            gainsSorted[Math.floor(gainsSorted.length / 2)] : 0,
+        byInseminationRound: [{ roundId, averageGain: gains.length > 0 ? gains.reduce((a, b) => a + b, 0) / gains.length : 0, count: gainData.length }],
+        topPerformers: gainData
+          .filter(d => d.motherId) // Only include records with motherId
+          .reduce((acc, d) => {
+            const existing = acc.find(m => m.motherId === d.motherId)
+            if (existing) {
+              existing.averageGain = (existing.averageGain * existing.count + d.gain) / (existing.count + 1)
+              existing.count++
+            } else {
+              acc.push({ motherId: d.motherId, averageGain: d.gain, count: 1 })
+            }
+            return acc
+          }, [] as Array<{ motherId: string, averageGain: number, count: number }>)
+          .sort((a, b) => b.averageGain - a.averageGain)
+          .slice(0, 5),
+        bottomPerformers: gainData
+          .filter(d => d.motherId) // Only include records with motherId
+          .reduce((acc, d) => {
+            const existing = acc.find(m => m.motherId === d.motherId)
+            if (existing) {
+              existing.averageGain = (existing.averageGain * existing.count + d.gain) / (existing.count + 1)
+              existing.count++
+            } else {
+              acc.push({ motherId: d.motherId, averageGain: d.gain, count: 1 })
+            }
+            return acc
+          }, [] as Array<{ motherId: string, averageGain: number, count: number }>)
+          .sort((a, b) => a.averageGain - b.averageGain)
+          .slice(0, 5)
       }
     }
-  },
-  objectives: {
-    targetRegistrations: 200,
-    targetWeight: 300,
-    targetBirths: 100,
-    targetMothers: 50
+  })
+
+  return {
+    overview: {
+      total: stats.total || animals.length,
+      synced: stats.synced || 0,
+      pending: stats.pending || 0,
+      syncRate: stats.total > 0 ? Math.round((stats.synced / stats.total) * 100) : 0,
+      cows: animals.length
+    },
+    inseminationRounds
   }
 }
 
-export function MetricsPage() {
+export function MetricsPage({ animals, stats }: MetricsPageProps) {
   const [selectedRound, setSelectedRound] = useState('2024')
-  const [metrics] = useState(mockMetrics)
+  const metrics = calculateMetrics(animals, stats)
 
   const currentRound = metrics.inseminationRounds[selectedRound as keyof typeof metrics.inseminationRounds]
 
@@ -221,7 +245,7 @@ export function MetricsPage() {
                     <div>
                       <h5 className="font-medium mb-2">Por Sexo</h5>
                       <div className="space-y-2">
-                        {currentRound.gender.map((item, index) => (
+                        {currentRound.gender.map((item: any, index: number) => (
                           <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded">
                             <span className="text-sm">
                               {item.gender === 'FEMALE' ? 'Hembras' : item.gender === 'MALE' ? 'Machos' : 'Desconocido'}
@@ -234,7 +258,7 @@ export function MetricsPage() {
                     <div>
                       <h5 className="font-medium mb-2">Por Estado</h5>
                       <div className="space-y-2">
-                        {currentRound.status.map((item, index) => (
+                        {currentRound.status.map((item: any, index: number) => (
                           <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded">
                             <span className="text-sm">
                               {item.status === 'ALIVE' ? 'Vivos' : item.status === 'DEAD' ? 'Muertos' : 'Desconocido'}
@@ -310,7 +334,7 @@ export function MetricsPage() {
                       <div>
                         <h5 className="font-semibold mb-3 text-green-700 dark:text-green-400">Mejores Madres</h5>
                         <div className="space-y-2">
-                          {currentRound.gain.topPerformers.slice(0, 3).map((mother, index) => (
+                          {currentRound.gain.topPerformers.slice(0, 3).map((mother: any, index: number) => (
                             <div key={index} className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/20 rounded border border-green-200 dark:border-green-800">
                               <div>
                                 <span className="font-medium">{mother.motherId}</span>
@@ -329,7 +353,7 @@ export function MetricsPage() {
                       <div>
                         <h5 className="font-semibold mb-3 text-red-700 dark:text-red-400">Menor Rendimiento</h5>
                         <div className="space-y-2">
-                          {currentRound.gain.bottomPerformers.slice(0, 3).map((mother, index) => (
+                          {currentRound.gain.bottomPerformers.slice(0, 3).map((mother: any, index: number) => (
                             <div key={index} className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950/20 rounded border border-red-200 dark:border-red-800">
                               <div>
                                 <span className="font-medium">{mother.motherId}</span>

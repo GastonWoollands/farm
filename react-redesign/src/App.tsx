@@ -273,7 +273,14 @@ function AppContent() {
 
           {/* Page content */}
           <TabsContent value="metrics" className="mt-0">
-            <MetricsPage />
+            <MetricsPage animals={appState.animals} stats={appState.stats || { 
+              total: 0, 
+              synced: 0, 
+              pending: 0, 
+              by_gender: {}, 
+              by_status: {}, 
+              by_color: {} 
+            }} />
           </TabsContent>
 
           <TabsContent value="animals" className="mt-0">
@@ -296,7 +303,7 @@ function AppContent() {
           </TabsContent>
 
           <TabsContent value="search" className="mt-0">
-            <SearchPage />
+            <SearchPage animals={appState.animals} onAnimalsChange={(animals) => setAppState(prev => ({ ...prev, animals }))} />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-0">
