@@ -163,21 +163,21 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
             <div className="text-center p-4 bg-muted/30 rounded-lg">
               <div className="text-3xl font-bold text-primary">{metrics.overview.total}</div>
               <div className="text-sm text-muted-foreground">Total Animales</div>
-              <div className="text-xs text-green-600 mt-1">
+              <div className="text-xs text-green-600 dark:text-green-400 mt-1">
                 {metrics.overview.synced} sincronizados
               </div>
             </div>
             <div className="text-center p-4 bg-muted/30 rounded-lg">
               <div className="text-3xl font-bold text-primary">{metrics.overview.syncRate}%</div>
               <div className="text-sm text-muted-foreground">Sincronización</div>
-              <div className="text-xs text-orange-600 mt-1">
+              <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
                 {metrics.overview.pending} pendientes
               </div>
             </div>
             <div className="text-center p-4 bg-muted/30 rounded-lg">
               <div className="text-3xl font-bold text-primary">{currentRound?.mothers.totalMothers || 0}</div>
               <div className="text-sm text-muted-foreground">Madres Activas</div>
-              <div className="text-xs text-blue-600 mt-1">
+              <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                 {currentRound?.mothers.totalOffspring || 0} crías
               </div>
             </div>
@@ -289,11 +289,11 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         <div className="text-xs text-muted-foreground">Mediana</div>
                       </div>
                       <div className="text-center p-3 bg-muted/30 rounded">
-                        <div className="text-lg font-semibold text-green-600">{formatWeight(currentRound.weight.min)}</div>
+                        <div className="text-lg font-semibold text-green-600 dark:text-green-400">{formatWeight(currentRound.weight.min)}</div>
                         <div className="text-xs text-muted-foreground">Mínimo</div>
                       </div>
                       <div className="text-center p-3 bg-muted/30 rounded">
-                        <div className="text-lg font-semibold text-red-600">{formatWeight(currentRound.weight.max)}</div>
+                        <div className="text-lg font-semibold text-red-600 dark:text-red-400">{formatWeight(currentRound.weight.max)}</div>
                         <div className="text-xs text-muted-foreground">Máximo</div>
                       </div>
                     </div>
@@ -350,7 +350,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                   {mother.count} cría{mother.count > 1 ? 's' : ''}
                                 </div>
                               </div>
-                              <Badge className="bg-green-600 text-white">
+                              <Badge className="bg-green-600 dark:bg-green-700 text-white">
                                 {formatPercentage(mother.averageGain)}
                               </Badge>
                             </div>
@@ -369,7 +369,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                   {mother.count} cría{mother.count > 1 ? 's' : ''}
                                 </div>
                               </div>
-                              <Badge className="bg-red-600 text-white">
+                              <Badge className="bg-red-600 dark:bg-red-700 text-white">
                                 {formatPercentage(mother.averageGain)}
                               </Badge>
                             </div>

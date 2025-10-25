@@ -328,7 +328,7 @@ export function SettingsPage({ animals, stats }: SettingsPageProps) {
             <div className="space-y-2">
               <Label>Estado de Conexión</Label>
               <Badge variant="default" className="gap-1 w-fit">
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
+                <div className="w-2 h-2 bg-green-500 dark:bg-green-400 rounded-full" />
                 Conectado
               </Badge>
             </div>
