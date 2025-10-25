@@ -17,8 +17,7 @@ import {
   Clock,
   CheckCircle,
   Edit,
-  Trash2,
-  Loader2
+  Trash2
 } from 'lucide-react'
 import { formatDate, getGenderName } from '@/lib/utils'
 import { apiService, Animal, RegisterBody } from '@/services/api'

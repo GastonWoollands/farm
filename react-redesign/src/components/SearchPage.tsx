@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -114,6 +114,10 @@ export function SearchPage() {
   }).sort((a, b) => {
     let aValue = a[sortBy as keyof typeof a]
     let bValue = b[sortBy as keyof typeof b]
+
+    // Handle null/undefined values
+    if (aValue == null) aValue = 0
+    if (bValue == null) bValue = 0
 
     if (sortBy === 'createdAt' || sortBy === 'bornDate') {
       aValue = new Date(aValue as string).getTime()

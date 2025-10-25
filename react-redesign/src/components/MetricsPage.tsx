@@ -1,17 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { 
-  TrendingUp, 
-  Users, 
-  Weight, 
-  Calendar,
-  Target,
-  BarChart3,
-  PieChart,
-  Activity
-} from 'lucide-react'
+// Icons removed - not currently used in this component
 import { formatWeight, formatPercentage } from '@/lib/utils'
 
 // Mock data - replace with actual API calls
@@ -129,7 +120,7 @@ const mockMetrics = {
 
 export function MetricsPage() {
   const [selectedRound, setSelectedRound] = useState('2024')
-  const [metrics, setMetrics] = useState(mockMetrics)
+  const [metrics] = useState(mockMetrics)
 
   const currentRound = metrics.inseminationRounds[selectedRound as keyof typeof metrics.inseminationRounds]
 
