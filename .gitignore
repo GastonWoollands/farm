@@ -12,3 +12,14 @@ backend_py/__pycache__/
 backend_py/data/
 data/
 notebooks/
+backend_py/__pycache__/
+backend_py/**/__pycache__/
+react-redesign/node_modules/
+react-redesign/dist/
+react-redesign/package-lock.json
+*.py
+*.sql
+test_*.py
+migrate_*.py
+migrate_*.sql
+RAILWAY_*.md

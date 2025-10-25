@@ -64,12 +64,12 @@ function AppContent() {
               const context = await apiService.getUserContext()
               console.log('User context loaded:', context)
               
-              const [animalsData, statsData] = await Promise.all([
-                apiService.getRegistrations(100),
-                apiService.getStats()
-              ])
-              
+              console.log('Loading animals data...')
+              const animalsData = await apiService.getRegistrations(100)
               console.log('Animals data loaded:', animalsData)
+              
+              console.log('Loading stats data...')
+              const statsData = await apiService.getStats()
               console.log('Stats data loaded:', statsData)
               
               setAppState(prev => ({
@@ -81,6 +81,10 @@ function AppContent() {
               }))
             } catch (error) {
               console.error('Error loading data:', error)
+              console.error('Error details:', {
+                message: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined
+              })
               // Set default values if API fails
               setAppState(prev => ({
                 ...prev,

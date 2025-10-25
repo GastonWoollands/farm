@@ -119,17 +119,26 @@ class ApiService {
       headers['Authorization'] = `Bearer ${this.authToken}`
     }
 
+    console.log(`API Request: ${options.method || 'GET'} ${url}`)
+    console.log('Headers:', headers)
+    console.log('Body:', options.body)
+
     const response = await fetch(url, {
       ...options,
       headers,
     })
 
+    console.log(`API Response: ${response.status} ${response.statusText}`)
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
+      console.error('API Error:', errorData)
       throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`)
     }
 
-    return response.json()
+    const data = await response.json()
+    console.log('API Response data:', data)
+    return data
   }
 
   // Authentication

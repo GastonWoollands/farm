@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,48 +37,79 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Filter and search animals
-  const filteredAnimals = (() => {
+  // Debug logging
+  console.log('SearchPage - animals received:', animals)
+  console.log('SearchPage - animals length:', animals?.length || 0)
+
+  // Filter and search animals - simplified and safer
+  const filteredAnimals = React.useMemo(() => {
     try {
-      return animals.filter(animal => {
-        const matchesSearch = 
-          (animal.animal_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (animal.rp_animal || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (animal.mother_id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (animal.rp_mother || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (animal.father_id || '').toLowerCase().includes(searchTerm.toLowerCase())
+      console.log('Filtering animals:', animals)
+      
+      if (!animals || !Array.isArray(animals)) {
+        console.log('Animals is not an array:', animals)
+        return []
+      }
 
-        const matchesGender = !filters.gender || animal.gender === filters.gender
-        const matchesStatus = !filters.status || animal.status === filters.status
-        const matchesColor = !filters.color || animal.color === filters.color
-        const matchesRound = !filters.inseminationRound || animal.insemination_round_id === filters.inseminationRound
+      let filtered = [...animals] // Create a copy to avoid mutations
 
-        return matchesSearch && matchesGender && matchesStatus && matchesColor && matchesRound
-      }).sort((a, b) => {
-    let aValue = a[sortBy as keyof typeof a]
-    let bValue = b[sortBy as keyof typeof b]
+      // Apply search filter
+      if (searchTerm) {
+        filtered = filtered.filter(animal => {
+          const searchLower = searchTerm.toLowerCase()
+          return (
+            (animal.animal_number || '').toLowerCase().includes(searchLower) ||
+            (animal.rp_animal || '').toLowerCase().includes(searchLower) ||
+            (animal.mother_id || '').toLowerCase().includes(searchLower) ||
+            (animal.rp_mother || '').toLowerCase().includes(searchLower) ||
+            (animal.father_id || '').toLowerCase().includes(searchLower)
+          )
+        })
+      }
 
-    // Handle null/undefined values
-    if (aValue == null) aValue = 0
-    if (bValue == null) bValue = 0
+      // Apply other filters
+      if (filters.gender) {
+        filtered = filtered.filter(animal => animal.gender === filters.gender)
+      }
+      if (filters.status) {
+        filtered = filtered.filter(animal => animal.status === filters.status)
+      }
+      if (filters.color) {
+        filtered = filtered.filter(animal => animal.color === filters.color)
+      }
+      if (filters.inseminationRound) {
+        filtered = filtered.filter(animal => animal.insemination_round_id === filters.inseminationRound)
+      }
 
-    if (sortBy === 'created_at' || sortBy === 'born_date') {
-      aValue = new Date(aValue as string).getTime()
-      bValue = new Date(bValue as string).getTime()
-    }
+      // Sort
+      filtered.sort((a, b) => {
+        let aValue = a[sortBy as keyof typeof a]
+        let bValue = b[sortBy as keyof typeof b]
 
-    if (sortOrder === 'asc') {
-      return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
-    } else {
-      return aValue > bValue ? -1 : aValue < bValue ? 1 : 0
-    }
-  })
+        // Handle null/undefined values
+        if (aValue == null) aValue = 0
+        if (bValue == null) bValue = 0
+
+        if (sortBy === 'created_at' || sortBy === 'born_date') {
+          aValue = new Date(aValue as string).getTime()
+          bValue = new Date(bValue as string).getTime()
+        }
+
+        if (sortOrder === 'asc') {
+          return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
+        } else {
+          return aValue > bValue ? -1 : aValue < bValue ? 1 : 0
+        }
+      })
+
+      console.log('Filtered animals result:', filtered)
+      return filtered
     } catch (err) {
       console.error('Error filtering animals:', err)
       setError('Error al filtrar animales')
       return []
     }
-  })()
+  }, [animals, searchTerm, filters, sortBy, sortOrder])
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({
@@ -95,6 +126,13 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
       color: '',
       inseminationRound: ''
     })
+  }
+
+  const clearFilter = (filterKey: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [filterKey]: ''
+    }))
   }
 
   const handleDelete = async (id: number) => {
@@ -168,15 +206,27 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           </div>
 
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-2">
-              <Label>Sexo</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Sexo</Label>
+                {filters.gender && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => clearFilter('gender')}
+                    className="h-7 w-7 p-0 text-xs hover:bg-destructive hover:text-destructive-foreground"
+                    title="Limpiar filtro de sexo"
+                  >
+                    ✕
+                  </Button>
+                )}
+              </div>
               <Select value={filters.gender} onValueChange={(value) => handleFilterChange('gender', value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos los sexos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos los sexos</SelectItem>
                   <SelectItem value="FEMALE">Hembra</SelectItem>
                   <SelectItem value="MALE">Macho</SelectItem>
                   <SelectItem value="UNKNOWN">Desconocido</SelectItem>
@@ -185,13 +235,25 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
             </div>
 
             <div className="space-y-2">
-              <Label>Estado</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Estado</Label>
+                {filters.status && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => clearFilter('status')}
+                    className="h-7 w-7 p-0 text-xs hover:bg-destructive hover:text-destructive-foreground"
+                    title="Limpiar filtro de estado"
+                  >
+                    ✕
+                  </Button>
+                )}
+              </div>
               <Select value={filters.status} onValueChange={(value) => handleFilterChange('status', value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos los estados" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos los estados</SelectItem>
                   <SelectItem value="ALIVE">Vivo</SelectItem>
                   <SelectItem value="DEAD">Muerto</SelectItem>
                   <SelectItem value="UNKNOWN">Desconocido</SelectItem>
@@ -200,13 +262,25 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
             </div>
 
             <div className="space-y-2">
-              <Label>Color</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Color</Label>
+                {filters.color && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => clearFilter('color')}
+                    className="h-7 w-7 p-0 text-xs hover:bg-destructive hover:text-destructive-foreground"
+                    title="Limpiar filtro de color"
+                  >
+                    ✕
+                  </Button>
+                )}
+              </div>
               <Select value={filters.color} onValueChange={(value) => handleFilterChange('color', value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos los colores" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos los colores</SelectItem>
                   <SelectItem value="COLORADO">Colorado</SelectItem>
                   <SelectItem value="NEGRO">Negro</SelectItem>
                   <SelectItem value="OTHERS">Otros</SelectItem>
@@ -215,13 +289,25 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
             </div>
 
             <div className="space-y-2">
-              <Label>Ronda de Inseminación</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Ronda de Inseminación</Label>
+                {filters.inseminationRound && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => clearFilter('inseminationRound')}
+                    className="h-7 w-7 p-0 text-xs hover:bg-destructive hover:text-destructive-foreground"
+                    title="Limpiar filtro de ronda"
+                  >
+                    ✕
+                  </Button>
+                )}
+              </div>
               <Select value={filters.inseminationRound} onValueChange={(value) => handleFilterChange('inseminationRound', value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todas las rondas" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas las rondas</SelectItem>
                   <SelectItem value="2024">2024</SelectItem>
                   <SelectItem value="2023">2023</SelectItem>
                 </SelectContent>
@@ -230,12 +316,13 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           </div>
 
           {/* Sort and Actions */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
+          <div className="space-y-4">
+            {/* Sort Controls */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex items-center gap-2">
-                <Label>Ordenar por:</Label>
+                <Label className="text-sm font-medium">Ordenar por:</Label>
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-[150px]">
+                  <SelectTrigger className="w-full sm:w-[150px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -250,17 +337,32 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                 variant="outline"
                 size="sm"
                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="w-full sm:w-auto"
               >
-                {sortOrder === 'asc' ? '↑' : '↓'}
+                {sortOrder === 'asc' ? '↑ Ascendente' : '↓ Descendente'}
               </Button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={clearFilters}>
-                <Filter className="h-4 w-4 mr-2" />
-                Limpiar filtros
-              </Button>
-              <Badge variant="secondary">
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button variant="outline" size="sm" onClick={clearFilters} className="w-full sm:w-auto">
+                  <Filter className="h-4 w-4 mr-2" />
+                  Limpiar filtros
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => {
+                    setSearchTerm('')
+                    setFilters({ gender: '', status: '', color: '', inseminationRound: '' })
+                  }}
+                  className="w-full sm:w-auto"
+                >
+                  Mostrar todos ({animals.length})
+                </Button>
+              </div>
+              <Badge variant="secondary" className="w-fit mx-auto sm:mx-0">
                 {filteredAnimals.length} resultado{filteredAnimals.length !== 1 ? 's' : ''}
               </Badge>
             </div>
@@ -280,15 +382,54 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Debug info - remove this after testing */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mb-4 p-2 bg-muted rounded text-xs">
+              <p>Debug: Animals received: {animals?.length || 0}</p>
+              <p>Debug: Filtered animals: {filteredAnimals?.length || 0}</p>
+              <p>Debug: Search term: "{searchTerm}"</p>
+              <p>Debug: Filters: {JSON.stringify(filters)}</p>
+            </div>
+          )}
+          
           {isLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
               <p className="text-muted-foreground">Cargando resultados...</p>
             </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <div className="text-destructive mb-4">
+                <Search className="h-12 w-12 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold">Error en la búsqueda</h3>
+                <p className="text-sm text-muted-foreground mt-2">{error}</p>
+              </div>
+              <Button onClick={() => setError(null)}>
+                Intentar de nuevo
+              </Button>
+            </div>
           ) : filteredAnimals.length === 0 ? (
             <div className="text-center py-12">
               <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-muted-foreground">No se encontraron resultados</p>
+              {animals.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Hay {animals.length} animales en total, pero no coinciden con los filtros actuales.
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => {
+                      setSearchTerm('')
+                      setFilters({ gender: '', status: '', color: '', inseminationRound: '' })
+                    }}
+                  >
+                    Mostrar todos los animales
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
