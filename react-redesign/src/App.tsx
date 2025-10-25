@@ -31,7 +31,8 @@ interface AppState {
   isOnline: boolean
   pendingCount: number
   currentCompany: string
-  animals: Animal[]
+  animals: Animal[] // All animals for metrics
+  displayAnimals: Animal[] // Recent animals for UI display
   stats: RegistrationStats | null
 }
 
@@ -42,6 +43,7 @@ function AppContent() {
     pendingCount: 0,
     currentCompany: 'Personal Data',
     animals: [],
+    displayAnimals: [],
     stats: null
   })
 
@@ -70,22 +72,38 @@ function AppContent() {
                 currentCompany: context.company?.name || 'Personal Data'
               }))
               
-              // Load local records (unsynced first, then last 10 synced)
+              // Load all records for metrics calculation
               try {
-                console.log('Loading local records...')
-                const localRecords = await apiService.getDisplayRecords(5)
-                console.log('Local records loaded:', localRecords)
+                console.log('Loading all records for metrics...')
+                const allRecords = await apiService.getRegistrations(1000) // Get all records
+                console.log('All records loaded:', allRecords.registrations.length)
+                
+                // Also get recent records for display
+                const displayRecords = await apiService.getDisplayRecords(10)
                 
                 setAppState(prev => ({
                   ...prev,
-                  animals: localRecords
+                  animals: allRecords.registrations, // All records for metrics
+                  displayAnimals: displayRecords // Recent records for UI
                 }))
-              } catch (localError) {
-                console.warn('Could not load local records:', localError)
-                setAppState(prev => ({
-                  ...prev,
-                  animals: []
-                }))
+              } catch (allRecordsError) {
+                console.warn('Could not load all records:', allRecordsError)
+                // Fallback to local records
+                try {
+                  const localRecords = await apiService.getDisplayRecords(10)
+                  setAppState(prev => ({
+                    ...prev,
+                    animals: localRecords, // Use local records for both
+                    displayAnimals: localRecords
+                  }))
+                } catch (localError) {
+                  console.warn('Could not load local records:', localError)
+                  setAppState(prev => ({
+                    ...prev,
+                    animals: [],
+                    displayAnimals: []
+                  }))
+                }
               }
               
               // Get pending count and load stats
@@ -117,13 +135,15 @@ function AppContent() {
                 const syncResult = await apiService.syncLocalRecords()
                 console.log('Sync completed:', syncResult)
                 
-                // Reload data after sync
-                const updatedRecords = await apiService.getDisplayRecords(10)
+                // Reload all data after sync
+                const updatedAllRecords = await apiService.getRegistrations(1000)
+                const updatedDisplayRecords = await apiService.getDisplayRecords(10)
                 const updatedPendingCount = await apiService.getPendingCount()
                 
                 setAppState(prev => ({
                   ...prev,
-                  animals: updatedRecords,
+                  animals: updatedAllRecords.registrations,
+                  displayAnimals: updatedDisplayRecords,
                   pendingCount: updatedPendingCount
                 }))
               } catch (syncError) {
@@ -364,8 +384,8 @@ function AppContent() {
 
           <TabsContent value="animals" className="mt-0">
             <AnimalsPage 
-              animals={appState.animals}
-              onAnimalsChange={(animals) => setAppState(prev => ({ ...prev, animals }))}
+              animals={appState.displayAnimals}
+              onAnimalsChange={(animals) => setAppState(prev => ({ ...prev, displayAnimals: animals }))}
               onStatsChange={async () => {
                 try {
                   const stats = await apiService.getStats()
