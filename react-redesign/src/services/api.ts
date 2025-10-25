@@ -158,7 +158,8 @@ class ApiService {
 
   // Registrations - using export-multi-tenant endpoint
   async getRegistrations(limit: number = 100): Promise<{ registrations: Animal[], count: number }> {
-    const data = await this.request<Animal[]>(`${API_ENDPOINTS.REGISTRATIONS}?format=json`)
+    const response = await this.request<{ count: number, items: Animal[] }>(`${API_ENDPOINTS.REGISTRATIONS}?format=json`)
+    const data = response.items || []
     // Limit the results to the requested limit
     const limitedData = data.slice(0, limit)
     return { registrations: limitedData, count: limitedData.length }
@@ -187,7 +188,8 @@ class ApiService {
 
   async getStats(): Promise<RegistrationStats> {
     // Get all data from export-multi-tenant and calculate stats
-    const data = await this.request<Animal[]>(`${API_ENDPOINTS.STATS}?format=json`)
+    const response = await this.request<{ count: number, items: Animal[] }>(`${API_ENDPOINTS.STATS}?format=json`)
+    const data = response.items || []
     
     // Calculate stats from the data
     const totalAnimals = data.length
@@ -341,9 +343,9 @@ class ApiService {
       })
 
       if (response.ok) {
-        const serverRecords = await response.json()
-        await localStorageService.importFromServer(serverRecords)
-        importedCount = serverRecords.length
+        const serverData = await response.json()
+        await localStorageService.importFromServer(serverData)
+        importedCount = serverData.items ? serverData.items.length : serverData.length
         console.log('Imported from server:', importedCount)
       }
     } catch (error) {

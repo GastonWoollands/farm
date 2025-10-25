@@ -99,9 +99,12 @@ class LocalStorageService {
     console.log('Deleted local record:', id)
   }
 
-  async importFromServer(serverRecords: Animal[]): Promise<void> {
+  async importFromServer(serverData: { count: number, items: Animal[] } | Animal[]): Promise<void> {
     const localRecords = this.getStorage()
     const nowIso = new Date().toISOString()
+    
+    // Handle both response formats
+    const serverRecords = Array.isArray(serverData) ? serverData : serverData.items || []
     
     // Convert server records to local format
     const serverRecordsAsLocal: LocalRecord[] = serverRecords.map((record, index) => ({
