@@ -25,6 +25,7 @@ import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { PrefixesProvider } from './contexts/PrefixesContext'
 import { authService, AuthUser } from './services/auth'
 import { apiService, Animal, RegistrationStats } from './services/api'
+import { register, registerPWAInstallPrompt } from './utils/serviceWorker'
 
 // Types
 interface AppState {
@@ -199,6 +200,20 @@ function AppContent() {
     }
 
     initializeApp()
+    
+    // Register service worker for PWA
+    register({
+      onSuccess: (registration) => {
+        console.log('Service Worker registered successfully:', registration)
+      },
+      onUpdate: (registration) => {
+        console.log('Service Worker updated:', registration)
+      }
+    })
+    
+    // Register PWA install prompt
+    const installPrompt = registerPWAInstallPrompt()
+    console.log('PWA install prompt registered:', installPrompt)
   }, [])
 
   const handleSignOut = async () => {
