@@ -52,18 +52,18 @@
   ],
   "screenshots": [
     {
-      "src": "/screenshot-desktop.png",
+      "src": "/logo.jpg",
       "sizes": "1280x720",
-      "type": "image/png",
+      "type": "image/jpeg",
       "form_factor": "wide",
-      "label": "LiveStock Desktop View"
+      "label": "TAG Desktop View"
     },
     {
-      "src": "/screenshot-mobile.png",
+      "src": "/logo.jpg",
       "sizes": "390x844",
-      "type": "image/png",
+      "type": "image/jpeg",
       "form_factor": "narrow",
-      "label": "LiveStock Mobile View"
+      "label": "TAG Mobile View"
     }
   ]
 }
