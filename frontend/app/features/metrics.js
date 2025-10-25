@@ -91,7 +91,8 @@ export class MetricsCalculator {
         gender: [],
         status: [],
         weight: { count: 0, average: 0, min: 0, max: 0, median: 0, ranges: [] },
-        mothers: { totalMothers: 0, totalOffspring: 0, averageOffspring: 0, topMothers: [], mothersWithMultipleOffspring: 0 }
+        mothers: { totalMothers: 0, totalOffspring: 0, averageOffspring: 0, topMothers: [], mothersWithMultipleOffspring: 0 },
+        gain: { totalRecords: 0, averageGain: 0, minGain: 0, maxGain: 0, medianGain: 0, byInseminationRound: [], topPerformers: [], bottomPerformers: [] }
       };
     }
 
@@ -101,7 +102,8 @@ export class MetricsCalculator {
       gender: this.calculateGenderMetricsForRecords(records),
       status: this.calculateStatusMetricsForRecords(records),
       weight: this.calculateWeightMetricsForRecords(records),
-      mothers: this.calculateMotherMetricsForRecords(records)
+      mothers: this.calculateMotherMetricsForRecords(records),
+      gain: this.calculateGainMetricsForRecords(records)
     };
   }
 
@@ -240,6 +242,113 @@ export class MetricsCalculator {
       averageOffspring,
       topMothers: mothers.slice(0, 10),
       mothersWithMultipleOffspring: mothers.filter(m => m.offspringCount > 1).length
+    };
+  }
+
+  /**
+   * Calculate gain percentage metrics for specific records
+   * Gain = (newborn weight / mother weight) * 100
+   */
+  calculateGainMetricsForRecords(records) {
+    // Filter records that have both newborn weight and mother weight
+    const validRecords = records.filter(record => 
+      record.weight && 
+      record.motherWeight && 
+      record.motherId &&
+      record.weight > 0 && 
+      record.motherWeight > 0
+    );
+
+    if (validRecords.length === 0) {
+      return {
+        totalRecords: 0,
+        averageGain: 0,
+        minGain: 0,
+        maxGain: 0,
+        medianGain: 0,
+        byInseminationRound: {},
+        topPerformers: [],
+        bottomPerformers: []
+      };
+    }
+
+    // Calculate gain percentages
+    const gainData = validRecords.map(record => {
+      const gainPercentage = (record.weight / record.motherWeight) * 100;
+      return {
+        animalNumber: record.animalNumber,
+        motherId: record.motherId,
+        newbornWeight: record.weight,
+        motherWeight: record.motherWeight,
+        gainPercentage: Math.round(gainPercentage * 10) / 10, // Round to 1 decimal
+        inseminationRoundId: record.inseminationRoundId || 'Sin Ronda'
+      };
+    });
+
+    // Calculate overall statistics
+    const gains = gainData.map(d => d.gainPercentage);
+    const sortedGains = [...gains].sort((a, b) => a - b);
+    const averageGain = gains.reduce((sum, gain) => sum + gain, 0) / gains.length;
+    const medianGain = sortedGains.length % 2 === 0 
+      ? (sortedGains[sortedGains.length / 2 - 1] + sortedGains[sortedGains.length / 2]) / 2
+      : sortedGains[Math.floor(sortedGains.length / 2)];
+
+    // Group by insemination round
+    const byInseminationRound = gainData.reduce((acc, record) => {
+      const roundId = record.inseminationRoundId;
+      if (!acc[roundId]) {
+        acc[roundId] = {
+          roundId,
+          records: [],
+          averageGain: 0,
+          count: 0
+        };
+      }
+      acc[roundId].records.push(record);
+      acc[roundId].count++;
+      return acc;
+    }, {});
+
+    // Calculate average gain per round
+    Object.values(byInseminationRound).forEach(round => {
+      const roundGains = round.records.map(r => r.gainPercentage);
+      round.averageGain = Math.round((roundGains.reduce((sum, gain) => sum + gain, 0) / roundGains.length) * 10) / 10;
+    });
+
+    // Get top and bottom performers (by mother)
+    const motherPerformance = gainData.reduce((acc, record) => {
+      if (!acc[record.motherId]) {
+        acc[record.motherId] = {
+          motherId: record.motherId,
+          records: [],
+          averageGain: 0,
+          count: 0
+        };
+      }
+      acc[record.motherId].records.push(record);
+      acc[record.motherId].count++;
+      return acc;
+    }, {});
+
+    // Calculate average gain per mother
+    Object.values(motherPerformance).forEach(mother => {
+      const motherGains = mother.records.map(r => r.gainPercentage);
+      mother.averageGain = Math.round((motherGains.reduce((sum, gain) => sum + gain, 0) / motherGains.length) * 10) / 10;
+    });
+
+    const motherPerformanceArray = Object.values(motherPerformance)
+      .filter(m => m.count >= 1) // Only mothers with at least 1 record
+      .sort((a, b) => b.averageGain - a.averageGain);
+
+    return {
+      totalRecords: validRecords.length,
+      averageGain: Math.round(averageGain * 10) / 10,
+      minGain: Math.min(...gains),
+      maxGain: Math.max(...gains),
+      medianGain: Math.round(medianGain * 10) / 10,
+      byInseminationRound: Object.values(byInseminationRound).sort((a, b) => b.averageGain - a.averageGain),
+      topPerformers: motherPerformanceArray.slice(0, 10),
+      bottomPerformers: motherPerformanceArray.slice(-10).reverse()
     };
   }
 
@@ -477,6 +586,7 @@ export class MetricsRenderer {
         ${this.renderGenderStatus(animalData.gender, animalData.status)}
         ${this.renderWeightMetrics(animalData.weight)}
         ${this.renderMotherMetrics(animalData.mothers)}
+        ${this.renderGainMetrics(animalData.gain)}
       </div>
     `;
   }
@@ -608,6 +718,98 @@ export class MetricsRenderer {
                 </div>
               `).join('')}
             </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  /**
+   * Render gain percentage metrics
+   */
+  renderGainMetrics(gainData) {
+    if (gainData.totalRecords === 0) {
+      return `
+        <div class="metrics-section">
+          <h3>Métricas de Ganancia</h3>
+          <div class="no-data">
+            <p>No hay datos suficientes para calcular ganancias (se requiere peso del animal y peso de la madre)</p>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="metrics-section">
+        <h3>Métricas de Ganancia</h3>
+        <div class="gain-stats">
+          <div class="gain-stat">
+            <span class="gain-value">${gainData.averageGain}%</span>
+            <span class="gain-label">Ganancia Promedio</span>
+          </div>
+          <div class="gain-stat">
+            <span class="gain-value">${gainData.minGain}%</span>
+            <span class="gain-label">Ganancia Mínima</span>
+          </div>
+          <div class="gain-stat">
+            <span class="gain-value">${gainData.maxGain}%</span>
+            <span class="gain-label">Ganancia Máxima</span>
+          </div>
+          <div class="gain-stat">
+            <span class="gain-value">${gainData.medianGain}%</span>
+            <span class="gain-label">Ganancia Mediana</span>
+          </div>
+        </div>
+        
+        ${gainData.byInseminationRound.length > 0 ? `
+          <div class="insemination-rounds">
+            <h4>Rendimiento por Ronda de Inseminación</h4>
+            <div class="rounds-list">
+              ${gainData.byInseminationRound.map(round => `
+                <div class="round-item">
+                  <div class="round-header">
+                    <span class="round-id">Ronda ${round.roundId}</span>
+                    <span class="round-count">${round.count} animales</span>
+                  </div>
+                  <div class="round-gain">
+                    <span class="round-gain-value">${round.averageGain}%</span>
+                    <span class="round-gain-label">Ganancia Promedio</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+        
+        ${gainData.topPerformers.length > 0 ? `
+          <div class="performance-mothers">
+            <div class="top-performers">
+              <h4>Mejores Madres (Mayor Ganancia)</h4>
+              <div class="performers-list">
+                ${gainData.topPerformers.slice(0, 5).map(mother => `
+                  <div class="performer-item">
+                    <span class="performer-id">${mother.motherId}</span>
+                    <span class="performer-gain">${mother.averageGain}%</span>
+                    <span class="performer-count">(${mother.count} cría${mother.count > 1 ? 's' : ''})</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            
+            ${gainData.bottomPerformers.length > 0 ? `
+              <div class="bottom-performers">
+                <h4>Madres con Menor Rendimiento</h4>
+                <div class="performers-list">
+                  ${gainData.bottomPerformers.slice(0, 5).map(mother => `
+                    <div class="performer-item">
+                      <span class="performer-id">${mother.motherId}</span>
+                      <span class="performer-gain">${mother.averageGain}%</span>
+                      <span class="performer-count">(${mother.count} cría${mother.count > 1 ? 's' : ''})</span>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
           </div>
         ` : ''}
       </div>
