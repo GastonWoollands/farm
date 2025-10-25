@@ -442,13 +442,13 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                           </Badge>
                         )}
                       </div>
-                      <Badge variant={animal.synced ? "default" : "destructive"}>
-                        {animal.synced ? (
+                      <Badge variant={animal.synced !== false ? "default" : "destructive"}>
+                        {animal.synced !== false ? (
                           <CheckCircle className="h-3 w-3 mr-1" />
                         ) : (
                           <Clock className="h-3 w-3 mr-1" />
                         )}
-                        {animal.synced ? 'Sincronizado' : 'Pendiente'}
+                        {animal.synced !== false ? 'Sincronizado' : 'Pendiente'}
                       </Badge>
                     </div>
 

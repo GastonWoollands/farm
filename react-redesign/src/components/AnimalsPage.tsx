@@ -51,8 +51,8 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
   })
 
   const totalAnimals = animals.length
-  const pendingAnimals = animals.filter(a => !a.synced).length
-  const syncedAnimals = animals.filter(a => a.synced).length
+  const pendingAnimals = animals.filter(a => a.synced === false).length
+  const syncedAnimals = animals.filter(a => a.synced !== false).length
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -199,7 +199,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         record.rp_animal || '',
         record.rp_mother || '',
         record.mother_weight || '',
-        record.synced ? 'Yes' : 'No'
+        record.synced !== false ? 'Yes' : 'No'
       ])
       
       const csvContent = [csvHeaders, ...csvRows]
@@ -504,8 +504,8 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                               {animal.rp_animal}
                             </Badge>
                           )}
-                          <Badge variant={animal.synced ? "default" : "destructive"} className="text-xs">
-                            {animal.synced ? 'Sincronizado' : 'Pendiente'}
+                          <Badge variant={animal.synced !== false ? "default" : "destructive"} className="text-xs">
+                            {animal.synced !== false ? 'Sincronizado' : 'Pendiente'}
                           </Badge>
                         </div>
                         <div className="text-sm text-muted-foreground space-y-1">
