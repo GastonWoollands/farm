@@ -57,11 +57,13 @@ const calculateMetrics = (animals: Animal[], stats: RegistrationStats) => {
       .sort((a, b) => b.offspring - a.offspring)
       .slice(0, 5)
 
-    // Gain calculation (mother weight vs newborn weight)
-    const gainData = roundAnimals.filter(a => a.weight && a.mother_weight).map(animal => ({
-      motherId: animal.mother_id || '',
-      gain: (animal.weight! / animal.mother_weight!) * 100
-    }))
+    // Gain calculation (mother weight vs newborn weight) - Only for alive newborn cows
+    const gainData = roundAnimals
+      .filter(a => a.weight && a.mother_weight && a.status === 'ALIVE')
+      .map(animal => ({
+        motherId: animal.mother_id || '',
+        gain: (animal.weight! / animal.mother_weight!) * 100
+      }))
 
     const gains = gainData.map(d => d.gain)
     const gainsSorted = [...gains].sort((a, b) => a - b)
@@ -305,11 +307,17 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">Análisis de Ganancia</CardTitle>
                     <CardDescription>
-                      Rendimiento de madres basado en ganancia de peso
+                      Rendimiento de madres basado en ganancia de peso (solo vacas recién nacidas vivas)
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* Gain Overview */}
+                    <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800">
+                      <p className="text-sm text-blue-700 dark:text-blue-300">
+                        <strong>Nota:</strong> Los cálculos de ganancia se basan únicamente en vacas recién nacidas vivas (status: ALIVE) 
+                        que tienen tanto peso del animal como peso de la madre registrados.
+                      </p>
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="text-center p-3 bg-primary/5 rounded border border-primary/20">
                         <div className="text-xl font-bold text-primary">{formatPercentage(currentRound.gain.averageGain)}</div>
