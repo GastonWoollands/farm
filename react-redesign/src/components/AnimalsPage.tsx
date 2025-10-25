@@ -155,14 +155,11 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
     setError(null)
 
     try {
-      // Delete from local storage
-      if (animal.id) {
-        await apiService.deleteLocalRecord(animal.id)
-      }
+      // Delete from backend
+      await apiService.deleteAnimal(animal.animal_number, animal.created_at || '')
       
-      // Refresh local data
-      const updatedAnimals = await apiService.getDisplayRecords(10)
-      onAnimalsChange(updatedAnimals)
+      // Update parent component
+      onAnimalsChange(animals.filter(a => a.animal_number !== animal.animal_number))
       
       // Update stats
       onStatsChange()
