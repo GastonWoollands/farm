@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,6 +23,49 @@ import { formatDate, getGenderName } from '@/lib/utils'
 import { apiService, Animal, RegisterBody } from '@/services/api'
 import { usePrefixes } from '@/contexts/PrefixesContext'
 
+// Custom PrefixedInput component
+interface PrefixedInputProps {
+  id: string
+  name: string
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  required?: boolean
+  prefix: string
+  label: string
+}
+
+const PrefixedInput = ({ id, name, value, onChange, placeholder, required, prefix, label }: PrefixedInputProps) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputValue = e.target.value
+    // Remove the prefix if it's already there to avoid duplication
+    const cleanValue = inputValue.startsWith(prefix) ? inputValue.substring(prefix.length) : inputValue
+    // Apply the prefix
+    const prefixedValue = cleanValue ? `${prefix}${cleanValue}` : prefix
+    onChange(prefixedValue)
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground text-sm font-medium pointer-events-none">
+          {prefix}
+        </div>
+        <Input
+          id={id}
+          name={name}
+          value={value}
+          onChange={handleChange}
+          placeholder={placeholder}
+          required={required}
+          className="pl-16"
+        />
+      </div>
+    </div>
+  )
+}
+
 interface AnimalsPageProps {
   animals: Animal[]
   onAnimalsChange: (animals: Animal[]) => void
@@ -36,11 +79,11 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
   const { prefixes } = usePrefixes()
   const [isRecordsExpanded, setIsRecordsExpanded] = useState(false)
   const [formData, setFormData] = useState({
-    animalNumber: '',
+    animalNumber: prefixes.animalPrefix,
     rpAnimal: '',
-    motherId: '',
+    motherId: prefixes.motherPrefix,
     rpMother: '',
-    fatherId: '',
+    fatherId: prefixes.fatherPrefix,
     bornDate: '',
     weight: '',
     motherWeight: '',
@@ -56,6 +99,16 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
   const pendingAnimals = animals.filter(a => a.synced === false).length
   const syncedAnimals = animals.filter(a => a.synced !== false).length
 
+  // Update form data when prefixes change
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      animalNumber: prev.animalNumber === '' ? prefixes.animalPrefix : prev.animalNumber,
+      motherId: prev.motherId === '' ? prefixes.motherPrefix : prev.motherId,
+      fatherId: prev.fatherId === '' ? prefixes.fatherPrefix : prev.fatherId
+    }))
+  }, [prefixes])
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({
@@ -63,6 +116,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
       [name]: value
     }))
   }
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -118,13 +172,13 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
       // Update stats
       onStatsChange()
       
-      // Reset form
+      // Reset form with prefixes
       setFormData({
-        animalNumber: '',
+        animalNumber: prefixes.animalPrefix,
         rpAnimal: '',
-        motherId: '',
+        motherId: prefixes.motherPrefix,
         rpMother: '',
-        fatherId: '',
+        fatherId: prefixes.fatherPrefix,
         bornDate: '',
         weight: '',
         motherWeight: '',
@@ -279,17 +333,16 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="animalNumber">ID del Animal *</Label>
-                      <Input
-                        id="animalNumber"
-                        name="animalNumber"
-                        value={formData.animalNumber}
-                        onChange={handleInputChange}
-                        placeholder={`e.g., ${prefixes.animalPrefix}001-24`}
-                        required
-                      />
-                    </div>
+                    <PrefixedInput
+                      id="animalNumber"
+                      name="animalNumber"
+                      value={formData.animalNumber}
+                      onChange={(value) => setFormData(prev => ({ ...prev, animalNumber: value }))}
+                      placeholder="001-24"
+                      required
+                      prefix={prefixes.animalPrefix}
+                      label="ID del Animal *"
+                    />
                     <div className="space-y-2">
                       <Label htmlFor="rpAnimal">RP Animal</Label>
                       <Input
@@ -300,16 +353,15 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         placeholder="e.g., RP-12345"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="motherId">ID de la Madre</Label>
-                      <Input
-                        id="motherId"
-                        name="motherId"
-                        value={formData.motherId}
-                        onChange={handleInputChange}
-                        placeholder={`e.g., ${prefixes.motherPrefix}001`}
-                      />
-                    </div>
+                    <PrefixedInput
+                      id="motherId"
+                      name="motherId"
+                      value={formData.motherId}
+                      onChange={(value) => setFormData(prev => ({ ...prev, motherId: value }))}
+                      placeholder="001"
+                      prefix={prefixes.motherPrefix}
+                      label="ID de la Madre"
+                    />
                     <div className="space-y-2">
                       <Label htmlFor="rpMother">RP Madre</Label>
                       <Input
@@ -320,16 +372,15 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         placeholder="e.g., RP-67890"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="fatherId">ID del Padre</Label>
-                      <Input
-                        id="fatherId"
-                        name="fatherId"
-                        value={formData.fatherId}
-                        onChange={handleInputChange}
-                        placeholder={`e.g., ${prefixes.fatherPrefix}`}
-                      />
-                    </div>
+                    <PrefixedInput
+                      id="fatherId"
+                      name="fatherId"
+                      value={formData.fatherId}
+                      onChange={(value) => setFormData(prev => ({ ...prev, fatherId: value }))}
+                      placeholder=""
+                      prefix={prefixes.fatherPrefix}
+                      label="ID del Padre"
+                    />
                     <div className="space-y-2">
                       <Label htmlFor="bornDate">Fecha de Nacimiento</Label>
                       <Input
@@ -443,7 +494,25 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                   </div>
 
                   <div className="flex justify-end gap-3 pt-4">
-                    <Button type="button" variant="outline" onClick={() => setIsRegistering(false)}>
+                    <Button type="button" variant="outline" onClick={() => {
+                      setIsRegistering(false)
+                      setFormData({
+                        animalNumber: prefixes.animalPrefix,
+                        rpAnimal: '',
+                        motherId: prefixes.motherPrefix,
+                        rpMother: '',
+                        fatherId: prefixes.fatherPrefix,
+                        bornDate: '',
+                        weight: '',
+                        motherWeight: '',
+                        gender: '',
+                        status: 'ALIVE',
+                        color: '',
+                        notes: '',
+                        notesMother: '',
+                        scrotalCircumference: ''
+                      })
+                    }}>
                       Cancelar
                     </Button>
                     <Button type="submit">
