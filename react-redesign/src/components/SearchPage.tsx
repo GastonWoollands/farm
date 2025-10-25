@@ -135,19 +135,26 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
     }))
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (animal: Animal) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar este animal?')) {
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
     try {
-      setIsLoading(true)
-      setError(null)
-      
       // Delete from local storage
-      await apiService.deleteLocalRecord(id)
+      if (animal.id) {
+        await apiService.deleteLocalRecord(animal.id)
+      }
       
-      // Update parent component
-      onAnimalsChange(animals.filter(animal => (animal.id || 0) !== id))
-    } catch (err) {
-      setError('Error al eliminar el animal')
-      console.error('Delete error:', err)
+      // Refresh local data
+      const updatedAnimals = await apiService.getDisplayRecords(10)
+      onAnimalsChange(updatedAnimals)
+      
+    } catch (err: any) {
+      setError(err.message || 'Error al eliminar el animal')
     } finally {
       setIsLoading(false)
     }
@@ -539,8 +546,9 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                       <Button 
                         size="sm" 
                         variant="ghost" 
-                        onClick={() => handleDelete(animal.id || 0)}
+                        onClick={() => handleDelete(animal)}
                         className="text-destructive hover:text-destructive"
+                        disabled={isLoading}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
