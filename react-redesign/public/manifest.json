@@ -1,7 +1,7 @@
 {
-  "name": "LiveStock - Farm Management",
-  "short_name": "LiveStock",
-  "description": "Professional farm management system for livestock tracking and data analysis",
+  "name": "TAG",
+  "short_name": "TAG",
+  "description": "Trazabilidad Ganadera",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
