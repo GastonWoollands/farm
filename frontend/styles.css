@@ -2122,6 +2122,68 @@ dialog { border:none; border-radius:12px; padding: 16px; background:#0b1220; col
   }
 }
 
+/* Insemination Round Selector Styles */
+.insemination-round-selector {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.insemination-round-selector label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.insemination-round-select {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #f1f5f9;
+  font-size: 14px;
+  min-width: 200px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.insemination-round-select:hover {
+  border-color: #475569;
+}
+
+.insemination-round-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.insemination-round-select option {
+  background: #0f172a;
+  color: #f1f5f9;
+  padding: 8px;
+}
+
+.insemination-round-metrics {
+  margin-top: 16px;
+}
+
+/* Mobile responsiveness for insemination selector */
+@media (max-width: 768px) {
+  .insemination-round-selector {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .insemination-round-select {
+    width: 100%;
+    min-width: auto;
+  }
+}
+
 /* Gain Metrics Styles - Compact & Focused */
 .gain-stats {
   display: flex;

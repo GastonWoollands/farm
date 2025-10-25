@@ -50,12 +50,26 @@ export class MetricsCalculator {
   async calculateMetrics() {
     this.records = await getRecords();
     const cows = this.records.filter(r => r.animalType === 1);
-    // const pigs = this.records.filter(r => r.animalType === 2);
+    
+    // Get all insemination rounds
+    const inseminationRounds = this.getInseminationRounds();
+    const roundsData = {};
+    
+    // Calculate metrics for each insemination round
+    inseminationRounds.forEach(roundId => {
+      const roundRecords = cows.filter(r => r.inseminationRoundId === roundId);
+      roundsData[roundId] = this.calculateInseminationRoundMetrics(roundRecords, roundId);
+    });
+    
+    // Add records without insemination round ID
+    const recordsWithoutRound = cows.filter(r => !r.inseminationRoundId);
+    if (recordsWithoutRound.length > 0) {
+      roundsData['Sin Ronda'] = this.calculateInseminationRoundMetrics(recordsWithoutRound, 'Sin Ronda');
+    }
     
     return {
       overview: this.calculateOverview(),
-      cows: this.calculateAnimalTypeMetrics(cows, 'Animales'),
-      // pigs: this.calculateAnimalTypeMetrics(pigs, 'Cerdos'),
+      inseminationRounds: roundsData,
       objectives: this.calculateObjectiveMetrics()
     };
   }
@@ -105,6 +119,46 @@ export class MetricsCalculator {
       mothers: this.calculateMotherMetricsForRecords(records),
       gain: this.calculateGainMetricsForRecords(records)
     };
+  }
+
+  /**
+   * Calculate metrics for a specific insemination round
+   */
+  calculateInseminationRoundMetrics(records, roundId) {
+    if (records.length === 0) {
+      return {
+        roundId,
+        count: 0,
+        gender: [],
+        status: [],
+        weight: { count: 0, average: 0, min: 0, max: 0, median: 0, ranges: [] },
+        mothers: { totalMothers: 0, totalOffspring: 0, averageOffspring: 0, topMothers: [], mothersWithMultipleOffspring: 0 },
+        gain: { totalRecords: 0, averageGain: 0, minGain: 0, maxGain: 0, medianGain: 0, byInseminationRound: [], topPerformers: [], bottomPerformers: [] }
+      };
+    }
+
+    return {
+      roundId,
+      count: records.length,
+      gender: this.calculateGenderMetricsForRecords(records),
+      status: this.calculateStatusMetricsForRecords(records),
+      weight: this.calculateWeightMetricsForRecords(records),
+      mothers: this.calculateMotherMetricsForRecords(records),
+      gain: this.calculateGainMetricsForRecords(records)
+    };
+  }
+
+  /**
+   * Get all unique insemination round IDs from records
+   */
+  getInseminationRounds() {
+    const rounds = new Set();
+    this.records.forEach(record => {
+      if (record.inseminationRoundId) {
+        rounds.add(record.inseminationRoundId);
+      }
+    });
+    return Array.from(rounds).sort();
   }
 
   /**
@@ -457,7 +511,7 @@ export class MetricsRenderer {
       <div class="metrics-dashboard">
         ${this.renderOverview(metrics.overview)}
         ${this.renderObjectives(metrics.objectives)}
-        ${this.renderAnimalTypeTabs(metrics.cows)}
+        ${this.renderInseminationRoundsOverview(metrics.inseminationRounds)}
       </div>
     `;
 
@@ -530,19 +584,40 @@ export class MetricsRenderer {
   }
 
   /**
-   * Render animal type tabs (cows only)
+   * Render insemination rounds overview with selection
    */
-  renderAnimalTypeTabs(cows) {
+  renderInseminationRoundsOverview(inseminationRounds) {
+    const rounds = Object.keys(inseminationRounds);
+    
+    if (rounds.length === 0) {
+      return `
+        <div class="metrics-section">
+          <h3>Métricas por Ronda de Inseminación</h3>
+          <div class="no-data">
+            <p>No hay datos de rondas de inseminación disponibles</p>
+          </div>
+        </div>
+      `;
+    }
+
+    // Create selection options
+    const options = rounds.map(roundId => {
+      const count = inseminationRounds[roundId].count;
+      const displayName = roundId === 'Sin Ronda' ? 'Sin Ronda' : `Ronda ${roundId}`;
+      return `<option value="${roundId}">${displayName} (${count} animales)</option>`;
+    }).join('');
+
     return `
       <div class="metrics-section">
-        <h3>Métricas por Tipo de Animal</h3>
-        <div class="animal-type-tabs">
-          <button class="animal-tab active" data-type="cows">Animales (${cows.count})</button>
+        <h3>Métricas por Ronda de Inseminación</h3>
+        <div class="insemination-round-selector">
+          <label for="insemination-round-select">Seleccionar Ronda:</label>
+          <select id="insemination-round-select" class="insemination-round-select">
+            ${options}
+          </select>
         </div>
-        <div class="animal-type-content">
-          <div id="cows-metrics" class="animal-metrics active">
-            ${this.renderAnimalTypeMetrics(cows)}
-          </div>
+        <div id="insemination-round-metrics" class="insemination-round-metrics">
+          ${this.renderInseminationRoundMetrics(inseminationRounds[rounds[0]])}
         </div>
       </div>
     `;
@@ -591,7 +666,50 @@ export class MetricsRenderer {
     `;
   }
 
+  /**
+   * Render metrics for a specific insemination round
+   */
+  renderInseminationRoundMetrics(roundData) {
+    if (roundData.count === 0) {
+      return `
+        <div class="no-data">
+          <p>No hay registros para ${roundData.roundId === 'Sin Ronda' ? 'esta ronda' : `la ronda ${roundData.roundId}`}</p>
+        </div>
+      `;
+    }
 
+    const displayName = roundData.roundId === 'Sin Ronda' ? 'Sin Ronda' : `Ronda ${roundData.roundId}`;
+    
+    return `
+      <div class="insemination-metrics-content">
+        <div class="metrics-section">
+          <h4>Resumen de ${displayName}</h4>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-value">${roundData.count}</div>
+              <div class="metric-label">Total</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">${roundData.weight.count}</div>
+              <div class="metric-label">Con Peso</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">${roundData.mothers.totalMothers}</div>
+              <div class="metric-label">Madres</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">${roundData.mothers.totalOffspring}</div>
+              <div class="metric-label">Crías</div>
+            </div>
+          </div>
+        </div>
+        ${this.renderGenderStatus(roundData.gender, roundData.status)}
+        ${this.renderWeightMetrics(roundData.weight)}
+        ${this.renderMotherMetrics(roundData.mothers)}
+        ${this.renderGainMetrics(roundData.gain)}
+      </div>
+    `;
+  }
 
   /**
    * Render gender and status distribution
@@ -883,6 +1001,12 @@ export class MetricsRenderer {
     animalTabs.forEach(tab => {
       tab.addEventListener('click', () => this.switchAnimalType(tab.dataset.type));
     });
+
+    // Insemination round selector
+    const inseminationSelect = this.container.querySelector('#insemination-round-select');
+    if (inseminationSelect) {
+      inseminationSelect.addEventListener('change', (e) => this.switchInseminationRound(e.target.value));
+    }
   }
 
   /**
@@ -900,6 +1024,21 @@ export class MetricsRenderer {
     contents.forEach(content => {
       content.classList.toggle('active', content.id === `${type}-metrics`);
     });
+  }
+
+  /**
+   * Switch between insemination rounds
+   */
+  async switchInseminationRound(roundId) {
+    const metrics = await this.calculator.calculateMetrics();
+    const roundData = metrics.inseminationRounds[roundId];
+    
+    if (roundData) {
+      const metricsContainer = this.container.querySelector('#insemination-round-metrics');
+      if (metricsContainer) {
+        metricsContainer.innerHTML = this.renderInseminationRoundMetrics(roundData);
+      }
+    }
   }
 }
 
