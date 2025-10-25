@@ -1,14 +1,14 @@
-// API Configuration
-export const API_BASE_URL = 'http://127.0.0.1:8000'
+// API Configuration - using same env var name as backend
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://farm-production-d087.up.railway.app'
 
-// Firebase Configuration
+// Firebase Configuration - using same structure as original frontend
 export const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBUh9T0UFdlwuXZ2rYEzik1REYW2BMGidc",
   authDomain: "farm-4d233.firebaseapp.com",
   projectId: "farm-4d233",
   storageBucket: "farm-4d233.firebasestorage.app",
   messagingSenderId: "81362761765",
-  appId: "1:81362761765:web:2a786a669687c29b3867cc"
+  appId: "1:81361761765:web:2a786a669687c29b3867cc"
 }
 
 // API Endpoints
