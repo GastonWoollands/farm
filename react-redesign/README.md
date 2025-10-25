@@ -152,6 +152,28 @@ src/
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
 
+## 🚀 Vercel Deployment
+
+### Environment Variables
+
+To deploy to Vercel with the correct backend URL, set the following environment variable:
+
+1. Go to your Vercel project dashboard
+2. Navigate to Settings → Environment Variables
+3. Add a new variable:
+   - **Name**: `VITE_API_BASE_URL`
+   - **Value**: `https://farm-production-d087.up.railway.app`
+   - **Environment**: Production, Preview, Development
+
+### Deployment Steps
+
+1. Push your code to the repository
+2. Connect your repository to Vercel
+3. Set the environment variable as described above
+4. Deploy
+
+The app will automatically use the Railway backend URL when deployed to Vercel.
+
 ## 🤝 Contributing
 
 1. Fork the repository
