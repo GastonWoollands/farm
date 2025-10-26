@@ -20,8 +20,9 @@ import {
   Trash2
 } from 'lucide-react'
 import { formatDate, getGenderName } from '@/lib/utils'
-import { apiService, Animal, RegisterBody } from '@/services/api'
+import { apiService, Animal, RegisterBody, InseminationRound } from '@/services/api'
 import { usePrefixes } from '@/contexts/PrefixesContext'
+import { useEffect } from 'react'
 
 
 interface AnimalsPageProps {
@@ -36,6 +37,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
   const [isRegistering, setIsRegistering] = useState(false)
   const { prefixes } = usePrefixes()
   const [isRecordsExpanded, setIsRecordsExpanded] = useState(false)
+  const [inseminationRounds, setInseminationRounds] = useState<InseminationRound[]>([])
   const [formData, setFormData] = useState({
     animalNumber: prefixes.animalPrefix,
     rpAnimal: '',
@@ -50,8 +52,22 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
     color: '',
     notes: '',
     notesMother: '',
-    scrotalCircumference: ''
+    scrotalCircumference: '',
+    inseminationRoundId: ''
   })
+
+  // Fetch insemination rounds on mount
+  useEffect(() => {
+    const fetchInseminationRounds = async () => {
+      try {
+        const rounds = await apiService.getInseminationRounds()
+        setInseminationRounds(rounds)
+      } catch (error) {
+        console.error('Error fetching insemination rounds:', error)
+      }
+    }
+    fetchInseminationRounds()
+  }, [])
 
   const totalAnimals = animals.length
   const pendingAnimals = animals.filter(a => a.synced === false).length
@@ -88,7 +104,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         notes: formData.notes || undefined,
         notesMother: formData.notesMother || undefined,
         scrotalCircumference: formData.scrotalCircumference ? parseFloat(formData.scrotalCircumference) : undefined,
-        inseminationRoundId: '2024' // Default value
+        inseminationRoundId: formData.inseminationRoundId || undefined
       }
 
       // Add to local storage (replicates original frontend behavior)
@@ -136,7 +152,8 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         color: '',
         notes: '',
         notesMother: '',
-        scrotalCircumference: ''
+        scrotalCircumference: '',
+        inseminationRoundId: ''
       })
       setIsRegistering(false)
     } catch (err: any) {
@@ -440,6 +457,24 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         placeholder="Cualquier nota adicional"
                       />
                     </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="inseminationRoundId">Ronda de Inseminación</Label>
+                      <Select 
+                        value={formData.inseminationRoundId} 
+                        onValueChange={(value) => setFormData(prev => ({ ...prev, inseminationRoundId: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar ronda de inseminación (opcional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {inseminationRounds.map((round) => (
+                            <SelectItem key={round.id} value={round.insemination_round_id}>
+                              {round.insemination_round_id} ({round.initial_date} - {round.end_date})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
                   <div className="flex justify-end gap-3 pt-4">
@@ -459,7 +494,8 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         color: '',
                         notes: '',
                         notesMother: '',
-                        scrotalCircumference: ''
+                        scrotalCircumference: '',
+                        inseminationRoundId: ''
                       })
                     }}>
                       Cancelar

@@ -75,6 +75,17 @@ export interface RegistrationStats {
   maxWeight: number
 }
 
+export interface InseminationRound {
+  id: number
+  insemination_round_id: string
+  initial_date: string
+  end_date: string
+  notes?: string
+  company_id?: number
+  created_at: string
+  updated_at: string
+}
+
 export interface User {
   user_id: number
   firebase_uid: string
@@ -230,6 +241,11 @@ class ApiService {
     }
 
     return response.json()
+  }
+
+  // Fetch insemination rounds for the company
+  async getInseminationRounds(): Promise<InseminationRound[]> {
+    return this.request<InseminationRound[]>('/inseminations-ids/')
   }
 
   // User Context

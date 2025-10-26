@@ -34,12 +34,15 @@ conn.execute(
     """
     CREATE TABLE IF NOT EXISTS inseminations_ids (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        insemination_round_id TEXT NOT NULL UNIQUE,
+        insemination_round_id TEXT NOT NULL,
         initial_date DATE NOT NULL,
         end_date DATE NOT NULL,
         notes TEXT,
+        company_id INTEGER,
         created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now'))
+        updated_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE SET NULL,
+        UNIQUE(insemination_round_id, company_id)
     )
     """
 )
@@ -803,7 +806,34 @@ def migrate_add_registration_fields():
     except sqlite3.Error as e:
         print(f"Registration fields migration error: {e}")
 
-# Run the migration
+# Add company_id to inseminations_ids migration
+def migrate_add_company_id_to_inseminations_ids():
+    """Add company_id column to inseminations_ids table"""
+    try:
+        _add_column_safely("inseminations_ids", "company_id", "INTEGER")
+        
+        # Remove old unique constraint and add company-aware constraint
+        try:
+            conn.execute("DROP INDEX IF EXISTS sqlite_autoindex_inseminations_ids_1")
+        except:
+            pass
+        
+        # Create composite unique constraint
+        try:
+            conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS unique_insemination_round_company 
+                ON inseminations_ids(insemination_round_id, company_id)
+            """)
+        except:
+            pass
+        
+        conn.commit()
+        print("Company ID added to inseminations_ids table successfully")
+    except sqlite3.Error as e:
+        print(f"Inseminations IDs migration error: {e}")
+
+# Run the migrations
 migrate_add_registration_fields()
+migrate_add_company_id_to_inseminations_ids()
 
 

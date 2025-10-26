@@ -114,6 +114,7 @@ class InseminationIdBody(BaseModel):
     initial_date: str
     end_date: str
     notes: str | None = None
+    company_id: int | None = None
 
 
 class UpdateInseminationIdBody(BaseModel):
