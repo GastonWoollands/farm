@@ -201,15 +201,19 @@ function AppContent() {
 
     initializeApp()
     
-    // Register service worker for PWA
-    register({
-      onSuccess: (registration) => {
-        console.log('Service Worker registered successfully:', registration)
-      },
-      onUpdate: (registration) => {
-        console.log('Service Worker updated:', registration)
-      }
-    })
+    // Register service worker for PWA (only in production)
+    if (import.meta.env.PROD) {
+      register({
+        onSuccess: (registration) => {
+          console.log('Service Worker registered successfully:', registration)
+        },
+        onUpdate: (registration) => {
+          console.log('Service Worker updated:', registration)
+        }
+      })
+    } else {
+      console.log('Service Worker disabled in development')
+    }
     
     // Register PWA install prompt
     const installPrompt = registerPWAInstallPrompt()

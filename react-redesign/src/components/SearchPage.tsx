@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { 
   Search, 
   Filter, 
@@ -17,7 +18,8 @@ import {
   Calendar
 } from 'lucide-react'
 import { formatDate, getGenderName, getStatusName } from '@/lib/utils'
-import { Animal, apiService } from '@/services/api'
+import { Animal, apiService, UpdateBody } from '@/services/api'
+import { localStorageService } from '@/services/localStorage'
 
 interface SearchPageProps {
   animals: Animal[]
@@ -36,6 +38,11 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Edit dialog state
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingAnimal, setEditingAnimal] = useState<Animal | null>(null)
+  const [editFormData, setEditFormData] = useState<Partial<Animal>>({})
 
   // Debug logging
   console.log('SearchPage - animals received:', animals)
@@ -133,6 +140,81 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
       ...prev,
       [filterKey]: ''
     }))
+  }
+
+  const handleEdit = (animal: Animal) => {
+    setEditingAnimal(animal)
+    setEditFormData(animal)
+    setIsEditDialogOpen(true)
+  }
+
+  const handleEditSave = async () => {
+    if (!editingAnimal || !editFormData.animal_number) {
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // Check if this is a local record by checking if it has a local ID
+      const localRecords = await localStorageService.getRecords()
+      const localRecord = localRecords.find(r => 
+        r.animal_number === editingAnimal.animal_number && 
+        r.created_at === editingAnimal.created_at
+      )
+
+      if (localRecord) {
+        // Update in local storage
+        await localStorageService.updateRecord(localRecord.id, editFormData)
+        
+        // Try to sync if online
+        if (navigator.onLine) {
+          try {
+            await apiService.syncLocalRecords()
+          } catch (syncErr) {
+            console.warn('Sync failed after edit:', syncErr)
+          }
+        }
+      } else {
+        // Update directly on backend
+        const updateData: UpdateBody = {
+          animalNumber: editingAnimal.animal_number,
+          createdAt: editingAnimal.created_at || '',
+          rpAnimal: editFormData.rp_animal || undefined,
+          motherId: editFormData.mother_id || undefined,
+          rpMother: editFormData.rp_mother || undefined,
+          fatherId: editFormData.father_id || undefined,
+          bornDate: editFormData.born_date || undefined,
+          weight: editFormData.weight || undefined,
+          motherWeight: editFormData.mother_weight || undefined,
+          gender: editFormData.gender || undefined,
+          status: editFormData.status || undefined,
+          color: editFormData.color || undefined,
+          notes: editFormData.notes || undefined,
+          notesMother: editFormData.notes_mother || undefined,
+          scrotalCircumference: editFormData.scrotal_circumference || undefined,
+          inseminationRoundId: editFormData.insemination_round_id || undefined
+        }
+
+        await apiService.updateAnimal(updateData)
+      }
+
+      // Update the parent component with edited data
+      onAnimalsChange(animals.map(a => 
+        a.animal_number === editingAnimal.animal_number 
+          ? { ...a, ...editFormData }
+          : a
+      ))
+
+      setIsEditDialogOpen(false)
+      setEditingAnimal(null)
+      setEditFormData({})
+    } catch (err: any) {
+      setError(err.message || 'Error al actualizar el animal')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleDelete = async (animal: Animal) => {
@@ -383,16 +465,6 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Debug info - remove this after testing */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mb-4 p-2 bg-muted rounded text-xs">
-              <p>Debug: Animals received: {animals?.length || 0}</p>
-              <p>Debug: Filtered animals: {filteredAnimals?.length || 0}</p>
-              <p>Debug: Search term: "{searchTerm}"</p>
-              <p>Debug: Filters: {JSON.stringify(filters)}</p>
-            </div>
-          )}
-          
           {isLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
@@ -537,7 +609,7 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                     </div>
 
                     <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t">
-                      <Button size="sm" variant="ghost">
+                      <Button size="sm" variant="ghost" onClick={() => handleEdit(animal)} disabled={isLoading}>
                         <Edit className="h-4 w-4" />
                       </Button>
                       <Button 
@@ -557,6 +629,168 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Animal</DialogTitle>
+            <DialogDescription>
+              Modifica la información del animal {editFormData.animal_number}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-rp-animal">RP Animal</Label>
+              <Input
+                id="edit-rp-animal"
+                value={editFormData.rp_animal || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, rp_animal: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-mother-id">ID Madre</Label>
+              <Input
+                id="edit-mother-id"
+                value={editFormData.mother_id || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, mother_id: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-rp-mother">RP Madre</Label>
+              <Input
+                id="edit-rp-mother"
+                value={editFormData.rp_mother || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, rp_mother: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-father-id">ID Padre</Label>
+              <Input
+                id="edit-father-id"
+                value={editFormData.father_id || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, father_id: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-born-date">Fecha de Nacimiento</Label>
+              <Input
+                id="edit-born-date"
+                type="date"
+                value={editFormData.born_date || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, born_date: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-weight">Peso</Label>
+              <Input
+                id="edit-weight"
+                type="number"
+                step="0.1"
+                value={editFormData.weight || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, weight: parseFloat(e.target.value) || undefined })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-mother-weight">Peso Madre</Label>
+              <Input
+                id="edit-mother-weight"
+                type="number"
+                step="0.1"
+                value={editFormData.mother_weight || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, mother_weight: parseFloat(e.target.value) || undefined })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-gender">Sexo</Label>
+              <Select value={editFormData.gender || ''} onValueChange={(value) => setEditFormData({ ...editFormData, gender: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar sexo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FEMALE">Hembra</SelectItem>
+                  <SelectItem value="MALE">Macho</SelectItem>
+                  <SelectItem value="UNKNOWN">Desconocido</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-status">Estado</Label>
+              <Select value={editFormData.status || ''} onValueChange={(value) => setEditFormData({ ...editFormData, status: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALIVE">Vivo</SelectItem>
+                  <SelectItem value="DEAD">Muerto</SelectItem>
+                  <SelectItem value="UNKNOWN">Desconocido</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-color">Color</Label>
+              <Select value={editFormData.color || ''} onValueChange={(value) => setEditFormData({ ...editFormData, color: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar color" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="COLORADO">Colorado</SelectItem>
+                  <SelectItem value="NEGRO">Negro</SelectItem>
+                  <SelectItem value="OTHERS">Otros</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-scrotal">Circunferencia Escrotal (cm)</Label>
+              <Input
+                id="edit-scrotal"
+                type="number"
+                step="0.1"
+                value={editFormData.scrotal_circumference || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, scrotal_circumference: parseFloat(e.target.value) || undefined })}
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="edit-notes">Notas</Label>
+              <Input
+                id="edit-notes"
+                value={editFormData.notes || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="edit-notes-mother">Notas Madre</Label>
+              <Input
+                id="edit-notes-mother"
+                value={editFormData.notes_mother || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, notes_mother: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isLoading}>
+              Cancelar
+            </Button>
+            <Button onClick={handleEditSave} disabled={isLoading}>
+              {isLoading ? 'Guardando...' : 'Guardar Cambios'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

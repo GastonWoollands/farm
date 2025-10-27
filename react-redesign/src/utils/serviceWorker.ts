@@ -14,13 +14,14 @@ type Config = {
 
 export function register(config?: Config) {
   if ('serviceWorker' in navigator) {
-    const publicUrl = new URL(process.env.PUBLIC_URL || '', window.location.href)
+    // Use Vite's import.meta.env instead of process.env
+    const publicUrl = new URL(import.meta.env.BASE_URL || '', window.location.href)
     if (publicUrl.origin !== window.location.origin) {
       return
     }
 
     window.addEventListener('load', () => {
-      const swUrl = `${process.env.PUBLIC_URL || ''}/sw.js`
+      const swUrl = `${import.meta.env.BASE_URL || ''}/sw.js`
 
       if (isLocalhost) {
         // This is running on localhost. Let's check if a service worker still exists or not.
