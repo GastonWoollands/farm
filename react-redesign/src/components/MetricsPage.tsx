@@ -247,27 +247,47 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                     <div>
                       <h5 className="font-medium mb-2">Por Sexo</h5>
                       <div className="space-y-2">
-                        {currentRound.gender.map((item: any, index: number) => (
-                          <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded">
-                            <span className="text-sm">
-                              {item.gender === 'FEMALE' ? 'Hembras' : item.gender === 'MALE' ? 'Machos' : 'Desconocido'}
-                            </span>
-                            <Badge variant="secondary">{item.count}</Badge>
-                          </div>
-                        ))}
+                        {currentRound.gender.map((item: any, index: number) => {
+                          const total = currentRound.count
+                          const percentage = total > 0 ? Math.round((item.count / total) * 100) : 0
+                          return (
+                            <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded">
+                              <span className="text-sm">
+                                {item.gender === 'FEMALE' ? 'Hembras' : item.gender === 'MALE' ? 'Machos' : 'Desconocido'}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary">{item.count}</Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {percentage}%
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                     <div>
                       <h5 className="font-medium mb-2">Por Estado</h5>
                       <div className="space-y-2">
-                        {currentRound.status.map((item: any, index: number) => (
-                          <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded">
-                            <span className="text-sm">
-                              {item.status === 'ALIVE' ? 'Vivos' : item.status === 'DEAD' ? 'Muertos' : 'Desconocido'}
-                            </span>
-                            <Badge variant={item.status === 'ALIVE' ? 'default' : 'destructive'}>{item.count}</Badge>
-                          </div>
-                        ))}
+                        {currentRound.status.map((item: any, index: number) => {
+                          const total = currentRound.count
+                          const percentage = total > 0 ? Math.round((item.count / total) * 100) : 0
+                          return (
+                            <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded">
+                              <span className="text-sm">
+                                {item.status === 'ALIVE' ? 'Vivos' : item.status === 'DEAD' ? 'Muertos' : 'Desconocido'}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <Badge variant={item.status === 'ALIVE' ? 'default' : 'destructive'}>
+                                  {item.count}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {percentage}%
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   </CardContent>
