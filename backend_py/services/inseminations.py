@@ -10,7 +10,11 @@ def _normalize_text(value: str | None) -> str | None:
     return (value or "").strip().upper() or None
 
 def _validate_date(date_str: str) -> str:
-    """Validate and normalize date string to YYYY-MM-DD format"""
+    """Validate and normalize date string to YYYY-MM-DD format
+    
+    Prioritizes dd/mm/yyyy format for better user-friendliness.
+    Supports: dd/mm/yyyy, yyyy-mm-dd, dd-mm-yyyy, and other common formats.
+    """
     if not date_str:
         raise HTTPException(status_code=400, detail="Date is required")
     
@@ -20,19 +24,20 @@ def _validate_date(date_str: str) -> str:
             # Handle various date formats
             date_str = date_str.strip()
             
-            # Try ISO format first
+            # Try ISO format first (for API consistency)
             try:
                 parsed_date = _dt.datetime.fromisoformat(date_str.replace('Z', '+00:00'))
                 return parsed_date.strftime("%Y-%m-%d")
             except ValueError:
                 pass
             
-            # Try other common formats
+            # Prioritize dd/mm/yyyy format (user-friendly format)
             formats = [
-                "%Y-%m-%d",      # 2024-01-15
-                "%d/%m/%Y",       # 15/01/2024
-                "%m/%d/%Y",       # 01/15/2024
+                "%d/%m/%Y",       # 15/01/2024 (PRIORITY - dd/mm/yyyy)
+                "%d/%m/%y",       # 15/01/24 (short year)
                 "%d-%m-%Y",       # 15-01-2024
+                "%Y-%m-%d",       # 2024-01-15
+                "%m/%d/%Y",       # 01/15/2024 (fallback for mm/dd/yyyy)
                 "%Y-%m-%d %H:%M:%S",  # 2024-01-15 10:30:00
             ]
             
@@ -43,7 +48,7 @@ def _validate_date(date_str: str) -> str:
                 except ValueError:
                     continue
             
-            raise ValueError(f"Could not parse date: {date_str}")
+            raise ValueError(f"Could not parse date: {date_str}. Expected format: dd/mm/yyyy (e.g., 15/01/2024)")
         else:
             # If it's already a datetime object
             if hasattr(date_str, 'strftime'):
@@ -52,7 +57,10 @@ def _validate_date(date_str: str) -> str:
                 raise ValueError(f"Invalid date type: {type(date_str)}")
                 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid date format: {str(e)}. Use YYYY-MM-DD format")
+        error_msg = str(e)
+        if "Could not parse date" in error_msg:
+            raise HTTPException(status_code=400, detail=f"Invalid date format: {error_msg}")
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {error_msg}. Use dd/mm/yyyy format (e.g., 15/01/2024)")
 
 def insert_insemination(created_by: str, body: InseminationBody, company_id: int = None) -> int:
     """Insert a new insemination record"""

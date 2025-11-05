@@ -68,11 +68,15 @@ async def parse_insemination_file(file: UploadFile, insemination_round_id: str) 
     content = await file.read()
     
     # Determine file type
+    # Read files without auto-parsing dates to preserve dd/mm/yyyy format
+    # This prevents pandas from misinterpreting dates as mm/dd/yyyy
     filename = file.filename.lower() if file.filename else ""
     if filename.endswith('.csv'):
-        df = pd.read_csv(io.BytesIO(content))
+        # Read CSV without auto-parsing dates - preserve original format
+        df = pd.read_csv(io.BytesIO(content), parse_dates=False, keep_default_na=False)
     elif filename.endswith(('.xlsx', '.xls')):
-        df = pd.read_excel(io.BytesIO(content))
+        # For Excel files, read without auto-parsing dates to preserve dd/mm/yyyy format
+        df = pd.read_excel(io.BytesIO(content), parse_dates=False, keep_default_na=False)
     else:
         raise HTTPException(status_code=400, detail="File must be CSV or XLSX format")
     
@@ -246,12 +250,25 @@ async def upload_inseminations_from_file(
                     if 'date' in row and pd.notna(row['date']):
                         date_value = row['date']
                         # Convert date to string format
+                        # Handle pandas auto-parsed dates (which might be in mm/dd/yyyy format)
                         if isinstance(date_value, pd.Timestamp):
-                            insemination_date_str = date_value.strftime("%Y-%m-%d")
+                            # Convert to dd/mm/yyyy format first, then let _validate_date handle it
+                            # This ensures consistency with user-friendly format
+                            insemination_date_str = date_value.strftime("%d/%m/%Y")
                         elif isinstance(date_value, str):
-                            insemination_date_str = date_value
+                            # Preserve original format (should be dd/mm/yyyy)
+                            insemination_date_str = date_value.strip()
+                        elif isinstance(date_value, (int, float)):
+                            # Handle Excel date serial numbers if pandas auto-parsed them
+                            # Convert to datetime and then to dd/mm/yyyy format
+                            try:
+                                dt = pd.to_datetime(date_value, origin='1899-12-30', unit='D')
+                                insemination_date_str = dt.strftime("%d/%m/%Y")
+                            except:
+                                insemination_date_str = str(date_value).strip()
                         else:
-                            insemination_date_str = str(date_value)
+                            # For other types, convert to string
+                            insemination_date_str = str(date_value).strip()
                     else:
                         # Use round's initial_date as default
                         if default_insemination_date:
