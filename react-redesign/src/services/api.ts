@@ -86,6 +86,48 @@ export interface InseminationRound {
   updated_at: string
 }
 
+export interface Insemination {
+  id: number
+  insemination_identifier: string
+  insemination_round_id: string
+  mother_id: string
+  mother_visual_id?: string
+  bull_id?: string
+  insemination_date: string
+  registration_date: string
+  animal_type?: string
+  notes?: string
+  created_by: string
+  updated_at: string
+}
+
+export interface InseminationBody {
+  inseminationIdentifier: string
+  inseminationRoundId: string
+  motherId: string
+  motherVisualId?: string
+  bullId?: string
+  inseminationDate: string
+  animalType?: string
+  notes?: string
+}
+
+export interface InseminationRoundBody {
+  insemination_round_id: string
+  initial_date: string
+  end_date: string
+  notes?: string
+}
+
+export interface InseminationUploadResponse {
+  ok: boolean
+  message?: string
+  uploaded?: number
+  skipped?: number
+  errors?: string[]
+  warnings?: string[]
+}
+
 export interface User {
   user_id: number
   firebase_uid: string
@@ -246,6 +288,48 @@ class ApiService {
   // Fetch insemination rounds for the company
   async getInseminationRounds(): Promise<InseminationRound[]> {
     return this.request<InseminationRound[]>('/inseminations-ids/')
+  }
+
+  // Create a new insemination round
+  async createInseminationRound(body: InseminationRoundBody): Promise<{ id: number, message: string }> {
+    return this.request<{ id: number, message: string }>('/inseminations-ids/', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    })
+  }
+
+  // Get inseminations for the company
+  async getInseminations(limit: number = 100): Promise<{ inseminations: Insemination[], count: number }> {
+    return this.request<{ inseminations: Insemination[], count: number }>(`/inseminations/?limit=${limit}`)
+  }
+
+  // Upload inseminations from file (CSV/XLSX)
+  async uploadInseminations(file: File, inseminationRoundId: string, initialDate?: string, endDate?: string): Promise<InseminationUploadResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('inseminationRoundId', inseminationRoundId)
+    if (initialDate) formData.append('initialDate', initialDate)
+    if (endDate) formData.append('endDate', endDate)
+
+    const url = `${this.baseURL}/inseminations/upload`
+    const headers: Record<string, string> = {}
+    
+    if (this.authToken) {
+      headers['Authorization'] = `Bearer ${this.authToken}`
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    return await response.json()
   }
 
   // User Context

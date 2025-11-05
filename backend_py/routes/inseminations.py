@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Header, HTTPException, Request, Query
+from fastapi import APIRouter, Header, HTTPException, Request, Query, UploadFile, File, Form
 from ..models import InseminationBody, UpdateInseminationBody, DeleteInseminationBody
 from ..services.inseminations import (
     insert_insemination, update_insemination, delete_insemination,
@@ -8,10 +8,13 @@ from ..services.inseminations import (
 from ..services.inseminations_multi_tenant import (
     get_inseminations_multi_tenant, get_insemination_statistics_multi_tenant
 )
+from ..services.inseminations_upload import upload_inseminations_from_file
 from ..services.firebase_auth import verify_bearer_id_token
+from ..services.auth_service import authenticate_user, require_company_access
 import csv
 import io
 from fastapi.responses import Response
+from typing import Optional
 
 router = APIRouter()
 
@@ -165,3 +168,81 @@ def get_insemination_stats(request: Request):
     
     stats = get_insemination_statistics_multi_tenant(user)
     return stats
+
+
+@router.post("/inseminations/upload")
+async def upload_inseminations(
+    request: Request,
+    file: UploadFile = File(...),
+    inseminationRoundId: str = Form(...),
+    initialDate: Optional[str] = Form(None),
+    endDate: Optional[str] = Form(None)
+):
+    """
+    Upload inseminations from CSV/XLSX file with strict company_id enforcement
+    
+    Args:
+        file: CSV or XLSX file with insemination data
+        inseminationRoundId: Round ID for all inseminations
+        initialDate: Optional start date for round update
+        endDate: Optional end date for round update
+    
+    Returns:
+        Upload results with counts and errors
+    """
+    # Authenticate user and get company_id
+    user, company_id = authenticate_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    # STRICT VALIDATION: Require company access
+    require_company_access(user)
+    
+    # Get user ID
+    firebase_uid = user.get('firebase_uid')
+    if not firebase_uid:
+        raise HTTPException(status_code=401, detail="User ID not found")
+    
+    # STRICT VALIDATION: Ensure company_id is set
+    if company_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Company ID is required. Cannot upload inseminations without company association. Please contact an administrator."
+        )
+    
+    # Validate file type
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File name is required")
+    
+    filename_lower = file.filename.lower()
+    if not (filename_lower.endswith('.csv') or filename_lower.endswith('.xlsx') or filename_lower.endswith('.xls')):
+        raise HTTPException(status_code=400, detail="File must be CSV or XLSX format")
+    
+    # Upload and process file
+    try:
+        result = await upload_inseminations_from_file(
+            file=file,
+            insemination_round_id=inseminationRoundId,
+            created_by=firebase_uid,
+            company_id=company_id,  # STRICTLY ENFORCED - must match authenticated user's company
+            initial_date=initialDate,
+            end_date=endDate
+        )
+        
+        message = f"Successfully uploaded {result['uploaded']} inseminations. {result['skipped']} rows skipped."
+        if result.get("warnings"):
+            message += f" Info: {result['warnings'][0]}"
+        
+        return {
+            "ok": result["ok"],
+            "uploaded": result["uploaded"],
+            "skipped": result["skipped"],
+            "errors": result["errors"],
+            "warnings": result.get("warnings", []),
+            "total_rows": result["total_rows"],
+            "message": message
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")

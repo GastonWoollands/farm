@@ -382,9 +382,14 @@ def create_inseminations_table():
             """
         )
         
-        # Create unique constraint to prevent duplicate inseminations for same cow on same date
+        # Create unique constraint to prevent duplicate inseminations for same cow on same date per company
+        # This ensures company_id is part of the uniqueness constraint to prevent cross-company data conflicts
         conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_mother_insemination_date ON inseminations(mother_id, insemination_date)"
+            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_mother_insemination_date_company ON inseminations(mother_id, insemination_date, company_id)"
+        )
+        # Keep old index for backward compatibility (can be removed in future migration)
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_mother_insemination_date ON inseminations(mother_id, insemination_date) WHERE company_id IS NULL"
         )
         
         # Create indexes for performance optimization

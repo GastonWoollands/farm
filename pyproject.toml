@@ -13,6 +13,7 @@ firebase-admin = ">=7.1.0,<8.0.0"
 google-cloud-storage = ">=3.4.1,<4.0.0"
 pandas = "^2.3.3"
 openpyxl = "^3.1.5"
+python-multipart = "^0.0.20"
 
 [tool.poetry.group.dev.dependencies]
 commitizen = "^4.9.1"

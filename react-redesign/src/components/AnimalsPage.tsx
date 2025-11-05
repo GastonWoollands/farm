@@ -17,12 +17,14 @@ import {
   Clock,
   CheckCircle,
   Edit,
-  Trash2
+  Trash2,
+  Upload
 } from 'lucide-react'
 import { formatDate, getGenderName } from '@/lib/utils'
 import { apiService, Animal, RegisterBody, InseminationRound } from '@/services/api'
 import { usePrefixes } from '@/contexts/PrefixesContext'
 import { useEffect } from 'react'
+import { InseminationsUploadDialog } from './InseminationsUploadDialog'
 
 
 interface AnimalsPageProps {
@@ -35,6 +37,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isRegistering, setIsRegistering] = useState(false)
+  const [isUploadingInseminations, setIsUploadingInseminations] = useState(false)
   const { prefixes } = usePrefixes()
   const [isRecordsExpanded, setIsRecordsExpanded] = useState(false)
   const [inseminationRounds, setInseminationRounds] = useState<InseminationRound[]>([])
@@ -56,16 +59,18 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
     inseminationRoundId: ''
   })
 
+  // Fetch insemination rounds
+  const fetchInseminationRounds = async () => {
+    try {
+      const rounds = await apiService.getInseminationRounds()
+      setInseminationRounds(rounds)
+    } catch (error) {
+      console.error('Error fetching insemination rounds:', error)
+    }
+  }
+
   // Fetch insemination rounds on mount
   useEffect(() => {
-    const fetchInseminationRounds = async () => {
-      try {
-        const rounds = await apiService.getInseminationRounds()
-        setInseminationRounds(rounds)
-      } catch (error) {
-        console.error('Error fetching insemination rounds:', error)
-      }
-    }
     fetchInseminationRounds()
   }, [])
 
@@ -600,21 +605,40 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         </CardContent>
       </Card>
 
-      {/* Inseminations Section - Coming Soon */}
-      <Card className="opacity-50">
+      {/* Inseminations Section */}
+      <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Inseminaciones
-          </CardTitle>
-          <CardDescription>
-            Próximamente - Gestión de inseminaciones
-          </CardDescription>
+          <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Inseminaciones
+              </CardTitle>
+              <CardDescription>
+                Gestiona las inseminaciones mediante carga de archivos CSV o XLSX
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Esta funcionalidad estará disponible próximamente</p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <InseminationsUploadDialog
+              open={isUploadingInseminations}
+              onOpenChange={setIsUploadingInseminations}
+              onSuccess={() => {
+                // Refresh insemination rounds after successful upload
+                fetchInseminationRounds()
+                onStatsChange()
+              }}
+            />
+            <Button
+              className="gap-2 w-full sm:w-auto"
+              onClick={() => setIsUploadingInseminations(true)}
+            >
+              <Upload className="h-4 w-4" />
+              <span className="hidden sm:inline">Subir Inseminaciones</span>
+              <span className="sm:hidden">Subir</span>
+            </Button>
           </div>
         </CardContent>
       </Card>

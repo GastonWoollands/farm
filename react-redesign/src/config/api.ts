@@ -19,5 +19,7 @@ export const API_ENDPOINTS = {
   STATS: '/export-multi-tenant',          // Use export-multi-tenant for stats (will calculate from data)
   USERS: '/users',
   COMPANIES: '/companies',
-  USER_CONTEXT: '/user-context'
+  USER_CONTEXT: '/user-context',
+  INSEMINATIONS: '/inseminations',
+  INSEMINATION_ROUNDS: '/inseminations-ids'
 } as const
