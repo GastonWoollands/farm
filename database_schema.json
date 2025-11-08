@@ -1,0 +1,151 @@
+{
+  "db": {
+    "type": "SQLite",
+    "file": "backend_py/data/farm.db",
+    "multi_tenant": true
+  },
+  "tables": {
+    "companies": {
+      "cols": {
+        "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+        "name": "TEXT NOT NULL",
+        "description": "TEXT",
+        "created_at": "TEXT DEFAULT (datetime('now'))",
+        "updated_at": "TEXT DEFAULT (datetime('now'))",
+        "is_active": "BOOLEAN DEFAULT 1"
+      },
+      "rel": {"1:N": ["users", "registrations", "inseminations", "events_state", "inseminations_ids"]}
+    },
+    "users": {
+      "cols": {
+        "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+        "firebase_uid": "TEXT NOT NULL UNIQUE",
+        "email": "TEXT NOT NULL UNIQUE",
+        "display_name": "TEXT",
+        "company_id": "INTEGER FK→companies(id) ON DELETE SET NULL",
+        "role": "TEXT DEFAULT 'admin'",
+        "is_active": "BOOLEAN DEFAULT 1",
+        "created_at": "TEXT DEFAULT (datetime('now'))",
+        "updated_at": "TEXT DEFAULT (datetime('now'))"
+      },
+      "rel": {"N:1": "companies"}
+    },
+    "roles": {
+      "cols": {
+        "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+        "name": "TEXT NOT NULL UNIQUE",
+        "description": "TEXT",
+        "permissions": "TEXT",
+        "created_at": "TEXT DEFAULT (datetime('now'))"
+      },
+      "defaults": {"1": "admin", "2": "manager", "3": "viewer"}
+    },
+    "animal_types": {
+      "cols": {
+        "id": "INTEGER PRIMARY KEY",
+        "name": "TEXT NOT NULL UNIQUE",
+        "description": "TEXT"
+      },
+      "defaults": {"1": "cow", "2": "bull"}
+    },
+    "inseminations_ids": {
+      "cols": {
+        "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+        "insemination_round_id": "TEXT NOT NULL",
+        "initial_date": "DATE NOT NULL",
+        "end_date": "DATE NOT NULL",
+        "notes": "TEXT",
+        "company_id": "INTEGER FK→companies(id) ON DELETE SET NULL",
+        "created_at": "TEXT DEFAULT (datetime('now'))",
+        "updated_at": "TEXT DEFAULT (datetime('now'))"
+      },
+      "unique": ["insemination_round_id", "company_id"],
+      "rel": {"N:1": "companies"}
+    },
+    "registrations": {
+      "cols": {
+        "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+        "short_id": "TEXT UNIQUE",
+        "animal_number": "TEXT NOT NULL",
+        "created_at": "TEXT NOT NULL",
+        "user_key": "TEXT",
+        "created_by": "TEXT",
+        "company_id": "INTEGER FK→companies(id) ON DELETE SET NULL",
+        "mother_id": "TEXT",
+        "father_id": "TEXT",
+        "born_date": "TEXT",
+        "weight": "REAL",
+        "gender": "TEXT",
+        "animal_type": "INTEGER",
+        "status": "TEXT",
+        "color": "TEXT",
+        "notes": "TEXT",
+        "notes_mother": "TEXT",
+        "insemination_round_id": "TEXT",
+        "insemination_identifier": "TEXT",
+        "scrotal_circumference": "REAL",
+        "rp_animal": "TEXT",
+        "rp_mother": "TEXT",
+        "mother_weight": "REAL"
+      },
+      "unique": ["user_key+animal_number+mother_id+father_id", "created_by+animal_number+mother_id+father_id"],
+      "rel": {"N:1": "companies", "1:N": "events_state"},
+      "triggers": ["track_registration_insert", "track_registration_update"]
+    },
+    "inseminations": {
+      "cols": {
+        "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+        "insemination_identifier": "TEXT NOT NULL",
+        "insemination_round_id": "TEXT NOT NULL",
+        "mother_id": "TEXT NOT NULL",
+        "mother_visual_id": "TEXT",
+        "bull_id": "TEXT",
+        "insemination_date": "DATE NOT NULL",
+        "registration_date": "TEXT NOT NULL DEFAULT (datetime('now'))",
+        "animal_type": "TEXT",
+        "notes": "TEXT",
+        "created_by": "TEXT NOT NULL",
+        "company_id": "INTEGER FK→companies(id) ON DELETE SET NULL",
+        "updated_at": "TEXT DEFAULT (datetime('now'))"
+      },
+      "unique": ["mother_id+insemination_date+company_id"],
+      "rel": {"N:1": "companies"},
+      "triggers": ["track_insemination_insert", "track_insemination_update", "track_insemination_delete"]
+    },
+    "events_state": {
+      "cols": {
+        "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+        "animal_id": "INTEGER NOT NULL FK→registrations(id) ON DELETE CASCADE",
+        "animal_number": "TEXT NOT NULL",
+        "event_type": "TEXT NOT NULL",
+        "modified_field": "TEXT",
+        "old_value": "TEXT",
+        "new_value": "TEXT",
+        "user_id": "TEXT NOT NULL",
+        "company_id": "INTEGER FK→companies(id) ON DELETE SET NULL",
+        "event_date": "TEXT NOT NULL DEFAULT (datetime('now'))",
+        "notes": "TEXT"
+      },
+      "event_types": ["born", "death", "correccion", "inseminacion", "eliminacion_inseminacion"],
+      "rel": {"N:1": ["registrations", "companies"]}
+    }
+  },
+  "logical_rels": {
+    "inseminations→registrations": ["mother_id", "insemination_identifier"],
+    "inseminations_ids→inseminations": "insemination_round_id",
+    "animal_types→registrations": "animal_type"
+  },
+  "multi_tenant": {
+    "col": "company_id",
+    "tables": ["registrations", "inseminations", "events_state", "inseminations_ids"]
+  },
+  "auth": {
+    "primary": "Firebase",
+    "legacy": "user_key"
+  },
+  "roles": {
+    "admin": "Full access",
+    "manager": "Manage data",
+    "viewer": "Read-only"
+  }
+}
