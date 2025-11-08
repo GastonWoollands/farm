@@ -139,9 +139,11 @@ export interface User {
 }
 
 export interface Company {
-  company_id: number
+  id?: number  // Backend returns 'id' from user_context
+  company_id?: number  // Some endpoints may use 'company_id'
   name: string
-  created_at: string
+  created_at?: string
+  has_company?: boolean
 }
 
 // API Service Class
@@ -335,6 +337,28 @@ class ApiService {
   // User Context
   async getUserContext(): Promise<{ user: User, company: Company | null }> {
     return this.request<{ user: User, company: Company | null }>(`${API_ENDPOINTS.USER_CONTEXT}/context`)
+  }
+
+  // Chatbot
+  async askChatbot(question: string, history?: Array<{ user: string, bot: string }>): Promise<{
+    final_answer: string
+    history: Array<{ user: string, bot: string }>
+    sql?: string
+    error?: string
+    question: string
+    success: boolean
+  }> {
+    return this.request<{
+      final_answer: string
+      history: Array<{ user: string, bot: string }>
+      sql?: string
+      error?: string
+      question: string
+      success: boolean
+    }>(`${API_ENDPOINTS.CHATBOT}/ask`, {
+      method: 'POST',
+      body: JSON.stringify({ question, history: history || [] })
+    })
   }
 
   // Sync functionality - replicates original frontend behavior

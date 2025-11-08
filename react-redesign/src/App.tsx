@@ -21,6 +21,7 @@ import { MetricsPage } from './components/MetricsPage'
 import { AnimalsPage } from './components/AnimalsPage'
 import { SearchPage } from './components/SearchPage'
 import { SettingsPage } from './components/SettingsPage'
+import { Chatbot } from './components/Chatbot'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { PrefixesProvider } from './contexts/PrefixesContext'
 import { authService, AuthUser } from './services/auth'
@@ -33,6 +34,7 @@ interface AppState {
   isOnline: boolean
   pendingCount: number
   currentCompany: string
+  currentCompanyId: number | null
   animals: Animal[] // All animals for metrics
   displayAnimals: Animal[] // Recent animals for UI display
   stats: RegistrationStats | null
@@ -44,6 +46,7 @@ function AppContent() {
     isOnline: false,
     pendingCount: 0,
     currentCompany: 'Personal Data',
+    currentCompanyId: null,
     animals: [],
     displayAnimals: [],
     stats: null
@@ -71,7 +74,9 @@ function AppContent() {
               
               setAppState(prev => ({
                 ...prev,
-                currentCompany: context.company?.name || 'Personal Data'
+                currentCompany: context.company?.name || 'Personal Data',
+                // Backend returns company.id from user_context endpoint
+                currentCompanyId: context.company?.id || context.company?.company_id || null
               }))
               
               // Load all records for metrics calculation
@@ -295,6 +300,7 @@ function AppContent() {
                 <span>{appState.currentCompany}</span>
               </div>
             </div>
+            
           </div>
 
           {/* Desktop Layout */}
@@ -439,6 +445,9 @@ function AppContent() {
           <span>API: {import.meta.env.VITE_API_BASE_URL || 'localhost:8000'}</span>
         </div>
       </footer>
+
+      {/* Chatbot */}
+      <Chatbot companyId={appState.currentCompanyId} />
     </div>
   )
 }

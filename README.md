@@ -107,6 +107,41 @@ python -m http.server 8000
 - `PUT /registrations/{id}` - Update animal
 - `DELETE /registrations/{id}` - Delete animal
 
+## Database Schema
+
+The system uses SQLite with a multi-tenant architecture. For complete database schema documentation, see [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md).
+
+### Core Tables
+
+1. **companies** - Company/organization information for multi-tenant data isolation
+2. **users** - User accounts linked to Firebase authentication
+3. **registrations** - Animal registration/birth records
+4. **inseminations** - Artificial insemination records
+5. **inseminations_ids** - Insemination round/period definitions
+6. **events_state** - Audit log tracking all changes
+7. **animal_types** - Lookup table for animal classifications
+8. **roles** - Role definitions and permissions
+
+### Key Relationships
+
+- **Companies** → **Users** (one-to-many)
+- **Companies** → **Registrations** (one-to-many)
+- **Companies** → **Inseminations** (one-to-many)
+- **Registrations** → **Events** (one-to-many)
+- **Inseminations** ↔ **Registrations** (logical via mother_id and insemination_identifier)
+
+### Multi-Tenant Architecture
+
+All major tables include a `company_id` column for data isolation:
+- Data is filtered by company_id at the application level
+- Users must belong to a company to access company-specific data
+- Legacy users (without company_id) can only access their own data
+
+### Schema Files
+
+- **DATABASE_SCHEMA.md** - Human-readable database documentation
+- **database_schema.json** - Machine-readable schema for LLM consumption
+
 ## Data Model
 
 ### Animal Registration

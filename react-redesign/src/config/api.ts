@@ -21,5 +21,6 @@ export const API_ENDPOINTS = {
   COMPANIES: '/companies',
   USER_CONTEXT: '/user-context',
   INSEMINATIONS: '/inseminations',
-  INSEMINATION_ROUNDS: '/inseminations-ids'
+  INSEMINATION_ROUNDS: '/inseminations-ids',
+  CHATBOT: '/chatbot'
 } as const
