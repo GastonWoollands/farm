@@ -43,6 +43,11 @@ export function Chatbot({ companyId }: ChatbotProps) {
     
     if (!question.trim() || isLoading) return
 
+    // Dismiss keyboard on mobile
+    if (inputRef.current) {
+      inputRef.current.blur()
+    }
+
     const userQuestion = question.trim()
     setQuestion('')
     setIsLoading(true)
@@ -204,14 +209,19 @@ export function Chatbot({ companyId }: ChatbotProps) {
                   placeholder="Pregunta sobre tus datos..."
                   disabled={isLoading}
                   rows={1}
-                  className="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none overflow-y-auto max-h-32"
+                  className="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none overflow-y-auto max-h-32"
                   style={{ 
                     wordWrap: 'break-word',
-                    overflowWrap: 'break-word'
+                    overflowWrap: 'break-word',
+                    fontSize: '16px' // Prevent iOS zoom on focus
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
+                      // Dismiss keyboard immediately
+                      if (inputRef.current) {
+                        inputRef.current.blur()
+                      }
                       handleSubmit(e)
                     }
                   }}
