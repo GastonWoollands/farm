@@ -87,7 +87,7 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
             <User className="w-6 h-6 text-primary-foreground" />
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold">LiveStock</CardTitle>
+            <CardTitle className="text-2xl font-bold">TAG</CardTitle>
             <CardDescription>
               {isSignUp ? 'Crea tu cuenta para comenzar' : 'Inicia sesión para continuar'}
             </CardDescription>

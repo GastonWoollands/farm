@@ -288,7 +288,7 @@ function AppContent() {
             {/* Centered title and company */}
             <div className="flex flex-col items-center text-center">
               <h1 className="text-xl font-bold tracking-tight">
-                LiveStock
+                TAG
                 {appState.pendingCount > 0 && (
                   <Badge variant="secondary" className="ml-2 text-xs">
                     {appState.pendingCount}
@@ -325,7 +325,7 @@ function AppContent() {
             {/* Center - Title and company info */}
             <div className="flex flex-col items-center text-center">
               <h1 className="text-2xl font-bold tracking-tight">
-                LiveStock
+                TAG
                 {appState.pendingCount > 0 && (
                   <Badge variant="secondary" className="ml-2 text-xs">
                     {appState.pendingCount}
