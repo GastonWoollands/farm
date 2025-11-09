@@ -102,7 +102,10 @@ export function Chatbot({ companyId }: ChatbotProps) {
           />
 
           {/* Sidebar - responsive width */}
-          <div className="fixed left-0 top-0 h-full w-full sm:max-w-md bg-background border-r shadow-xl flex flex-col animate-in slide-in-from-left duration-300">
+          <div 
+            className="fixed left-0 top-0 h-full w-full sm:max-w-md bg-background border-r shadow-xl flex flex-col animate-in slide-in-from-left duration-300 z-50"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b">
               <div className="flex items-center gap-2">
@@ -114,7 +117,10 @@ export function Chatbot({ companyId }: ChatbotProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={handleClear}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleClear()
+                    }}
                     className="text-xs"
                   >
                     Limpiar
@@ -123,7 +129,12 @@ export function Chatbot({ companyId }: ChatbotProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setIsOpen(false)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsOpen(false)
+                  }}
+                  className="relative z-10"
+                  aria-label="Cerrar chatbot"
                 >
                   <X className="h-4 w-4" />
                 </Button>

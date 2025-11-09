@@ -28,9 +28,11 @@ from chatbot.config import ChatbotConfig
 from chatbot.graph import ChatbotGraph
 
 # Initialize configuration
+# API key will be read from GOOGLE_API_KEY or GEMINI_API_KEY environment variable
 config = ChatbotConfig(
     company_id="2",  # Get from authenticated user
     llm_model="gemini-2.0-flash-exp"
+    # google_api_key can also be passed directly, but using env var is recommended
 )
 
 # Create chatbot
@@ -46,10 +48,13 @@ print(result["final_answer"])
 Configuration can be set via:
 - Constructor parameters
 - Environment variables:
+  - `GOOGLE_API_KEY` or `GEMINI_API_KEY` - **REQUIRED** - Google API key for Gemini LLM
   - `DB_PATH` - Path to SQLite database
   - `SCHEMA_PATH` - Path to database schema JSON
   - `COMPANY_ID` - Company ID for multi-tenant filtering
   - `LLM_MODEL` - Gemini model name (default: gemini-2.0-flash-exp)
+
+**Important**: The `GOOGLE_API_KEY` or `GEMINI_API_KEY` environment variable must be set for the chatbot to work. This is used to authenticate with Google's Gemini API.
 
 ## Security
 
