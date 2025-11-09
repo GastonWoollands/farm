@@ -4,7 +4,6 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { MessageCircle, X, Send, Loader2 } from 'lucide-react'
 import { chatbotService, ChatbotMessage } from '@/services/chatbot'
 
@@ -18,7 +17,7 @@ export function Chatbot({ companyId }: ChatbotProps) {
   const [messages, setMessages] = useState<ChatbotMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -86,7 +85,7 @@ export function Chatbot({ companyId }: ChatbotProps) {
         className="fixed right-4 bottom-24 z-40 h-12 w-12 rounded-full shadow-lg hover:shadow-xl transition-all"
         size="icon"
         aria-label="Open chatbot"
-        title={companyId ? "Abrir asistente SQL" : "Asistente SQL no disponible (sin compañía)"}
+        title={companyId ? "Abrir asistente" : "Asistente no disponible (sin compañía)"}
         disabled={!companyId}
       >
         <MessageCircle className="h-5 w-5" />
@@ -110,7 +109,7 @@ export function Chatbot({ companyId }: ChatbotProps) {
             <div className="flex items-center justify-between p-4 border-b">
               <div className="flex items-center gap-2">
                 <MessageCircle className="h-5 w-5" />
-                <h2 className="text-lg font-semibold">Asistente SQL</h2>
+                <h2 className="text-lg font-semibold">Asistente</h2>
               </div>
               <div className="flex items-center gap-2">
                 {messages.length > 0 && (
@@ -148,16 +147,17 @@ export function Chatbot({ companyId }: ChatbotProps) {
                   <div className="space-y-3">
                     <MessageCircle className="h-10 w-10 mx-auto opacity-50" />
                     <div className="space-y-1">
-                      <p className="text-sm font-medium">Asistente SQL</p>
+                      <p className="text-sm font-medium">Asistente de Datos</p>
                       <p className="text-xs opacity-75">
-                        Haz preguntas sobre tus datos en lenguaje natural
+                        Haz preguntas sobre tu granja en lenguaje natural
                       </p>
                     </div>
                     <div className="pt-4 space-y-1 text-xs opacity-60">
-                      <p>Ejemplos:</p>
-                      <p>"¿Cuántos registros hay?"</p>
+                      <p className="font-medium mb-2">Ejemplos de preguntas:</p>
+                      <p>"¿Cuántos animales tengo registrados?"</p>
                       <p>"Dame los terneros de mayor peso"</p>
                       <p>"¿Cuántas inseminaciones hay en 2025?"</p>
+                      <p>"Muestra las madres con mayor peso"</p>
                     </div>
                   </div>
                 </div>
@@ -196,25 +196,37 @@ export function Chatbot({ companyId }: ChatbotProps) {
 
             {/* Input */}
             <form onSubmit={handleSubmit} className="p-4 border-t">
-              <div className="flex gap-2">
-                <Input
-                  ref={inputRef}
+              <div className="flex gap-2 items-end">
+                <textarea
+                  ref={inputRef as React.RefObject<HTMLTextAreaElement>}
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
                   placeholder="Pregunta sobre tus datos..."
                   disabled={isLoading}
-                  className="flex-1"
+                  rows={1}
+                  className="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none overflow-y-auto max-h-32"
+                  style={{ 
+                    wordWrap: 'break-word',
+                    overflowWrap: 'break-word'
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
                       handleSubmit(e)
                     }
                   }}
+                  onInput={(e) => {
+                    // Auto-resize textarea
+                    const target = e.target as HTMLTextAreaElement
+                    target.style.height = 'auto'
+                    target.style.height = `${Math.min(target.scrollHeight, 128)}px`
+                  }}
                 />
                 <Button
                   type="submit"
                   disabled={!question.trim() || isLoading}
                   size="icon"
+                  className="flex-shrink-0"
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
