@@ -21,27 +21,35 @@ def _require_admin_auth(x_admin_secret: str | None = Header(default=None)):
 @router.post("/process", response_model=Dict)
 async def process_father_assignments(
     dry_run: bool = Query(False, description="If true, simulate the process without making changes"),
-    gestation_days: int = Query(300, description="Gestation period in days", ge=200, le=400),
+    gestation_days: int = Query(300, description="Maximum gestation period in days", ge=200, le=400),
+    min_gestation_days: int = Query(260, description="Minimum gestation period in days", ge=200, le=400),
     x_admin_secret: str | None = Header(default=None)
 ):
     """
     Process all registrations without father IDs and assign them based on insemination data.
     
+    Strict assignment rules:
+    - 260-300 days: assign bull_id from insemination
+    - > 300 days: assign 'REPASO'
+    - < 260 days: assign None (no assignment)
+    
     - **dry_run**: If true, simulates the process without making actual changes
-    - **gestation_days**: Gestation period in days (default: 300, range: 200-400)
+    - **gestation_days**: Maximum gestation period in days (default: 300, range: 200-400)
+    - **min_gestation_days**: Minimum gestation period in days (default: 260, range: 200-400)
     
     Returns processing results and statistics.
     """
     _require_admin_auth(x_admin_secret)
     
     try:
-        service = create_father_assignment_service(gestation_days)
+        service = create_father_assignment_service(gestation_days, min_gestation_days)
         results = service.process_all_registrations(dry_run=dry_run)
         
         return {
             "success": True,
             "dry_run": dry_run,
             "gestation_days": gestation_days,
+            "min_gestation_days": min_gestation_days,
             "results": results
         }
     except Exception as e:
@@ -90,18 +98,20 @@ async def get_pending_assignments():
 @router.post("/process-single", response_model=Dict)
 async def process_single_registration(
     registration_id: int = Query(..., description="ID of the registration to process"),
-    gestation_days: int = Query(300, description="Gestation period in days", ge=200, le=400)
+    gestation_days: int = Query(300, description="Maximum gestation period in days", ge=200, le=400),
+    min_gestation_days: int = Query(260, description="Minimum gestation period in days", ge=200, le=400)
 ):
     """
     Process a single registration for father ID assignment.
     
     - **registration_id**: ID of the registration to process
-    - **gestation_days**: Gestation period in days (default: 300, range: 200-400)
+    - **gestation_days**: Maximum gestation period in days (default: 300, range: 200-400)
+    - **min_gestation_days**: Minimum gestation period in days (default: 260, range: 200-400)
     
     Returns the result of processing this specific registration.
     """
     try:
-        service = create_father_assignment_service(gestation_days)
+        service = create_father_assignment_service(gestation_days, min_gestation_days)
         
         # Get the specific registration
         pending = service.get_registrations_without_father()
@@ -121,6 +131,7 @@ async def process_single_registration(
         return {
             "success": True,
             "gestation_days": gestation_days,
+            "min_gestation_days": min_gestation_days,
             "result": result
         }
     except HTTPException:
@@ -131,20 +142,22 @@ async def process_single_registration(
 
 @router.post("/validate-assignments", response_model=Dict)
 async def validate_assignments(
-    gestation_days: int = Query(300, description="Gestation period in days", ge=200, le=400)
+    gestation_days: int = Query(300, description="Maximum gestation period in days", ge=200, le=400),
+    min_gestation_days: int = Query(260, description="Minimum gestation period in days", ge=200, le=400)
 ):
     """
     Validate existing father ID assignments against insemination data.
     
-    - **gestation_days**: Gestation period in days (default: 300, range: 200-400)
+    - **gestation_days**: Maximum gestation period in days (default: 300, range: 200-400)
+    - **min_gestation_days**: Minimum gestation period in days (default: 260, range: 200-400)
     
     Returns validation results for existing assignments.
     """
     try:
-        service = create_father_assignment_service(gestation_days)
+        service = create_father_assignment_service(gestation_days, min_gestation_days)
         
         # Get all registrations with father IDs
-        cursor = service.conn.execute("""
+        cursor = conn.execute("""
             SELECT id, animal_number, mother_id, born_date, father_id, insemination_identifier
             FROM registrations 
             WHERE mother_id IS NOT NULL 
@@ -178,7 +191,10 @@ async def validate_assignments(
                     registration['born_date']
                 )
                 
-                if gestation_days_actual <= gestation_days:
+                # Apply strict rules: 260-300 days = bull_id, >300 = REPASO, <260 = None
+                if gestation_days_actual < min_gestation_days:
+                    expected_father = None  # Too short - should not be assigned
+                elif min_gestation_days <= gestation_days_actual <= gestation_days:
                     expected_father = matching_insem['bull_id'] or 'UNKNOWN'
                 else:
                     expected_father = 'REPASO'
@@ -203,6 +219,7 @@ async def validate_assignments(
         return {
             "success": True,
             "gestation_days": gestation_days,
+            "min_gestation_days": min_gestation_days,
             "total_validated": len(registrations),
             "valid_assignments": valid_count,
             "invalid_assignments": invalid_count,

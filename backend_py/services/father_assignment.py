@@ -12,8 +12,9 @@ from ..db import conn
 class FatherAssignmentService:
     """Service for assigning father IDs to registrations based on insemination data"""
     
-    def __init__(self, gestation_days: int = 300):
-        self.gestation_days = gestation_days
+    def __init__(self, gestation_days: int = 300, min_gestation_days: int = 260):
+        self.gestation_days = gestation_days  # Maximum gestation period (default: 300)
+        self.min_gestation_days = min_gestation_days  # Minimum gestation period (default: 260)
     
     def get_registrations_without_father(self) -> List[Dict]:
         """Get all registrations that don't have a father_id assigned"""
@@ -57,13 +58,18 @@ class FatherAssignmentService:
             raise Exception(f"Date parsing error: {e}")
     
     def find_matching_insemination(self, mother_id: str, born_date: str) -> Optional[Dict]:
-        """Find the most likely insemination that resulted in this birth"""
+        """Find the most likely insemination that resulted in this birth
+        
+        Returns the insemination if gestation is between min_gestation_days and gestation_days,
+        or the closest insemination if over gestation_days (for REPASO assignment).
+        Returns None if gestation is less than min_gestation_days.
+        """
         inseminations = self.get_inseminations_by_mother(mother_id)
         
         if not inseminations:
             return None
         
-        # Find the closest insemination within gestation period
+        # Find the closest insemination within valid gestation period
         best_match = None
         min_days_over = float('inf')
         
@@ -74,19 +80,20 @@ class FatherAssignmentService:
                     born_date
                 )
                 
-                # If within normal gestation period, this is a match
-                if gestation_days <= self.gestation_days:
+                # If within valid gestation period (260-300 days), this is a match
+                if self.min_gestation_days <= gestation_days <= self.gestation_days:
                     return insem
                 
-                # If over gestation period, track the closest one
-                if gestation_days < min_days_over:
+                # If over maximum gestation period, track the closest one (for REPASO)
+                if gestation_days > self.gestation_days and gestation_days < min_days_over:
                     min_days_over = gestation_days
                     best_match = insem
                     
             except Exception:
                 continue
         
-        # If no insemination within normal period, return closest (will be marked as REPASO)
+        # If no insemination within valid period, return closest over max (will be marked as REPASO)
+        # If gestation is less than min_gestation_days, return None (no assignment)
         return best_match
     
     def assign_father_id(self, registration_id: int, father_id: str, insemination_identifier: str = None) -> bool:
@@ -134,11 +141,21 @@ class FatherAssignmentService:
             )
             result['gestation_days'] = gestation_days
             
-            # Determine father ID
-            if gestation_days <= self.gestation_days:
+            # Determine father ID based on strict rules:
+            # - 260-300 days: assign bull_id from insemination
+            # - > 300 days: assign 'REPASO'
+            # - < 260 days: assign None (don't assign)
+            if gestation_days < self.min_gestation_days:
+                # Gestation too short - don't assign father
+                result['status'] = 'too_short'
+                result['assigned_father'] = None
+                return result
+            elif self.min_gestation_days <= gestation_days <= self.gestation_days:
+                # Valid gestation period - assign bull_id
                 assigned_father = matching_insem['bull_id'] or 'UNKNOWN'
                 result['status'] = 'assigned'
             else:
+                # Gestation over maximum - assign REPASO
                 assigned_father = 'REPASO'
                 result['status'] = 'repaso'
             
@@ -168,6 +185,7 @@ class FatherAssignmentService:
             'total_processed': len(registrations),
             'assigned': 0,
             'repaso': 0,
+            'too_short': 0,
             'no_insemination': 0,
             'errors': 0,
             'processing_time_seconds': 0,
@@ -194,6 +212,8 @@ class FatherAssignmentService:
                 results['assigned'] += 1
             elif result['status'] == 'repaso':
                 results['repaso'] += 1
+            elif result['status'] == 'too_short':
+                results['too_short'] += 1
             elif result['status'] == 'no_insemination':
                 results['no_insemination'] += 1
             elif result['status'] == 'error':
@@ -227,6 +247,6 @@ class FatherAssignmentService:
             raise Exception(f"Database error fetching stats: {e}")
 
 
-def create_father_assignment_service(gestation_days: int = 300) -> FatherAssignmentService:
+def create_father_assignment_service(gestation_days: int = 300, min_gestation_days: int = 260) -> FatherAssignmentService:
     """Factory function to create a FatherAssignmentService instance"""
-    return FatherAssignmentService(gestation_days)
+    return FatherAssignmentService(gestation_days, min_gestation_days)

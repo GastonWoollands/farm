@@ -15,32 +15,39 @@ jobs:
         API_BASE_URL: ${{ secrets.API_BASE_URL }}
         ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
         GESTATION_DAYS: ${{ secrets.GESTATION_DAYS || '300' }}
+        MIN_GESTATION_DAYS: ${{ secrets.MIN_GESTATION_DAYS || '260' }}
       run: |
         echo "🐄 Daily Father Assignment - $(date)"
         echo "====================================="
+        echo "Rules: 260-300 days = assign bull_id, >300 = REPASO, <260 = None"
+        echo ""
         
-        # Run the father assignment process
+        # Run the father assignment process with strict 260-300 day window
         RESPONSE=$(curl -s -X POST \
           -H "X-Admin-Secret: $ADMIN_SECRET" \
           -H "Content-Type: application/json" \
-          "$API_BASE_URL/father-assignment/process?dry_run=false&gestation_days=$GESTATION_DAYS")
+          "$API_BASE_URL/father-assignment/process?dry_run=false&gestation_days=$GESTATION_DAYS&min_gestation_days=$MIN_GESTATION_DAYS")
         
         # Extract and display key results
         TOTAL=$(echo "$RESPONSE" | grep -o '"total_processed":[0-9]*' | cut -d':' -f2)
         ASSIGNED=$(echo "$RESPONSE" | grep -o '"assigned":[0-9]*' | cut -d':' -f2)
         REPASO=$(echo "$RESPONSE" | grep -o '"repaso":[0-9]*' | cut -d':' -f2)
+        TOO_SHORT=$(echo "$RESPONSE" | grep -o '"too_short":[0-9]*' | cut -d':' -f2)
         NO_INSEMINATION=$(echo "$RESPONSE" | grep -o '"no_insemination":[0-9]*' | cut -d':' -f2)
         ERRORS=$(echo "$RESPONSE" | grep -o '"errors":[0-9]*' | cut -d':' -f2)
         
         echo "📊 Results:"
         echo "  Processed: $TOTAL"
-        echo "  Assigned: $ASSIGNED"
-        echo "  REPASO: $REPASO"
-        echo "  No Data: $NO_INSEMINATION"
+        echo "  Assigned (260-300 days): $ASSIGNED"
+        echo "  REPASO (>300 days): $REPASO"
+        echo "  Too Short (<260 days): $TOO_SHORT"
+        echo "  No Insemination Data: $NO_INSEMINATION"
         echo "  Errors: $ERRORS"
         
         if [ "$ASSIGNED" -gt 0 ]; then
           echo "✅ Successfully assigned $ASSIGNED father IDs!"
+        elif [ "$TOO_SHORT" -gt 0 ]; then
+          echo "ℹ️  $TOO_SHORT registrations had gestation < 260 days (not assigned)"
         elif [ "$NO_INSEMINATION" -gt 0 ]; then
           echo "ℹ️  No insemination data found for $NO_INSEMINATION registrations"
         else
