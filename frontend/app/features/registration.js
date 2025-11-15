@@ -10,6 +10,7 @@ export class RegistrationPopup {
     this.dialog = null;
     this.form = null;
     this.isOpen = false;
+    this.inseminationRounds = [];
     this.callbacks = {
       onSuccess: null,
       onError: null
@@ -106,6 +107,12 @@ export class RegistrationPopup {
                 <option value="OTHERS">Otros</option>
               </select>
             </div>
+            <div class="form-field">
+              <label for="reg-insemination-round">Ronda de Inseminación</label>
+              <select id="reg-insemination-round">
+                <option value="">— Seleccionar (opcional) —</option>
+              </select>
+            </div>
             <div class="form-field full-width">
               <label for="reg-notes-mother">Notas de la Madre</label>
               <input id="reg-notes-mother" type="text" placeholder="Cualquier nota sobre la madre" autocomplete="off">
@@ -155,13 +162,14 @@ export class RegistrationPopup {
   /**
    * Open the registration popup
    */
-  open() {
+  async open() {
     if (!this.dialog) {
       this.createDialog();
       this.setupEventListeners();
     }
 
     this.clearForm();
+    await this.loadInseminationRounds();
     this.dialog?.showModal();
     this.isOpen = true;
     
@@ -185,6 +193,58 @@ export class RegistrationPopup {
   clearForm() {
     if (this.form) {
       this.form.reset();
+    }
+  }
+
+  /**
+   * Load insemination rounds from API and populate dropdown
+   */
+  async loadInseminationRounds() {
+    try {
+      const userKey = await getAuthToken();
+      if (!userKey) {
+        console.warn('No auth token available for fetching insemination rounds');
+        return;
+      }
+
+      const API_BASE_URL = window.API_BASE_URL || 'https://farm-production-d087.up.railway.app';
+      const response = await fetch(`${API_BASE_URL}/inseminations-ids/`, {
+        headers: {
+          'Authorization': `Bearer ${userKey}`
+        }
+      });
+
+      if (!response.ok) {
+        console.error('Failed to load insemination rounds:', response.status);
+        return;
+      }
+
+      const rounds = await response.json();
+      this.inseminationRounds = rounds || [];
+
+      // Populate dropdown
+      const select = document.getElementById('reg-insemination-round');
+      if (!select) return;
+
+      // Clear existing options except the first one
+      select.innerHTML = '<option value="">— Seleccionar (opcional) —</option>';
+
+      // Add options for each insemination round
+      this.inseminationRounds.forEach(round => {
+        const option = document.createElement('option');
+        option.value = round.insemination_round_id;
+        option.textContent = `${round.insemination_round_id} (${round.initial_date} - ${round.end_date})`;
+        select.appendChild(option);
+      });
+
+      // Set the last round as default (if rounds exist)
+      if (this.inseminationRounds.length > 0) {
+        const lastRound = this.inseminationRounds[this.inseminationRounds.length - 1];
+        select.value = lastRound.insemination_round_id;
+      }
+    } catch (error) {
+      console.error('Error loading insemination rounds:', error);
+      // Don't show error to user - just log it
     }
   }
 
@@ -217,7 +277,8 @@ export class RegistrationPopup {
         color: formData.get('reg-color')?.toUpperCase() || null,
         notes: formData.get('reg-notes')?.trim().toUpperCase() || null,
         notesMother: formData.get('reg-notes-mother')?.trim().toUpperCase() || null,
-        scrotalCircumference: formData.get('reg-scrotal-circumference') ? parseFloat(formData.get('reg-scrotal-circumference')) : null
+        scrotalCircumference: formData.get('reg-scrotal-circumference') ? parseFloat(formData.get('reg-scrotal-circumference')) : null,
+        inseminationRoundId: formData.get('reg-insemination-round')?.trim() || null
       });
 
       this.close();
@@ -258,7 +319,8 @@ export class RegistrationPopup {
       color: data.color,
       notes: data.notes,
       notesMother: data.notesMother,
-      scrotalCircumference: (data.scrotalCircumference !== null && !isNaN(data.scrotalCircumference) && isFinite(data.scrotalCircumference)) ? data.scrotalCircumference : null
+      scrotalCircumference: (data.scrotalCircumference !== null && !isNaN(data.scrotalCircumference) && isFinite(data.scrotalCircumference)) ? data.scrotalCircumference : null,
+      inseminationRoundId: data.inseminationRoundId || null
     };
 
     await addRecord(record);
