@@ -19,10 +19,13 @@ export function Chatbot({ companyId }: ChatbotProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change or loading state changes
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    // Use requestAnimationFrame to ensure DOM is updated
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    })
+  }, [messages, isLoading])
 
   // Focus input when opened
   useEffect(() => {
@@ -80,20 +83,24 @@ export function Chatbot({ companyId }: ChatbotProps) {
 
   return (
     <>
-      {/* Floating button - bottom right */}
+      {/* Floating button - bottom right, mobile-optimized */}
       <Button
         onClick={() => {
           if (companyId) {
             setIsOpen(true)
           }
         }}
-        className="fixed right-4 bottom-24 z-40 h-12 w-12 rounded-full shadow-lg hover:shadow-xl transition-all"
+        className="fixed right-4 bottom-24 z-40 h-14 w-14 sm:h-12 sm:w-12 rounded-full shadow-lg hover:shadow-xl transition-all touch-manipulation"
+        style={{
+          bottom: 'max(6rem, calc(6rem + env(safe-area-inset-bottom, 0px)))',
+          touchAction: 'manipulation'
+        }}
         size="icon"
         aria-label="Open chatbot"
         title={companyId ? "Abrir asistente" : "Asistente no disponible (sin compañía)"}
         disabled={!companyId}
       >
-        <MessageCircle className="h-5 w-5" />
+        <MessageCircle className="h-5 w-5 sm:h-5 sm:w-5" />
       </Button>
 
       {/* Sidebar drawer - only show if companyId exists */}
@@ -105,13 +112,17 @@ export function Chatbot({ companyId }: ChatbotProps) {
             onClick={() => setIsOpen(false)}
           />
 
-          {/* Sidebar - responsive width */}
+          {/* Sidebar - responsive width, mobile-optimized */}
           <div 
-            className="fixed left-0 top-0 h-full w-full sm:max-w-md bg-background border-r shadow-xl flex flex-col animate-in slide-in-from-left duration-300 z-50"
+            className="fixed left-0 top-0 w-full sm:max-w-md bg-background border-r shadow-xl flex flex-col animate-in slide-in-from-left duration-300 z-50"
+            style={{
+              height: '100dvh', // Dynamic viewport height for mobile (falls back to 100vh)
+              maxHeight: '100dvh'
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b">
+            {/* Header - sticky on mobile */}
+            <div className="flex items-center justify-between p-4 border-b bg-background flex-shrink-0">
               <div className="flex items-center gap-2">
                 <MessageCircle className="h-5 w-5" />
                 <h2 className="text-lg font-semibold">Asistente</h2>
@@ -145,8 +156,14 @@ export function Chatbot({ companyId }: ChatbotProps) {
               </div>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Messages - scrollable area with proper mobile handling */}
+            <div 
+              className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 min-h-0"
+              style={{
+                WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
+                scrollBehavior: 'smooth'
+              }}
+            >
               {messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-center text-muted-foreground px-4">
                   <div className="space-y-3">
@@ -171,14 +188,14 @@ export function Chatbot({ companyId }: ChatbotProps) {
                   <div key={idx} className="space-y-2">
                     {/* User message */}
                     <div className="flex justify-end">
-                      <div className="max-w-[80%] rounded-lg bg-primary text-primary-foreground px-4 py-2.5 text-sm shadow-sm">
+                      <div className="max-w-[85%] sm:max-w-[80%] rounded-lg bg-primary text-primary-foreground px-4 py-2.5 text-sm shadow-sm break-words">
                         {msg.user}
                       </div>
                     </div>
                     {/* Bot message */}
                     {msg.bot && (
                       <div className="flex justify-start">
-                        <div className="max-w-[80%] rounded-lg bg-muted px-4 py-2.5 text-sm whitespace-pre-wrap border">
+                        <div className="max-w-[85%] sm:max-w-[80%] rounded-lg bg-muted px-4 py-2.5 text-sm whitespace-pre-wrap border break-words">
                           {msg.bot}
                         </div>
                       </div>
@@ -199,8 +216,20 @@ export function Chatbot({ companyId }: ChatbotProps) {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
-            <form onSubmit={handleSubmit} className="p-4 border-t">
+            {/* Input - sticky at bottom, always visible on mobile */}
+            <form 
+              onSubmit={handleSubmit} 
+              className="p-4 border-t bg-background flex-shrink-0 chatbot-input-container"
+              style={{
+                paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 1rem))'
+              }}
+              onKeyDown={(e) => {
+                // Prevent form submission on Enter (handled in textarea)
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                }
+              }}
+            >
               <div className="flex gap-2 items-end">
                 <textarea
                   ref={inputRef as React.RefObject<HTMLTextAreaElement>}
@@ -209,19 +238,17 @@ export function Chatbot({ companyId }: ChatbotProps) {
                   placeholder="Pregunta sobre tus datos..."
                   disabled={isLoading}
                   rows={1}
-                  className="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none overflow-y-auto max-h-32"
+                  className="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-2.5 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none overflow-y-auto max-h-32"
                   style={{ 
                     wordWrap: 'break-word',
                     overflowWrap: 'break-word',
-                    fontSize: '16px' // Prevent iOS zoom on focus
+                    fontSize: '16px', // Prevent iOS zoom on focus
+                    WebkitAppearance: 'none', // Remove iOS styling
+                    borderRadius: '6px'
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
-                      // Dismiss keyboard immediately
-                      if (inputRef.current) {
-                        inputRef.current.blur()
-                      }
                       handleSubmit(e)
                     }
                   }}
@@ -236,7 +263,11 @@ export function Chatbot({ companyId }: ChatbotProps) {
                   type="submit"
                   disabled={!question.trim() || isLoading}
                   size="icon"
-                  className="flex-shrink-0"
+                  className="flex-shrink-0 h-10 w-10 min-h-[44px] min-w-[44px] touch-manipulation"
+                  aria-label="Enviar mensaje"
+                  style={{
+                    touchAction: 'manipulation' // Better touch handling on mobile
+                  }}
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
