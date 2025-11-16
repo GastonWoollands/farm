@@ -176,10 +176,14 @@ export function Chatbot({ companyId }: ChatbotProps) {
                     </div>
                     <div className="pt-4 space-y-1 text-xs opacity-60">
                       <p className="font-medium mb-2">Ejemplos de preguntas:</p>
+                      <p className="font-semibold mt-2">Métricas:</p>
+                      <p>"¿Qué es Total Animales?"</p>
+                      <p>"¿Cuál es la diferencia entre Total Animales y Madres Activas?"</p>
+                      <p>"¿Cuál es el peso promedio?"</p>
+                      <p className="font-semibold mt-2">Datos:</p>
                       <p>"¿Cuántos animales tengo registrados?"</p>
                       <p>"Dame los terneros de mayor peso"</p>
                       <p>"¿Cuántas inseminaciones hay en 2025?"</p>
-                      <p>"Muestra las madres con mayor peso"</p>
                     </div>
                   </div>
                 </div>

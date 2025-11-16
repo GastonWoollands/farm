@@ -24,30 +24,86 @@ class NodeHandler:
     def _init_prompts(self):
         """Initialize prompt templates."""
         self.sql_prompt = ChatPromptTemplate.from_template("""
-Eres un asistente experto en SQL que genera consultas para una base de datos SQLite.
+Eres un asistente experto en SQL que genera consultas para una base de datos SQLite de una granja.
 
 Tienes acceso a las siguientes tablas y columnas:
 {schema}
 
 El usuario actual pertenece a la compañía con ID: {company_id}.
 
-**Reglas estrictas:**
+**REGLAS ESTRICTAS:**
 1. **Todas las consultas deben incluir un filtro `WHERE company_id = {company_id}` o su equivalente en los `JOIN`.**
    - Si la tabla principal no tiene `company_id`, usa una tabla relacionada que sí lo tenga para filtrar correctamente.
    - Nunca devuelvas datos de otras compañías.
 2. Usa únicamente los nombres de tablas y columnas que aparecen en el schema.
 3. Si la pregunta es ambigua o no se puede filtrar por `company_id`, responde "NO_SQL".
 4. Devuelve **solo una query SQL válida**, ejecutable en SQLite. Sin comentarios, sin Markdown, sin texto adicional.
-5. Si la pregunta no requiere SQL, responde "NO_SQL".
+5. Si la pregunta NO está relacionada con datos de la granja (animales, inseminaciones, métricas), responde "NO_SQL".
 6. Usa alias cortos (`u`, `r`, `c`, etc.) si es necesario, pero mantén la legibilidad.
 7. Asegúrate de que la consulta final termine con un punto y coma `;`.
 8. IMPORTANTE: LA QUERY SOLO PUEDE TENER SELECT, NO PERMITIDO DELETE, UPDATE, INSERT, ETC.
-
 9. EXTREMA IMPORTANCIA: SOLO CREA UNA QUERY SQL FILTRADA POR company_id!!!
 
 10. **CONTEXTO DE CONVERSACIÓN**: Si hay historial de conversación, úsalo para entender referencias como "esas madres", "ellos", "esos registros", etc.
     - Si la pregunta hace referencia a resultados anteriores, usa esos valores en la consulta SQL.
     - Por ejemplo, si la pregunta anterior devolvió IDs como "MOTHER-002", "AC988", usa esos valores en un filtro WHERE o IN.
+
+**MÉTRICAS DISPONIBLES EN LA INTERFAZ:**
+
+El sistema calcula las siguientes métricas que los usuarios pueden consultar. Cuando un usuario pregunta por la definición o explicación de una métrica, debes responder con una explicación conceptual clara SIN mencionar SQL, tablas, filtros técnicos, o detalles de implementación:
+
+1. **Total Animales (Total Registros)**: 
+   - Es el conteo total de todos los animales registrados en el sistema.
+   - Representa todos los terneros/animales registrados, NO las madres adultas.
+   - Es el número total de registros de nacimientos o registros de animales.
+
+2. **Madres Activas**:
+   - Es el número de madres únicas que han parido (tienen registros de terneros).
+   - Una madre activa es una vaca que tiene al menos un ternero registrado en el sistema.
+   - Cuenta cada madre solo una vez, sin importar cuántos terneros haya parido.
+
+3. **Total de Crías (Total Offspring)**:
+   - Es el número total de terneros nacidos de todas las madres.
+   - Diferencia con "Total Animales": "Total Animales" incluye todos los registros, mientras que "Total de Crías" solo incluye los terneros que tienen una madre identificada.
+
+4. **Peso Promedio**:
+   - Es el peso promedio de los terneros registrados al momento de su registro.
+   - Se calcula sumando todos los pesos de los terneros y dividiéndolos entre el número de terneros.
+   - Refleja el peso de los terneros recién nacidos, NO el peso de las madres.
+
+5. **Peso Mínimo y Máximo**:
+   - Peso mínimo: El peso más bajo registrado entre todos los terneros.
+   - Peso máximo: El peso más alto registrado entre todos los terneros.
+   - Estos valores ayudan a entender el rango de pesos de los terneros.
+
+6. **Promedio de Crías por Madre**:
+   - Se calcula dividiendo el total de crías entre el número de madres activas.
+   - Indica cuántos terneros en promedio tiene cada madre.
+   - Fórmula: Total de Crías / Madres Activas
+
+7. **Inseminaciones por Ronda**:
+   - Agrupa las inseminaciones realizadas por ronda o período de tiempo.
+   - Cada ronda representa un período específico de inseminaciones.
+   - Permite analizar la actividad de inseminación por períodos.
+
+**EXPLICACIONES DE DIFERENCIAS ENTRE MÉTRICAS:**
+
+Cuando expliques diferencias entre métricas, usa lenguaje claro y conceptual, SIN mencionar SQL, tablas, campos técnicos, o filtros:
+
+- **Total Animales vs Madres Activas**: 
+  - "Total Animales" cuenta todos los registros de terneros, mientras que "Madres Activas" cuenta las madres únicas que han parido.
+  - Ejemplo: Si hay 50 terneros de 20 madres diferentes, "Total Animales" = 50, "Madres Activas" = 20.
+  - La diferencia es que una madre puede tener múltiples terneros, por lo que el total de animales es mayor que el número de madres.
+
+- **Total Animales vs Total de Crías**:
+  - "Total Animales" incluye todos los registros de animales (puede incluir animales sin madre identificada).
+  - "Total de Crías" solo incluye los terneros que tienen una madre identificada.
+  - Si todos los animales tienen madre identificada, ambos valores son iguales.
+
+- **Peso del Ternero vs Peso de la Madre**:
+  - El peso del ternero es el peso del animal recién nacido al momento del registro.
+  - El peso de la madre es el peso de la vaca adulta que parió.
+  - Son valores diferentes y no deben confundirse: el peso del ternero es mucho menor que el peso de la madre.
 
 **CONTEXTO CRÍTICO DE LA BASE DE DATOS:**
 
@@ -114,19 +170,61 @@ SQL:
 """)
         
         self.validation_prompt = ChatPromptTemplate.from_template("""
-Eres un asistente que determina si una pregunta del usuario requiere una consulta SQL a la base de datos.
+Eres un asistente que determina si una pregunta del usuario está relacionada con los datos de la granja y requiere una consulta SQL.
 
 Schema disponible:
 {schema}
 
+**CONTEXTO:**
+Este es un sistema de gestión de granja que maneja:
+- Registros de animales (terneros, vacas, toros)
+- Inseminaciones
+- Métricas de la granja (Total Animales, Madres Activas, Peso Promedio, etc.)
+- Rondas de inseminación
+
+**MÉTRICAS DISPONIBLES:**
+- Total Animales / Total Registros
+- Madres Activas
+- Total de Crías
+- Peso Promedio, Mínimo, Máximo
+- Promedio de Crías por Madre
+- Inseminaciones por Ronda
+- Diferencias entre métricas
+
 Pregunta del usuario: {question}
 
-Responde SOLO con "YES" si la pregunta requiere datos de la base de datos (tablas, conteos, filtros, etc.).
-Responde SOLO con "NO" si la pregunta es:
-- Un saludo o conversación general
-- No relacionada con datos de la base de datos
-- Una pregunta sobre cómo usar el sistema
-- Una pregunta que no puede responderse con SQL
+**Responde SOLO con "YES" si la pregunta:**
+- Pregunta sobre datos de animales (terneros, madres, toros)
+- Pregunta sobre inseminaciones
+- Pregunta sobre métricas (Total Animales, Total Registros, Madres Activas, Peso Promedio, etc.)
+- Pregunta sobre diferencias entre métricas
+- Pregunta sobre conteos, estadísticas, filtros de datos
+- Pregunta sobre registros específicos
+- Pregunta sobre fechas, pesos, géneros, estados de animales
+- Pregunta sobre rondas de inseminación
+- Pregunta que pide explicación o definición de una métrica (ej: "qué es", "qué significa", "explica", "definición")
+- Pregunta sobre "total de registros", "total registros", "total animales", etc. (con o sin "de")
+
+**Responde SOLO con "NO" si la pregunta es:**
+- Un saludo general ("Hola", "Buenos días", etc.)
+- Conversación casual no relacionada con datos
+- Pregunta sobre cómo usar el sistema o la interfaz
+- Pregunta sobre programación, tecnología, o temas no relacionados
+- Pregunta sobre temas generales (clima, política, deportes, etc.)
+- Pregunta que no puede responderse con datos de la base de datos
+- Pregunta sobre funciones del sistema (cómo registrar, cómo buscar, etc.)
+
+**Ejemplos:**
+- "¿Cuántos animales tengo?" → YES
+- "¿Qué es Total Animales?" → YES (explicación de métrica)
+- "¿Qué significa total de registros?" → YES (explicación de métrica)
+- "¿Qué significa total registros?" → YES (explicación de métrica)
+- "¿Cuál es la diferencia entre Total Animales y Madres Activas?" → YES
+- "Hola, ¿cómo estás?" → NO
+- "¿Cómo registro un animal?" → NO
+- "¿Qué tiempo hace?" → NO
+- "Explícame la métrica de Madres Activas" → YES
+- "que significa total de registros?" → YES
 
 Respuesta (YES o NO):
 """)
@@ -168,7 +266,7 @@ Respuesta (YES o NO):
                 logger.info("Question does not require SQL")
                 return {
                     "is_sql_needed": False,
-                    "non_sql_response": "Lo siento, solo puedo responder preguntas sobre los datos de la base de datos. ¿Hay algo específico que te gustaría consultar?"
+                    "non_sql_response": "Lo siento, solo puedo responder preguntas relacionadas con los datos de tu granja. Puedo ayudarte con:\n\nMétricas y estadísticas:\n- Total de animales registrados\n- Madres activas\n- Peso promedio, mínimo, máximo\n- Inseminaciones por ronda\n- Diferencias entre métricas\n\nDatos de animales:\n- Consultas sobre terneros, madres, toros\n- Búsquedas por peso, fecha, género, estado\n- Relaciones entre madres y crías\n\nInseminaciones:\n- Registros de inseminaciones\n- Rondas de inseminación\n- Toros utilizados\n\n¿Hay algo específico sobre tus datos que te gustaría consultar?"
                 }
             
             logger.info("Question requires SQL")
@@ -242,6 +340,165 @@ Respuesta (YES o NO):
         
         return sql if sql.lower().startswith("select") else None
     
+    def _is_metric_explanation_question(self, question: str) -> bool:
+        """Check if question is asking for metric explanation (not data query)."""
+        question_lower = question.lower()
+        
+        # Keywords that indicate explanation request
+        explanation_keywords = [
+            "qué es", "que es", "qué significa", "que significa",
+            "explica", "explicame", "explicación", "definición", "definicion",
+            "diferencia entre", "diferencias entre", "diferencia de",
+            "cómo se calcula", "como se calcula", "cómo funciona", "como funciona"
+        ]
+        
+        # Metric names and variations (including with/without "de")
+        metric_patterns = [
+            "total animales", "total de animales", "total animal",
+            "total registros", "total de registros", "total registro",
+            "madres activas", "madre activa", "madres activa",
+            "total de crías", "total crías", "total de crias", "total crias",
+            "peso promedio", "peso medio", "peso promedio de",
+            "peso mínimo", "peso minimo", "peso máximo", "peso maximo",
+            "promedio de crías", "promedio de crias", "crías por madre", "crias por madre",
+            "inseminaciones por ronda", "ronda de inseminación", "ronda de inseminacion"
+        ]
+        
+        # Check if question contains explanation keywords
+        has_explanation_keyword = any(keyword in question_lower for keyword in explanation_keywords)
+        
+        # Check if question contains any metric pattern
+        has_metric_name = any(pattern in question_lower for pattern in metric_patterns)
+        
+        # Also check for metric keywords even without exact match
+        metric_keywords = ["total", "registro", "madre", "cría", "cria", "peso", "inseminación", "inseminacion", "ronda"]
+        has_metric_keyword = any(keyword in question_lower for keyword in metric_keywords)
+        
+        # If it has explanation keyword and metric-related content, it's an explanation question
+        if has_explanation_keyword:
+            if has_metric_name:
+                return True
+            # Also check if it has metric keywords and explanation keywords together
+            if has_metric_keyword and ("total" in question_lower or "registro" in question_lower or "madre" in question_lower):
+                return True
+        
+        # Check for "diferencia" questions (always explanations)
+        if "diferencia" in question_lower and has_metric_name:
+            return True
+        
+        return False
+    
+    def _get_metric_explanation(self, question: str) -> str:
+        """Provide conceptual explanation of metrics without technical details."""
+        question_lower = question.lower()
+        
+        explanations = {
+            "total animales": """Total Animales (Total Registros)
+
+Es el número total de todos los animales registrados en tu sistema. Representa todos los terneros o animales que han sido registrados al nacer, sin importar si tienen o no una madre identificada.
+
+Esta métrica te da una visión general de cuántos animales has registrado en total en tu granja.""",
+
+            "total registros": """Total Animales (Total Registros)
+
+Es el número total de todos los animales registrados en tu sistema. Representa todos los terneros o animales que han sido registrados al nacer, sin importar si tienen o no una madre identificada.
+
+Esta métrica te da una visión general de cuántos animales has registrado en total en tu granja.""",
+
+            "total de registros": """Total Animales (Total Registros)
+
+Es el número total de todos los animales registrados en tu sistema. Representa todos los terneros o animales que han sido registrados al nacer, sin importar si tienen o no una madre identificada.
+
+Esta métrica te da una visión general de cuántos animales has registrado en total en tu granja.""",
+
+            "total registro": """Total Animales (Total Registros)
+
+Es el número total de todos los animales registrados en tu sistema. Representa todos los terneros o animales que han sido registrados al nacer, sin importar si tienen o no una madre identificada.
+
+Esta métrica te da una visión general de cuántos animales has registrado en total en tu granja.""",
+
+            "madres activas": """Madres Activas
+
+Es el número de madres únicas que han parido y tienen al menos un ternero registrado en el sistema. Cada madre cuenta solo una vez, sin importar cuántos terneros haya parido.
+
+Por ejemplo, si una madre ha parido 3 terneros, solo cuenta como 1 madre activa. Esta métrica te ayuda a entender cuántas vacas reproductoras activas tienes en tu granja.""",
+
+            "total de crías": """Total de Crías
+
+Es el número total de terneros que han nacido y tienen una madre identificada en el sistema. A diferencia de "Total Animales", esta métrica solo incluye los terneros que están asociados a una madre específica.
+
+Si todos tus animales tienen una madre identificada, el "Total de Crías" será igual al "Total Animales". Si algunos animales no tienen madre identificada, el "Total de Crías" será menor.""",
+
+            "peso promedio": """Peso Promedio
+
+Es el peso promedio de todos los terneros registrados al momento de su registro o nacimiento. Se calcula sumando todos los pesos de los terneros y dividiéndolos entre el número de terneros.
+
+Esta métrica te ayuda a entender el peso típico de tus terneros recién nacidos y puede indicar la salud general de tus animales.""",
+
+            "peso mínimo": """Peso Mínimo
+
+Es el peso más bajo registrado entre todos los terneros en tu sistema. Te ayuda a identificar el ternero con menor peso al nacer.""",
+
+            "peso máximo": """Peso Máximo
+
+Es el peso más alto registrado entre todos los terneros en tu sistema. Te ayuda a identificar el ternero con mayor peso al nacer.""",
+
+            "promedio de crías": """Promedio de Crías por Madre
+
+Es el número promedio de terneros que tiene cada madre. Se calcula dividiendo el total de crías entre el número de madres activas.
+
+Por ejemplo, si tienes 50 crías de 20 madres, el promedio sería 2.5 crías por madre. Esta métrica te ayuda a entender la productividad de tus madres.""",
+
+            "inseminaciones por ronda": """Inseminaciones por Ronda
+
+Agrupa las inseminaciones realizadas por ronda o período de tiempo. Cada ronda representa un período específico durante el cual se realizaron inseminaciones.
+
+Esta métrica te permite analizar la actividad de inseminación por períodos y entender cuántas inseminaciones se realizaron en cada ronda."""
+        }
+        
+        # Find matching explanation - check variations
+        for metric_key, explanation in explanations.items():
+            # Check exact match
+            if metric_key in question_lower:
+                return explanation
+            # Check variations (with/without "de", singular/plural)
+            metric_variations = [
+                metric_key,
+                metric_key.replace(" de ", " "),
+                metric_key.replace(" ", " de "),
+                metric_key.replace("registros", "registro"),
+                metric_key.replace("registro", "registros"),
+            ]
+            for variation in metric_variations:
+                if variation in question_lower:
+                    return explanation
+        
+        # Special handling for "total de registros" / "total registros" variations
+        if ("total" in question_lower and "registro" in question_lower) or ("total" in question_lower and "registros" in question_lower):
+            return explanations.get("total registros", explanations.get("total de registros", None))
+        
+        # Default explanation for difference questions
+        if "diferencia" in question_lower:
+            if "total animales" in question_lower and "madres activas" in question_lower:
+                return """Diferencia entre Total Animales y Madres Activas
+
+Total Animales cuenta todos los registros de terneros en tu sistema. Si tienes 50 terneros registrados, el Total Animales será 50.
+
+Madres Activas cuenta las madres únicas que han parido. Si esos 50 terneros provienen de 20 madres diferentes, las Madres Activas serán 20.
+
+La diferencia es que una madre puede tener múltiples terneros, por lo que el total de animales siempre será mayor o igual que el número de madres activas."""
+            
+            elif "total animales" in question_lower and "total de crías" in question_lower:
+                return """Diferencia entre Total Animales y Total de Crías
+
+Total Animales incluye todos los registros de animales en tu sistema, incluso aquellos que no tienen una madre identificada.
+
+Total de Crías solo incluye los terneros que tienen una madre identificada en el sistema.
+
+Si todos tus animales tienen una madre identificada, ambos valores serán iguales. Si algunos animales no tienen madre identificada, el Total de Crías será menor que el Total Animales."""
+        
+        return None
+    
     def interpret_question(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Generate SQL query from question - simplified version."""
         question = state.get("question", "").strip()
@@ -253,6 +510,17 @@ Respuesta (YES o NO):
         if not question:
             result.update({"sql": None, "error": "La pregunta está vacía."})
             return result
+        
+        # Check if this is a metric explanation question (not a data query)
+        if self._is_metric_explanation_question(question):
+            explanation = self._get_metric_explanation(question)
+            if explanation:
+                result.update({
+                    "sql": None,
+                    "error": None,
+                    "non_sql_response": explanation
+                })
+                return result
         
         try:
             import json
@@ -296,7 +564,7 @@ Respuesta (YES o NO):
                 result.update({
                     "sql": None,
                     "error": None,
-                    "non_sql_response": "Lo siento, solo puedo responder preguntas relacionadas con los datos de tu granja. Por ejemplo, puedo ayudarte con:\n- Consultas sobre animales registrados\n- Información sobre inseminaciones\n- Estadísticas y conteos\n- Búsquedas de registros específicos\n\n¿Hay algo específico sobre tus datos que te gustaría consultar?"
+                    "non_sql_response": "Lo siento, solo puedo responder preguntas relacionadas con los datos de tu granja. Puedo ayudarte con:\n\nMétricas y estadísticas:\n- Total de animales registrados\n- Madres activas\n- Peso promedio, mínimo, máximo\n- Inseminaciones por ronda\n- Explicaciones de métricas y diferencias entre ellas\n\nDatos de animales:\n- Consultas sobre terneros, madres, toros\n- Búsquedas por peso, fecha, género, estado\n- Relaciones entre madres y crías\n\nInseminaciones:\n- Registros de inseminaciones\n- Rondas de inseminación\n- Toros utilizados\n\n¿Hay algo específico sobre tus datos que te gustaría consultar?"
                 })
                 return result
             
@@ -451,7 +719,7 @@ Respuesta (YES o NO):
         if error:
             # Make error messages more user-friendly
             if "No hay SQL para ejecutar" in error or "No se pudo generar" in error:
-                result["final_answer"] = "Lo siento, solo puedo responder preguntas relacionadas con los datos de tu granja. Por ejemplo:\n\n- ¿Cuántos registros hay?\n- Dame los terneros de mayor peso\n- ¿Cuántas inseminaciones hay en 2025?\n- Muestra las madres con mayor peso\n\n¿Hay algo específico sobre tus datos que te gustaría consultar?"
+                result["final_answer"] = "Lo siento, solo puedo responder preguntas relacionadas con los datos de tu granja. Puedo ayudarte con:\n\nMétricas:\n- ¿Cuántos animales tengo registrados?\n- ¿Qué es Total Animales?\n- ¿Cuál es la diferencia entre Total Animales y Madres Activas?\n- ¿Cuál es el peso promedio?\n\nDatos de animales:\n- Dame los terneros de mayor peso\n- Muestra las madres con mayor peso\n- ¿Cuántos animales hay por género?\n\nInseminaciones:\n- ¿Cuántas inseminaciones hay en 2025?\n- Muestra las rondas de inseminación\n\n¿Hay algo específico sobre tus datos que te gustaría consultar?"
             else:
                 result["final_answer"] = f"Error: {error}"
             return result
@@ -567,20 +835,35 @@ Resultados de la consulta (JSON):
 - `mother_id`: ID de la madre inseminada.
 - `bull_id`: ID del toro usado.
 
+**MÉTRICAS DISPONIBLES (para explicaciones):**
+Cuando expliques métricas, usa lenguaje conceptual y claro, SIN mencionar SQL, tablas, campos técnicos, filtros, o detalles de implementación:
+
+- **Total Animales**: Conteo total de todos los animales registrados en el sistema (todos los terneros registrados).
+- **Madres Activas**: Número de madres únicas que han parido (cada madre cuenta solo una vez).
+- **Total de Crías**: Total de terneros que tienen una madre identificada.
+- **Peso Promedio**: Promedio del peso de los terneros al momento de su registro.
+- **Peso Mínimo/Máximo**: Valores mínimo y máximo del peso de terneros registrados.
+- **Promedio de Crías por Madre**: Se calcula dividiendo el total de crías entre el número de madres activas.
+
 **INSTRUCCIONES DE FORMATEO:**
 1. Natural y fácil de leer
 2. Mostrando solo la información relevante (evita IDs técnicos como `id`, `company_id`, timestamps como `created_at`, `updated_at`, `user_id`, `firebase_uid`)
 3. Organizada y clara
 4. En español
 5. Si hay múltiples resultados, usa una lista numerada o formato de tabla simple
+6. Si la pregunta es sobre métricas o diferencias entre métricas, incluye una explicación clara y breve
 
-**IMPORTANTE:**
+**IMPORTANTE - PROHIBIDO REVELAR DETALLES TÉCNICOS:**
+- **NUNCA** menciones SQL, queries, tablas, campos técnicos, filtros, o detalles de implementación cuando expliques métricas.
+- **NUNCA** muestres código SQL, nombres de tablas, o filtros técnicos al usuario.
+- Si la pregunta es sobre la definición o explicación de una métrica, responde solo con el concepto y significado, sin detalles técnicos.
 - NO confundas `animal_number` (ternero) con `mother_id` (madre).
 - Si la pregunta es sobre "madres", identifica correctamente que `mother_id` es la madre, NO `animal_number`.
 - Si la pregunta es sobre "terneros" o "animales registrados", `animal_number` es el animal.
 - No inventes información que no esté en los resultados.
 - Si hay muchos resultados, muestra los primeros y menciona cuántos hay en total.
-- Usa nombres de columnas legibles:
+- Si la pregunta es sobre métricas o diferencias, explica claramente qué significa cada métrica usando lenguaje simple y conceptual.
+- Usa nombres de columnas legibles (pero solo cuando muestres datos, no en explicaciones de métricas):
   - `animal_number` → "Número de animal" o "ID del animal registrado" (si es ternero)
   - `mother_id` → "ID de madre" o "Madre"
   - `father_id`/`bull_id` → "ID de toro" o "Toro"
