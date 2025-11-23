@@ -222,6 +222,70 @@ class FatherAssignmentService:
         results['processing_time_seconds'] = (datetime.now() - start_time).total_seconds()
         return results
     
+    def get_registrations_for_mother_without_father(self, mother_id: str) -> List[Dict]:
+        """Get all registrations for a specific mother that don't have a father_id assigned"""
+        try:
+            cursor = conn.execute("""
+                SELECT id, animal_number, mother_id, born_date, father_id, insemination_identifier
+                FROM registrations 
+                WHERE mother_id = ?
+                AND born_date IS NOT NULL 
+                AND (father_id IS NULL OR father_id = '')
+                ORDER BY born_date DESC
+            """, (mother_id,))
+            
+            columns = [description[0] for description in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            raise Exception(f"Database error fetching registrations for mother: {e}")
+    
+    def process_registrations_for_mother(self, mother_id: str) -> Dict:
+        """Process all registrations for a specific mother that don't have father IDs
+        
+        This is optimized for real-time processing when a new insemination is created.
+        It only processes registrations for the specific mother, making it fast.
+        """
+        start_time = datetime.now()
+        
+        # Get registrations for this specific mother without father IDs
+        registrations = self.get_registrations_for_mother_without_father(mother_id)
+        
+        results = {
+            'mother_id': mother_id,
+            'total_processed': len(registrations),
+            'assigned': 0,
+            'repaso': 0,
+            'too_short': 0,
+            'no_insemination': 0,
+            'errors': 0,
+            'processing_time_seconds': 0,
+            'results': []
+        }
+        
+        if not registrations:
+            results['processing_time_seconds'] = (datetime.now() - start_time).total_seconds()
+            return results
+        
+        # Process each registration for this mother
+        for registration in registrations:
+            result = self.process_single_registration(registration)
+            results['results'].append(result)
+            
+            # Count results
+            if result['status'] == 'assigned':
+                results['assigned'] += 1
+            elif result['status'] == 'repaso':
+                results['repaso'] += 1
+            elif result['status'] == 'too_short':
+                results['too_short'] += 1
+            elif result['status'] == 'no_insemination':
+                results['no_insemination'] += 1
+            elif result['status'] == 'error':
+                results['errors'] += 1
+        
+        results['processing_time_seconds'] = (datetime.now() - start_time).total_seconds()
+        return results
+    
     def get_assignment_stats(self) -> Dict:
         """Get statistics about father ID assignments"""
         try:

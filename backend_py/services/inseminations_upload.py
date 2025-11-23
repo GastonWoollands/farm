@@ -236,6 +236,7 @@ async def upload_inseminations_from_file(
     errors = []
     warnings = []
     using_default_date = False
+    processed_mother_ids = []  # Track mother IDs for background father assignment
     
     try:
         with conn:
@@ -337,6 +338,9 @@ async def upload_inseminations_from_file(
                         )
                     )
                     uploaded_count += 1
+                    # Track mother_id for background processing
+                    if mother_id:
+                        processed_mother_ids.append(mother_id)
                     
                 except sqlite3.IntegrityError as e:
                     if "UNIQUE constraint failed" in str(e):
@@ -355,6 +359,17 @@ async def upload_inseminations_from_file(
     # Add warning if default date was used
     if using_default_date and default_insemination_date:
         warnings.append(f"Using insemination round initial date ({default_insemination_date}) as default date for all records")
+    
+    # Trigger background father assignment for all processed mothers
+    # This runs in separate threads and doesn't block the response
+    if processed_mother_ids:
+        try:
+            from .father_assignment_background import trigger_father_assignment_for_multiple_mothers
+            trigger_father_assignment_for_multiple_mothers(processed_mother_ids)
+        except Exception as e:
+            # Log but don't fail the request if background task fails
+            import logging
+            logging.warning(f"Failed to trigger background father assignment for bulk upload: {e}")
     
     return {
         "ok": True,

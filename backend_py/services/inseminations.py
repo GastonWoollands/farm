@@ -63,7 +63,7 @@ def _validate_date(date_str: str) -> str:
         raise HTTPException(status_code=400, detail=f"Invalid date format: {error_msg}. Use dd/mm/yyyy format (e.g., 15/01/2024)")
 
 def insert_insemination(created_by: str, body: InseminationBody, company_id: int = None) -> int:
-    """Insert a new insemination record"""
+    """Insert a new insemination record and trigger background father assignment"""
     if not body.inseminationIdentifier:
         raise HTTPException(status_code=400, detail="inseminationIdentifier is required")
     
@@ -111,7 +111,19 @@ def insert_insemination(created_by: str, body: InseminationBody, company_id: int
                     company_id
                 )
             )
-            return cursor.lastrowid
+            insemination_db_id = cursor.lastrowid
+            
+            # Trigger background father assignment for this mother
+            # This runs in a separate thread and doesn't block the response
+            try:
+                from .father_assignment_background import trigger_father_assignment_for_mother
+                trigger_father_assignment_for_mother(mother_id)
+            except Exception as e:
+                # Log but don't fail the request if background task fails
+                import logging
+                logging.warning(f"Failed to trigger background father assignment for {mother_id}: {e}")
+            
+            return insemination_db_id
     except sqlite3.IntegrityError as e:
         if "UNIQUE constraint failed" in str(e):
             raise HTTPException(status_code=409, detail="Duplicate insemination for this mother on the same date")
