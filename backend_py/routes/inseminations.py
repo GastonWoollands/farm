@@ -6,7 +6,8 @@ from ..services.inseminations import (
     get_insemination_statistics, export_inseminations
 )
 from ..services.inseminations_multi_tenant import (
-    get_inseminations_multi_tenant, get_insemination_statistics_multi_tenant
+    get_inseminations_multi_tenant, get_insemination_statistics_multi_tenant,
+    export_inseminations_multi_tenant
 )
 from ..services.inseminations_upload import upload_inseminations_from_file
 from ..services.firebase_auth import verify_bearer_id_token
@@ -168,6 +169,43 @@ def get_insemination_stats(request: Request):
     
     stats = get_insemination_statistics_multi_tenant(user)
     return stats
+
+
+@router.get("/export")
+def export_inseminations_multi_tenant_endpoint(
+    request: Request,
+    format: str = "json",
+    insemination_round_id: str = None
+):
+    """Export inseminations with multi-tenant filtering, optionally filtered by round ID"""
+    from ..services.auth_service import authenticate_user
+    
+    user, company_id = authenticate_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    records = export_inseminations_multi_tenant(user, insemination_round_id)
+    
+    if (format or "").lower() == "csv":
+        buf = io.StringIO()
+        if records:
+            cols = list(records[0].keys())
+        else:
+            cols = ["date", "insemination_date", "mother_id", "bull_name"]
+        
+        writer = csv.DictWriter(buf, fieldnames=cols)
+        writer.writeheader()
+        for record in records:
+            writer.writerow(record)
+        
+        csv_data = buf.getvalue()
+        return Response(
+            content=csv_data,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=inseminations_export.csv"}
+        )
+    
+    return {"count": len(records), "items": records}
 
 
 @router.post("/inseminations/upload")

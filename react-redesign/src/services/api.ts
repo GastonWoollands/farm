@@ -334,6 +334,31 @@ class ApiService {
     return await response.json()
   }
 
+  // Export inseminations to CSV
+  async exportInseminations(inseminationRoundId?: string): Promise<Blob> {
+    const params = new URLSearchParams()
+    params.set('format', 'csv')
+    if (inseminationRoundId) {
+      params.set('insemination_round_id', inseminationRoundId)
+    }
+
+    const url = `${this.baseURL}/inseminations/export?${params.toString()}`
+    const headers: Record<string, string> = {}
+    
+    if (this.authToken) {
+      headers['Authorization'] = `Bearer ${this.authToken}`
+    }
+
+    const response = await fetch(url, { headers })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    return response.blob()
+  }
+
   // User Context
   async getUserContext(): Promise<{ user: User, company: Company | null }> {
     return this.request<{ user: User, company: Company | null }>(`${API_ENDPOINTS.USER_CONTEXT}/context`)

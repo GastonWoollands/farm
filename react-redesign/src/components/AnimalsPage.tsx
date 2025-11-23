@@ -38,9 +38,11 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
   const [error, setError] = useState<string | null>(null)
   const [isRegistering, setIsRegistering] = useState(false)
   const [isUploadingInseminations, setIsUploadingInseminations] = useState(false)
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const { prefixes } = usePrefixes()
   const [isRecordsExpanded, setIsRecordsExpanded] = useState(false)
   const [inseminationRounds, setInseminationRounds] = useState<InseminationRound[]>([])
+  const [selectedRoundId, setSelectedRoundId] = useState<string>('all')
   const [formData, setFormData] = useState({
     animalNumber: prefixes.animalPrefix,
     rpAnimal: '',
@@ -241,6 +243,30 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
       document.body.removeChild(a)
     } catch (err: any) {
       setError(err.message || 'Error al exportar los datos')
+    }
+  }
+
+  const handleExportInseminations = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      
+      const roundId = selectedRoundId === 'all' ? undefined : selectedRoundId
+      const blob = await apiService.exportInseminations(roundId)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const roundSuffix = roundId ? `_${roundId}` : ''
+      a.download = `inseminaciones${roundSuffix}_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      setIsExportDialogOpen(false)
+    } catch (err: any) {
+      setError(err.message || 'Error al exportar las inseminaciones')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -621,24 +647,79 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <InseminationsUploadDialog
-              open={isUploadingInseminations}
-              onOpenChange={setIsUploadingInseminations}
-              onSuccess={() => {
-                // Refresh insemination rounds after successful upload
-                fetchInseminationRounds()
-                onStatsChange()
-              }}
-            />
-            <Button
-              className="gap-2 w-full sm:w-auto"
-              onClick={() => setIsUploadingInseminations(true)}
-            >
-              <Upload className="h-4 w-4" />
-              <span className="hidden sm:inline">Subir Inseminaciones</span>
-              <span className="sm:hidden">Subir</span>
-            </Button>
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <InseminationsUploadDialog
+                open={isUploadingInseminations}
+                onOpenChange={setIsUploadingInseminations}
+                onSuccess={() => {
+                  // Refresh insemination rounds after successful upload
+                  fetchInseminationRounds()
+                  onStatsChange()
+                }}
+              />
+              <Button
+                className="gap-2 w-full sm:w-auto"
+                onClick={() => setIsUploadingInseminations(true)}
+              >
+                <Upload className="h-4 w-4" />
+                <span className="hidden sm:inline">Subir Inseminaciones</span>
+                <span className="sm:hidden">Subir</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2 w-full sm:w-auto"
+                onClick={() => setIsExportDialogOpen(true)}
+                disabled={isLoading}
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Exportar CSV</span>
+                <span className="sm:hidden">Exportar</span>
+              </Button>
+            </div>
+            
+            <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Exportar Inseminaciones</DialogTitle>
+                  <DialogDescription>
+                    Selecciona una ronda de inseminación para filtrar o exporta todas las inseminaciones
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="roundSelect">Filtrar por Ronda de Inseminación (opcional)</Label>
+                    <Select value={selectedRoundId} onValueChange={setSelectedRoundId}>
+                      <SelectTrigger id="roundSelect">
+                        <SelectValue placeholder="Todas las rondas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas las rondas</SelectItem>
+                        {inseminationRounds.map((round) => (
+                          <SelectItem key={round.id} value={round.insemination_round_id}>
+                            {round.insemination_round_id} ({round.initial_date} - {round.end_date})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsExportDialogOpen(false)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleExportInseminations}
+                      disabled={isLoading}
+                    >
+                      Exportar CSV
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </CardContent>
       </Card>

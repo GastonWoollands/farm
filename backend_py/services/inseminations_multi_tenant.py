@@ -97,3 +97,40 @@ def get_insemination_statistics_multi_tenant(user: dict) -> dict:
         }
     except sqlite3.Error as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+
+def export_inseminations_multi_tenant(user: dict, insemination_round_id: str = None) -> list[dict]:
+    """Export inseminations with multi-tenant filtering, optionally filtered by round ID"""
+    try:
+        company_id = user.get('company_id')
+        firebase_uid = user.get('firebase_uid')
+        
+        where_clause, params = get_data_filter_clause(company_id, firebase_uid)
+        
+        # Add round ID filter if provided
+        if insemination_round_id:
+            where_clause += " AND insemination_round_id = ?"
+            params.append(insemination_round_id)
+        
+        cursor = conn.execute(
+            f"""
+            SELECT registration_date, insemination_date, mother_id, bull_id
+            FROM inseminations
+            WHERE {where_clause}
+            ORDER BY insemination_date DESC
+            """,
+            params
+        )
+        
+        rows = cursor.fetchall()
+        return [
+            {
+                "date": row[0],
+                "insemination_date": row[1],
+                "mother_id": row[2],
+                "bull_name": row[3] or ""
+            }
+            for row in rows
+        ]
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
