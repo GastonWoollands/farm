@@ -451,6 +451,24 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="inseminationRoundId">Ronda de Inseminación</Label>
+                      <Select 
+                        value={formData.inseminationRoundId} 
+                        onValueChange={(value) => setFormData(prev => ({ ...prev, inseminationRoundId: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar ronda de inseminación (opcional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {inseminationRounds.map((round) => (
+                            <SelectItem key={round.id} value={round.insemination_round_id}>
+                              {round.insemination_round_id} ({round.initial_date} - {round.end_date})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     {formData.gender === 'MALE' && (
                       <div className="space-y-2">
                         <Label htmlFor="scrotalCircumference">Circunferencia Escrotal (cm)</Label>
@@ -487,24 +505,6 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         onChange={handleInputChange}
                         placeholder="Cualquier nota adicional"
                       />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="inseminationRoundId">Ronda de Inseminación</Label>
-                      <Select 
-                        value={formData.inseminationRoundId} 
-                        onValueChange={(value) => setFormData(prev => ({ ...prev, inseminationRoundId: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar ronda de inseminación (opcional)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {inseminationRounds.map((round) => (
-                            <SelectItem key={round.id} value={round.insemination_round_id}>
-                              {round.insemination_round_id} ({round.initial_date} - {round.end_date})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                     </div>
                   </div>
 
