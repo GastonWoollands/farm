@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,7 +18,7 @@ import {
   Calendar
 } from 'lucide-react'
 import { formatDate, getGenderName, getStatusName } from '@/lib/utils'
-import { Animal, apiService, UpdateBody } from '@/services/api'
+import { Animal, apiService, UpdateBody, InseminationRound } from '@/services/api'
 import { localStorageService } from '@/services/localStorage'
 
 interface SearchPageProps {
@@ -32,7 +32,9 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
     gender: '',
     status: '',
     color: '',
-    inseminationRound: ''
+    inseminationRound: '',
+    rpAnimal: '',
+    rpMother: ''
   })
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -43,6 +45,22 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingAnimal, setEditingAnimal] = useState<Animal | null>(null)
   const [editFormData, setEditFormData] = useState<Partial<Animal>>({})
+  const [inseminationRounds, setInseminationRounds] = useState<InseminationRound[]>([])
+
+  // Fetch insemination rounds
+  const fetchInseminationRounds = async () => {
+    try {
+      const rounds = await apiService.getInseminationRounds()
+      setInseminationRounds(rounds)
+    } catch (error) {
+      console.error('Error fetching insemination rounds:', error)
+    }
+  }
+
+  // Fetch insemination rounds on mount
+  useEffect(() => {
+    fetchInseminationRounds()
+  }, [])
 
   // Debug logging
   console.log('SearchPage - animals received:', animals)
@@ -69,7 +87,8 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
             (animal.rp_animal || '').toLowerCase().includes(searchLower) ||
             (animal.mother_id || '').toLowerCase().includes(searchLower) ||
             (animal.rp_mother || '').toLowerCase().includes(searchLower) ||
-            (animal.father_id || '').toLowerCase().includes(searchLower)
+            (animal.father_id || '').toLowerCase().includes(searchLower) ||
+            (animal.insemination_round_id || '').toLowerCase().includes(searchLower)
           )
         })
       }
@@ -86,6 +105,16 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
       }
       if (filters.inseminationRound) {
         filtered = filtered.filter(animal => animal.insemination_round_id === filters.inseminationRound)
+      }
+      if (filters.rpAnimal) {
+        filtered = filtered.filter(animal => 
+          (animal.rp_animal || '').toLowerCase().includes(filters.rpAnimal.toLowerCase())
+        )
+      }
+      if (filters.rpMother) {
+        filtered = filtered.filter(animal => 
+          (animal.rp_mother || '').toLowerCase().includes(filters.rpMother.toLowerCase())
+        )
       }
 
       // Sort
@@ -131,7 +160,9 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
       gender: '',
       status: '',
       color: '',
-      inseminationRound: ''
+      inseminationRound: '',
+      rpAnimal: '',
+      rpMother: ''
     })
   }
 
@@ -264,13 +295,56 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
       {/* Search and Filters */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Buscar Animales
-          </CardTitle>
-          <CardDescription>
-            Encuentra y gestiona animales con filtros avanzados
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5" />
+                Buscar Animales
+              </CardTitle>
+              <CardDescription>
+                Encuentra y gestiona animales con filtros avanzados
+              </CardDescription>
+            </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium whitespace-nowrap">Ordenar por:</Label>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="created_at">Fecha de registro</SelectItem>
+                    <SelectItem value="born_date">Fecha de nacimiento</SelectItem>
+                    <SelectItem value="animal_number">ID del animal</SelectItem>
+                    <SelectItem value="weight">Peso</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="whitespace-nowrap"
+              >
+                {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={clearFilters} className="whitespace-nowrap">
+                <Filter className="h-4 w-4 mr-2" />
+                Limpiar filtros
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  setSearchTerm('')
+                  setFilters({ gender: '', status: '', color: '', inseminationRound: '', rpAnimal: '', rpMother: '' })
+                }}
+                className="whitespace-nowrap"
+              >
+                Mostrar todos ({animals.length})
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Search Bar */}
@@ -289,7 +363,7 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           </div>
 
           {/* Filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-medium">Sexo</Label>
@@ -391,64 +465,65 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                   <SelectValue placeholder="Todas las rondas" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="2024">2024</SelectItem>
-                  <SelectItem value="2023">2023</SelectItem>
+                  {inseminationRounds.map((round) => (
+                    <SelectItem key={round.id} value={round.insemination_round_id}>
+                      {round.insemination_round_id} ({round.initial_date} - {round.end_date})
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">RP Animal</Label>
+                {filters.rpAnimal && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => clearFilter('rpAnimal')}
+                    className="h-7 w-7 p-0 text-xs hover:bg-destructive hover:text-destructive-foreground"
+                    title="Limpiar filtro de RP Animal"
+                  >
+                    ✕
+                  </Button>
+                )}
+              </div>
+              <Input
+                placeholder="Filtrar por RP Animal"
+                value={filters.rpAnimal}
+                onChange={(e) => handleFilterChange('rpAnimal', e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">RP Madre</Label>
+                {filters.rpMother && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => clearFilter('rpMother')}
+                    className="h-7 w-7 p-0 text-xs hover:bg-destructive hover:text-destructive-foreground"
+                    title="Limpiar filtro de RP Madre"
+                  >
+                    ✕
+                  </Button>
+                )}
+              </div>
+              <Input
+                placeholder="Filtrar por RP Madre"
+                value={filters.rpMother}
+                onChange={(e) => handleFilterChange('rpMother', e.target.value)}
+              />
+            </div>
           </div>
 
-          {/* Sort and Actions */}
-          <div className="space-y-4">
-            {/* Sort Controls */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium">Ordenar por:</Label>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-full sm:w-[150px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="created_at">Fecha de registro</SelectItem>
-                    <SelectItem value="born_date">Fecha de nacimiento</SelectItem>
-                    <SelectItem value="animal_number">ID del animal</SelectItem>
-                    <SelectItem value="weight">Peso</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="w-full sm:w-auto"
-              >
-                {sortOrder === 'asc' ? '↑ Ascendente' : '↓ Descendente'}
-              </Button>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button variant="outline" size="sm" onClick={clearFilters} className="w-full sm:w-auto">
-                  <Filter className="h-4 w-4 mr-2" />
-                  Limpiar filtros
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => {
-                    setSearchTerm('')
-                    setFilters({ gender: '', status: '', color: '', inseminationRound: '' })
-                  }}
-                  className="w-full sm:w-auto"
-                >
-                  Mostrar todos ({animals.length})
-                </Button>
-              </div>
-              <Badge variant="secondary" className="w-fit mx-auto sm:mx-0">
-                {filteredAnimals.length} resultado{filteredAnimals.length !== 1 ? 's' : ''}
-              </Badge>
-            </div>
+          {/* Results Count */}
+          <div className="flex justify-end">
+            <Badge variant="secondary">
+              {filteredAnimals.length} resultado{filteredAnimals.length !== 1 ? 's' : ''}
+            </Badge>
           </div>
         </CardContent>
       </Card>
@@ -496,7 +571,7 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                     className="mt-2"
                     onClick={() => {
                       setSearchTerm('')
-                      setFilters({ gender: '', status: '', color: '', inseminationRound: '' })
+                      setFilters({ gender: '', status: '', color: '', inseminationRound: '', rpAnimal: '', rpMother: '' })
                     }}
                   >
                     Mostrar todos los animales
@@ -581,6 +656,13 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">Color:</span>
                           <span className="capitalize">{animal.color.toLowerCase()}</span>
+                        </div>
+                      )}
+
+                      {animal.insemination_round_id && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Ronda Inseminación:</span>
+                          <span>{animal.insemination_round_id}</span>
                         </div>
                       )}
 
@@ -747,6 +829,26 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                   <SelectItem value="COLORADO">Colorado</SelectItem>
                   <SelectItem value="NEGRO">Negro</SelectItem>
                   <SelectItem value="OTHERS">Otros</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-insemination-round">Ronda de Inseminación</Label>
+              <Select 
+                value={editFormData.insemination_round_id || ''} 
+                onValueChange={(value) => setEditFormData({ ...editFormData, insemination_round_id: value || undefined })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar ronda de inseminación (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Ninguna</SelectItem>
+                  {inseminationRounds.map((round) => (
+                    <SelectItem key={round.id} value={round.insemination_round_id}>
+                      {round.insemination_round_id} ({round.initial_date} - {round.end_date})
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
