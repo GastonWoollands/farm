@@ -836,14 +836,18 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
             <div className="space-y-2">
               <Label htmlFor="edit-insemination-round">Ronda de Inseminación</Label>
               <Select 
-                value={editFormData.insemination_round_id || ''} 
-                onValueChange={(value) => setEditFormData({ ...editFormData, insemination_round_id: value || undefined })}
+                value={editFormData.insemination_round_id ? editFormData.insemination_round_id : 'none'} 
+                onValueChange={(value) => {
+                  // Handle clearing: if value is "none", set to undefined
+                  const newValue = value === 'none' ? undefined : value
+                  setEditFormData({ ...editFormData, insemination_round_id: newValue })
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar ronda de inseminación (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Ninguna</SelectItem>
+                  <SelectItem value="none">Ninguna</SelectItem>
                   {inseminationRounds.map((round) => (
                     <SelectItem key={round.id} value={round.insemination_round_id}>
                       {round.insemination_round_id} ({round.initial_date} - {round.end_date})
