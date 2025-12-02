@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 // Icons removed - not currently used in this component
 import { formatWeight, formatPercentage } from '@/lib/utils'
-import { Animal, RegistrationStats } from '@/services/api'
+import { Animal, RegistrationStats, InseminationRound, apiService } from '@/services/api'
 
 interface MetricsPageProps {
   animals: Animal[]
@@ -157,6 +157,20 @@ const calculateMetrics = (animals: Animal[], stats: RegistrationStats) => {
 
 export function MetricsPage({ animals, stats }: MetricsPageProps) {
   const metrics = calculateMetrics(animals, stats)
+  const [inseminationRounds, setInseminationRounds] = useState<InseminationRound[]>([])
+  
+  // Fetch insemination rounds with dates
+  useEffect(() => {
+    const fetchRounds = async () => {
+      try {
+        const rounds = await apiService.getInseminationRounds()
+        setInseminationRounds(rounds || [])
+      } catch (error) {
+        console.error('Error fetching insemination rounds:', error)
+      }
+    }
+    fetchRounds()
+  }, [])
   
   // Get available rounds, with "Todos" first
   const availableRounds = Object.keys(metrics.inseminationRounds)
@@ -164,6 +178,35 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
   
   const [selectedRound, setSelectedRound] = useState(defaultRound)
   const currentRound = metrics.inseminationRounds[selectedRound as keyof typeof metrics.inseminationRounds]
+
+  // Prepare comparison data: sort rounds by initial_date (lower to greater)
+  const comparisonData = (() => {
+    const rounds = Object.keys(metrics.inseminationRounds)
+      .filter(r => r !== 'Todos' && r !== 'Sin Ronda')
+      .map(roundId => {
+        const roundData = metrics.inseminationRounds[roundId as keyof typeof metrics.inseminationRounds]
+        const roundInfo = inseminationRounds.find(r => r.insemination_round_id === roundId)
+        return {
+          roundId,
+          initialDate: roundInfo?.initial_date || '',
+          endDate: roundInfo?.end_date || '',
+          count: roundData.count,
+          averageWeight: roundData.weight.average,
+          deadCount: roundData.status.find((s: any) => s.status === 'DEAD')?.count || 0
+        }
+      })
+      .sort((a, b) => {
+        // Sort by date if available, otherwise by roundId
+        if (a.initialDate && b.initialDate) {
+          return new Date(a.initialDate).getTime() - new Date(b.initialDate).getTime()
+        }
+        if (a.initialDate) return -1
+        if (b.initialDate) return 1
+        return a.roundId.localeCompare(b.roundId)
+      })
+    
+    return rounds
+  })()
 
   return (
     <div className="space-y-6">
@@ -437,6 +480,56 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Comparison between Rounds */}
+      {comparisonData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl">Comparación entre Rondas</CardTitle>
+            <CardDescription>
+              Comparación de rendimiento entre campañas de inseminación {comparisonData.length > 1 ? '(ordenadas por fecha)' : ''}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-3 font-semibold text-sm">Ronda</th>
+                    <th className="text-center p-3 font-semibold text-sm">Nacimientos</th>
+                    <th className="text-center p-3 font-semibold text-sm">Peso Promedio</th>
+                    <th className="text-center p-3 font-semibold text-sm">Muertes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparisonData.map((round) => (
+                    <tr key={round.roundId} className="border-b hover:bg-muted/30 transition-colors">
+                      <td className="p-3">
+                        <span className="font-medium">Ronda {round.roundId}</span>
+                      </td>
+                      <td className="p-3 text-center">
+                        <Badge variant="secondary" className="font-semibold">
+                          {round.count}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-center">
+                        <span className="font-medium">{formatWeight(round.averageWeight)}</span>
+                      </td>
+                      <td className="p-3 text-center">
+                        {round.deadCount > 0 ? (
+                          <Badge variant="destructive">{round.deadCount}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">0</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
