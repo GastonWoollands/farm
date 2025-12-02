@@ -11,22 +11,8 @@ interface MetricsPageProps {
   stats: RegistrationStats
 }
 
-// Calculate metrics from real data
-const calculateMetrics = (animals: Animal[], stats: RegistrationStats) => {
-  // Group animals by insemination round
-  const animalsByRound = animals.reduce((acc, animal) => {
-    const roundId = animal.insemination_round_id || 'Sin Ronda'
-    if (!acc[roundId]) {
-      acc[roundId] = []
-    }
-    acc[roundId].push(animal)
-    return acc
-  }, {} as Record<string, Animal[]>)
-
-  // Calculate metrics for each round
-  const inseminationRounds: Record<string, any> = {}
-  
-  Object.entries(animalsByRound).forEach(([roundId, roundAnimals]) => {
+// Helper function to calculate metrics for a group of animals
+const calculateRoundMetrics = (roundAnimals: Animal[], roundId: string) => {
     const weights = roundAnimals.filter(a => a.weight).map(a => a.weight!)
     const weightsSorted = [...weights].sort((a, b) => a - b)
     
@@ -68,7 +54,7 @@ const calculateMetrics = (animals: Animal[], stats: RegistrationStats) => {
     const gains = gainData.map(d => d.gain)
     const gainsSorted = [...gains].sort((a, b) => a - b)
 
-    inseminationRounds[roundId] = {
+    return {
       roundId,
       count: roundAnimals.length,
       gender: Object.entries(genderCount).map(([gender, count]) => ({ gender, count })),
@@ -130,7 +116,29 @@ const calculateMetrics = (animals: Animal[], stats: RegistrationStats) => {
           .slice(0, 5)
       }
     }
+}
+
+// Calculate metrics from real data
+const calculateMetrics = (animals: Animal[], stats: RegistrationStats) => {
+  // Group animals by insemination round
+  const animalsByRound = animals.reduce((acc, animal) => {
+    const roundId = animal.insemination_round_id || 'Sin Ronda'
+    if (!acc[roundId]) {
+      acc[roundId] = []
+    }
+    acc[roundId].push(animal)
+    return acc
+  }, {} as Record<string, Animal[]>)
+
+  // Calculate metrics for each round
+  const inseminationRounds: Record<string, any> = {}
+  
+  Object.entries(animalsByRound).forEach(([roundId, roundAnimals]) => {
+    inseminationRounds[roundId] = calculateRoundMetrics(roundAnimals, roundId)
   })
+
+  // Calculate overall metrics (all animals)
+  const overallMetrics = calculateRoundMetrics(animals, 'Todos')
 
   return {
     overview: {
@@ -140,14 +148,21 @@ const calculateMetrics = (animals: Animal[], stats: RegistrationStats) => {
       syncRate: 100, // Assume all data is synced
       cows: animals.length
     },
-    inseminationRounds
+    inseminationRounds: {
+      'Todos': overallMetrics,
+      ...inseminationRounds
+    }
   }
 }
 
 export function MetricsPage({ animals, stats }: MetricsPageProps) {
-  const [selectedRound, setSelectedRound] = useState('2024')
   const metrics = calculateMetrics(animals, stats)
-
+  
+  // Get available rounds, with "Todos" first
+  const availableRounds = Object.keys(metrics.inseminationRounds)
+  const defaultRound = availableRounds.includes('Todos') ? 'Todos' : availableRounds[0] || 'Todos'
+  
+  const [selectedRound, setSelectedRound] = useState(defaultRound)
   const currentRound = metrics.inseminationRounds[selectedRound as keyof typeof metrics.inseminationRounds]
 
   return (
@@ -209,11 +224,29 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.keys(metrics.inseminationRounds).map(roundId => (
-                  <SelectItem key={roundId} value={roundId}>
-                    Ronda {roundId} ({metrics.inseminationRounds[roundId as keyof typeof metrics.inseminationRounds].count} animales)
-                  </SelectItem>
-                ))}
+                {(() => {
+                  const rounds = Object.keys(metrics.inseminationRounds)
+                  // Sort: "Todos" first, then sort the rest (excluding "Todos" and "Sin Ronda")
+                  const sortedRounds = [
+                    ...rounds.filter(r => r === 'Todos'),
+                    ...rounds.filter(r => r !== 'Todos' && r !== 'Sin Ronda').sort(),
+                    ...rounds.filter(r => r === 'Sin Ronda')
+                  ]
+                  
+                  return sortedRounds.map(roundId => {
+                    const roundData = metrics.inseminationRounds[roundId as keyof typeof metrics.inseminationRounds]
+                    const displayName = roundId === 'Todos' 
+                      ? `Todos (${roundData.count} animales)` 
+                      : roundId === 'Sin Ronda'
+                      ? `Sin Ronda (${roundData.count} animales)`
+                      : `Ronda ${roundId} (${roundData.count} animales)`
+                    return (
+                      <SelectItem key={roundId} value={roundId}>
+                        {displayName}
+                      </SelectItem>
+                    )
+                  })
+                })()}
               </SelectContent>
             </Select>
           </div>
