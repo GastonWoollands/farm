@@ -178,6 +178,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
   
   const [selectedRound, setSelectedRound] = useState(defaultRound)
   const [comparisonLimit, setComparisonLimit] = useState<number | 'all'>(4)
+  const [tableLimit, setTableLimit] = useState<number | 'all'>(5)
   const [motherSort, setMotherSort] = useState<{ column: 'motherId' | 'count' | 'averageWeight', direction: 'asc' | 'desc' }>({
     column: 'averageWeight',
     direction: 'desc'
@@ -523,8 +524,10 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                 </Card>
               )}
 
-              {/* Table I: Top Mothers by Calf Weight */}
-              {(() => {
+              {/* Tables I & II: Side by Side */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Table I: Top Mothers by Calf Weight */}
+                {(() => {
                 // Filter animals by selected round
                 const filteredAnimals = selectedRound === 'Todos' 
                   ? animals 
@@ -581,17 +584,38 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         : (bValue as number) - (aValue as number)
                     }
                   })
-                  .slice(0, 10)
 
                 if (topMothers.length === 0) return null
+
+                const displayedMothers = tableLimit === 'all' 
+                  ? topMothers 
+                  : topMothers.slice(0, tableLimit)
 
                 return (
                   <Card>
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-lg">Top Madres por Peso de Cría</CardTitle>
-                      <CardDescription>
-                        Madres con crías de mayor peso promedio
-                      </CardDescription>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-lg">Top Madres por Peso de Cría</CardTitle>
+                          <CardDescription>
+                            Madres con crías de mayor peso promedio
+                          </CardDescription>
+                        </div>
+                        <Select
+                          value={tableLimit === 'all' ? 'all' : tableLimit.toString()}
+                          onValueChange={(value) => setTableLimit(value === 'all' ? 'all' : parseInt(value))}
+                        >
+                          <SelectTrigger className="w-[120px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5">Top 5</SelectItem>
+                            <SelectItem value="10">Top 10</SelectItem>
+                            <SelectItem value="20">Top 20</SelectItem>
+                            <SelectItem value="all">Todos</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <div className="overflow-x-auto">
@@ -634,7 +658,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                             </tr>
                           </thead>
                           <tbody>
-                            {topMothers.map((mother) => (
+                            {displayedMothers.map((mother) => (
                               <tr key={mother.motherId} className="border-b hover:bg-muted/30 transition-colors">
                                 <td className="p-3">
                                   <span className="font-medium">{mother.motherId}</span>
@@ -654,11 +678,11 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                       </div>
                     </CardContent>
                   </Card>
-                )
-              })()}
+                  )
+                })()}
 
-              {/* Table II: Bull Metrics */}
-              {(() => {
+                {/* Table II: Bull Metrics */}
+                {(() => {
                 // Filter animals by selected round
                 const filteredAnimals = selectedRound === 'Todos' 
                   ? animals 
@@ -727,13 +751,35 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
 
                 if (bullStats.length === 0) return null
 
+                const displayedBulls = tableLimit === 'all' 
+                  ? bullStats 
+                  : bullStats.slice(0, tableLimit)
+
                 return (
                   <Card>
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-lg">Métricas por Toro</CardTitle>
-                      <CardDescription>
-                        Rendimiento de toros por inseminaciones y crías
-                      </CardDescription>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-lg">Métricas por Toro</CardTitle>
+                          <CardDescription>
+                            Rendimiento de toros por inseminaciones y crías
+                          </CardDescription>
+                        </div>
+                        <Select
+                          value={tableLimit === 'all' ? 'all' : tableLimit.toString()}
+                          onValueChange={(value) => setTableLimit(value === 'all' ? 'all' : parseInt(value))}
+                        >
+                          <SelectTrigger className="w-[120px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5">Top 5</SelectItem>
+                            <SelectItem value="10">Top 10</SelectItem>
+                            <SelectItem value="20">Top 20</SelectItem>
+                            <SelectItem value="all">Todos</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <div className="overflow-x-auto">
@@ -778,7 +824,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                 onClick={() => handleBullSort('averageWeight')}
                               >
                                 <div className="flex items-center justify-center gap-1">
-                                  Peso Promedio
+                                  Peso
                                   {bullSort.column === 'averageWeight' && (
                                     <span className="text-xs">{bullSort.direction === 'asc' ? '↑' : '↓'}</span>
                                   )}
@@ -787,7 +833,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                             </tr>
                           </thead>
                           <tbody>
-                            {bullStats.map((bull) => (
+                            {displayedBulls.map((bull) => (
                               <tr key={bull.bullName} className="border-b hover:bg-muted/30 transition-colors">
                                 <td className="p-3">
                                   <span className="font-medium">{bull.bullName}</span>
@@ -814,8 +860,9 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                       </div>
                     </CardContent>
                   </Card>
-                )
-              })()}
+                  )
+                })()}
+              </div>
             </div>
           )}
         </CardContent>
