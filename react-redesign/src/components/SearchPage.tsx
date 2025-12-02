@@ -297,13 +297,13 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Search className="h-5 w-5" />
-                Buscar Animales
-              </CardTitle>
-              <CardDescription>
-                Encuentra y gestiona animales con filtros avanzados
-              </CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <Search className="h-5 w-5" />
+            Buscar Animales
+          </CardTitle>
+          <CardDescription>
+            Encuentra y gestiona animales con filtros avanzados
+          </CardDescription>
             </div>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <div className="flex items-center gap-2">
@@ -472,21 +472,21 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+          </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-medium">RP Animal</Label>
                 {filters.rpAnimal && (
-                  <Button 
+              <Button
                     variant="ghost" 
-                    size="sm" 
+                size="sm"
                     onClick={() => clearFilter('rpAnimal')}
                     className="h-7 w-7 p-0 text-xs hover:bg-destructive hover:text-destructive-foreground"
                     title="Limpiar filtro de RP Animal"
-                  >
+              >
                     ✕
-                  </Button>
+              </Button>
                 )}
               </div>
               <Input
@@ -500,15 +500,15 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-medium">RP Madre</Label>
                 {filters.rpMother && (
-                  <Button 
+                <Button 
                     variant="ghost" 
-                    size="sm" 
+                  size="sm" 
                     onClick={() => clearFilter('rpMother')}
                     className="h-7 w-7 p-0 text-xs hover:bg-destructive hover:text-destructive-foreground"
                     title="Limpiar filtro de RP Madre"
                   >
                     ✕
-                  </Button>
+                </Button>
                 )}
               </div>
               <Input
@@ -522,8 +522,8 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           {/* Results Count */}
           <div className="flex justify-end">
             <Badge variant="secondary">
-              {filteredAnimals.length} resultado{filteredAnimals.length !== 1 ? 's' : ''}
-            </Badge>
+                {filteredAnimals.length} resultado{filteredAnimals.length !== 1 ? 's' : ''}
+              </Badge>
           </div>
         </CardContent>
       </Card>

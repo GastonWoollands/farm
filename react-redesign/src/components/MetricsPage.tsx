@@ -401,9 +401,15 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                 {item.status === 'ALIVE' ? 'Vivos' : item.status === 'DEAD' ? 'Muertos' : 'Desconocido'}
                               </span>
                               <div className="flex items-center gap-2">
-                                <Badge variant={isDead ? 'destructive' : 'secondary'} className="font-semibold">
-                                  {item.count}
-                                </Badge>
+                                {isDead ? (
+                                  <span className="font-semibold text-red-600 dark:text-red-400">
+                                    {item.count}
+                                  </span>
+                                ) : (
+                                  <Badge variant="secondary" className="font-semibold">
+                                    {item.count}
+                                  </Badge>
+                                )}
                                 <span className="text-xs text-muted-foreground">
                                   {percentage}%
                                 </span>
