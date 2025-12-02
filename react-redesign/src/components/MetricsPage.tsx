@@ -377,7 +377,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                 {item.gender === 'FEMALE' ? 'Hembras' : item.gender === 'MALE' ? 'Machos' : 'Desconocido'}
                               </span>
                               <div className="flex items-center gap-2">
-                                <Badge variant="secondary">{item.count}</Badge>
+                                <Badge variant="secondary" className="font-semibold">{item.count}</Badge>
                                 <span className="text-xs text-muted-foreground">
                                   {percentage}%
                                 </span>
@@ -393,13 +393,14 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         {currentRound.status.map((item: any, index: number) => {
                           const total = currentRound.count
                           const percentage = total > 0 ? Math.round((item.count / total) * 100) : 0
+                          const isDead = item.status === 'DEAD'
                           return (
                             <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded">
                               <span className="text-sm">
                                 {item.status === 'ALIVE' ? 'Vivos' : item.status === 'DEAD' ? 'Muertos' : 'Desconocido'}
                               </span>
                               <div className="flex items-center gap-2">
-                                <Badge variant={item.status === 'ALIVE' ? 'default' : 'destructive'}>
+                                <Badge variant={isDead ? 'destructive' : 'secondary'} className="font-semibold">
                                   {item.count}
                                 </Badge>
                                 <span className="text-xs text-muted-foreground">
@@ -430,11 +431,11 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         <div className="text-xs text-muted-foreground">Mediana</div>
                       </div>
                       <div className="text-center p-3 bg-muted/30 rounded">
-                        <div className="text-lg font-semibold text-green-600 dark:text-green-400">{formatWeight(currentRound.weight.min)}</div>
+                        <div className="text-lg font-semibold text-red-600 dark:text-red-400">{formatWeight(currentRound.weight.min)}</div>
                         <div className="text-xs text-muted-foreground">Mínimo</div>
                       </div>
                       <div className="text-center p-3 bg-muted/30 rounded">
-                        <div className="text-lg font-semibold text-red-600 dark:text-red-400">{formatWeight(currentRound.weight.max)}</div>
+                        <div className="text-lg font-semibold text-green-600 dark:text-green-400">{formatWeight(currentRound.weight.max)}</div>
                         <div className="text-xs text-muted-foreground">Máximo</div>
                       </div>
                     </div>
@@ -642,7 +643,9 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                   <Badge variant="secondary">{mother.count}</Badge>
                                 </td>
                                 <td className="p-3 text-center">
-                                  <span className="font-medium">{formatWeight(mother.averageWeight)}</span>
+                                  <Badge variant="secondary" className="font-semibold">
+                                    {formatWeight(mother.averageWeight)}
+                                  </Badge>
                                 </td>
                               </tr>
                             ))}
@@ -790,14 +793,16 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                   <span className="font-medium">{bull.bullName}</span>
                                 </td>
                                 <td className="p-3 text-center">
-                                  <Badge variant="secondary">{bull.totalInseminations}</Badge>
+                                  <Badge variant="secondary" className="font-semibold">{bull.totalInseminations}</Badge>
                                 </td>
                                 <td className="p-3 text-center">
-                                  <Badge variant="default">{bull.aliveNewborns}</Badge>
+                                  <Badge variant="default" className="font-semibold">{bull.aliveNewborns}</Badge>
                                 </td>
                                 <td className="p-3 text-center">
                                   {bull.averageWeight > 0 ? (
-                                    <span className="font-medium">{formatWeight(bull.averageWeight)}</span>
+                                    <Badge variant="secondary" className="font-semibold">
+                                      {formatWeight(bull.averageWeight)}
+                                    </Badge>
                                   ) : (
                                     <span className="text-muted-foreground">-</span>
                                   )}
@@ -943,13 +948,15 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         </Badge>
                       </td>
                       <td className="p-3 text-center">
-                        <span className="font-medium">{formatWeight(round.averageWeight)}</span>
+                        <Badge variant="secondary" className="font-semibold">
+                          {formatWeight(round.averageWeight)}
+                        </Badge>
                       </td>
                       <td className="p-3 text-center">
                         {round.deadCount > 0 ? (
-                          <Badge variant="destructive">{round.deadCount}</Badge>
+                          <Badge variant="destructive" className="font-semibold">{round.deadCount}</Badge>
                         ) : (
-                          <span className="text-muted-foreground">0</span>
+                          <Badge variant="secondary" className="font-semibold">0</Badge>
                         )}
                       </td>
                     </tr>
