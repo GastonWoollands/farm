@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
@@ -178,24 +178,68 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
   
   const [selectedRound, setSelectedRound] = useState(defaultRound)
   const [comparisonLimit, setComparisonLimit] = useState<number | 'all'>(4)
+  const [motherSort, setMotherSort] = useState<{ column: 'motherId' | 'count' | 'averageWeight', direction: 'asc' | 'desc' }>({
+    column: 'averageWeight',
+    direction: 'desc'
+  })
+  const [bullSort, setBullSort] = useState<{ column: 'bullName' | 'totalInseminations' | 'aliveNewborns' | 'averageWeight', direction: 'asc' | 'desc' }>({
+    column: 'totalInseminations',
+    direction: 'desc'
+  })
+  const [comparisonSort, setComparisonSort] = useState<{ column: 'roundId' | 'count' | 'averageWeight' | 'deadCount', direction: 'asc' | 'desc' }>({
+    column: 'roundId',
+    direction: 'asc'
+  })
   const currentRound = metrics.inseminationRounds[selectedRound as keyof typeof metrics.inseminationRounds]
 
-  // Prepare comparison data: sort rounds by initial_date (lower to greater)
-  const comparisonData = (() => {
+  // Helper function to handle column sorting
+  const handleMotherSort = (column: 'motherId' | 'count' | 'averageWeight') => {
+    setMotherSort(prev => ({
+      column,
+      direction: prev.column === column && prev.direction === 'desc' ? 'asc' : 'desc'
+    }))
+  }
+
+  const handleBullSort = (column: 'bullName' | 'totalInseminations' | 'aliveNewborns' | 'averageWeight') => {
+    setBullSort(prev => ({
+      column,
+      direction: prev.column === column && prev.direction === 'desc' ? 'asc' : 'desc'
+    }))
+  }
+
+  const handleComparisonSort = (column: 'roundId' | 'count' | 'averageWeight' | 'deadCount') => {
+    setComparisonSort(prev => ({
+      column,
+      direction: prev.column === column && prev.direction === 'desc' ? 'asc' : 'desc'
+    }))
+  }
+
+  // Prepare comparison data: get all rounds with their metrics
+  const comparisonData = useMemo(() => {
+    // Get all rounds from metrics (excluding "Todos" and "Sin Ronda")
     const rounds = Object.keys(metrics.inseminationRounds)
       .filter(r => r !== 'Todos' && r !== 'Sin Ronda')
       .map(roundId => {
         const roundData = metrics.inseminationRounds[roundId as keyof typeof metrics.inseminationRounds]
+        if (!roundData) return null
+        
+        // Find round info from API to get dates
         const roundInfo = inseminationRounds.find(r => r.insemination_round_id === roundId)
+        
+        // Get dead count from status array
+        const deadStatus = roundData.status?.find((s: any) => s.status === 'DEAD')
+        const deadCount = deadStatus?.count || 0
+        
         return {
           roundId,
           initialDate: roundInfo?.initial_date || '',
           endDate: roundInfo?.end_date || '',
-          count: roundData.count,
-          averageWeight: roundData.weight.average,
-          deadCount: roundData.status.find((s: any) => s.status === 'DEAD')?.count || 0
+          count: roundData.count || 0,
+          averageWeight: roundData.weight?.average || 0,
+          deadCount
         }
       })
+      .filter((r): r is NonNullable<typeof r> => r !== null) // Remove nulls
       .sort((a, b) => {
         // Sort by date if available, otherwise by roundId
         if (a.initialDate && b.initialDate) {
@@ -207,7 +251,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
       })
     
     return rounds
-  })()
+  }, [metrics.inseminationRounds, inseminationRounds])
 
   return (
     <div className="space-y-6">
@@ -477,6 +521,296 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                   </CardContent>
                 </Card>
               )}
+
+              {/* Table I: Top Mothers by Calf Weight */}
+              {(() => {
+                // Filter animals by selected round
+                const filteredAnimals = selectedRound === 'Todos' 
+                  ? animals 
+                  : animals.filter(a => a.insemination_round_id === selectedRound || (selectedRound === 'Sin Ronda' && !a.insemination_round_id))
+                
+                // Group by mother_id and calculate metrics
+                const motherMetrics = filteredAnimals
+                  .filter(a => a.mother_id && a.weight)
+                  .reduce((acc, animal) => {
+                    const motherId = animal.mother_id!
+                    if (!acc[motherId]) {
+                      acc[motherId] = {
+                        motherId,
+                        calves: [],
+                        totalWeight: 0,
+                        count: 0
+                      }
+                    }
+                    acc[motherId].calves.push(animal.weight!)
+                    acc[motherId].totalWeight += animal.weight!
+                    acc[motherId].count++
+                    return acc
+                  }, {} as Record<string, { motherId: string, calves: number[], totalWeight: number, count: number }>)
+
+                const topMothers = Object.values(motherMetrics)
+                  .map(m => ({
+                    motherId: m.motherId,
+                    averageWeight: m.totalWeight / m.count,
+                    maxWeight: Math.max(...m.calves),
+                    count: m.count
+                  }))
+                  .sort((a, b) => {
+                    let aValue: string | number
+                    let bValue: string | number
+                    
+                    if (motherSort.column === 'motherId') {
+                      aValue = a.motherId
+                      bValue = b.motherId
+                    } else if (motherSort.column === 'count') {
+                      aValue = a.count
+                      bValue = b.count
+                    } else {
+                      aValue = a.averageWeight
+                      bValue = b.averageWeight
+                    }
+                    
+                    if (typeof aValue === 'string') {
+                      return motherSort.direction === 'asc' 
+                        ? aValue.localeCompare(bValue as string)
+                        : (bValue as string).localeCompare(aValue)
+                    } else {
+                      return motherSort.direction === 'asc' 
+                        ? (aValue as number) - (bValue as number)
+                        : (bValue as number) - (aValue as number)
+                    }
+                  })
+                  .slice(0, 10)
+
+                if (topMothers.length === 0) return null
+
+                return (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">Top Madres por Peso de Cría</CardTitle>
+                      <CardDescription>
+                        Madres con crías de mayor peso promedio
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="border-b">
+                              <th 
+                                className="text-left p-3 font-semibold text-sm cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                                onClick={() => handleMotherSort('motherId')}
+                              >
+                                <div className="flex items-center gap-1">
+                                  ID Madre
+                                  {motherSort.column === 'motherId' && (
+                                    <span className="text-xs">{motherSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                  )}
+                                </div>
+                              </th>
+                              <th 
+                                className="text-center p-3 font-semibold text-sm cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                                onClick={() => handleMotherSort('count')}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Crías
+                                  {motherSort.column === 'count' && (
+                                    <span className="text-xs">{motherSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                  )}
+                                </div>
+                              </th>
+                              <th 
+                                className="text-center p-3 font-semibold text-sm cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                                onClick={() => handleMotherSort('averageWeight')}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Peso Promedio
+                                  {motherSort.column === 'averageWeight' && (
+                                    <span className="text-xs">{motherSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                  )}
+                                </div>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {topMothers.map((mother) => (
+                              <tr key={mother.motherId} className="border-b hover:bg-muted/30 transition-colors">
+                                <td className="p-3">
+                                  <span className="font-medium">{mother.motherId}</span>
+                                </td>
+                                <td className="p-3 text-center">
+                                  <Badge variant="secondary">{mother.count}</Badge>
+                                </td>
+                                <td className="p-3 text-center">
+                                  <span className="font-medium">{formatWeight(mother.averageWeight)}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })()}
+
+              {/* Table II: Bull Metrics */}
+              {(() => {
+                // Filter animals by selected round
+                const filteredAnimals = selectedRound === 'Todos' 
+                  ? animals 
+                  : animals.filter(a => a.insemination_round_id === selectedRound || (selectedRound === 'Sin Ronda' && !a.insemination_round_id))
+                
+                // Group by father_id (bull name) and calculate metrics
+                const bullMetrics = filteredAnimals
+                  .filter(a => a.father_id)
+                  .reduce((acc, animal) => {
+                    const bullName = animal.father_id!
+                    if (!acc[bullName]) {
+                      acc[bullName] = {
+                        bullName,
+                        total: 0,
+                        alive: 0,
+                        totalWeight: 0,
+                        weightCount: 0
+                      }
+                    }
+                    acc[bullName].total++
+                    if (animal.status === 'ALIVE') {
+                      acc[bullName].alive++
+                    }
+                    if (animal.weight) {
+                      acc[bullName].totalWeight += animal.weight
+                      acc[bullName].weightCount++
+                    }
+                    return acc
+                  }, {} as Record<string, { bullName: string, total: number, alive: number, totalWeight: number, weightCount: number }>)
+
+                const bullStats = Object.values(bullMetrics)
+                  .map(b => ({
+                    bullName: b.bullName,
+                    totalInseminations: b.total,
+                    aliveNewborns: b.alive,
+                    averageWeight: b.weightCount > 0 ? b.totalWeight / b.weightCount : 0
+                  }))
+                  .sort((a, b) => {
+                    let aValue: string | number
+                    let bValue: string | number
+                    
+                    if (bullSort.column === 'bullName') {
+                      aValue = a.bullName
+                      bValue = b.bullName
+                    } else if (bullSort.column === 'totalInseminations') {
+                      aValue = a.totalInseminations
+                      bValue = b.totalInseminations
+                    } else if (bullSort.column === 'aliveNewborns') {
+                      aValue = a.aliveNewborns
+                      bValue = b.aliveNewborns
+                    } else {
+                      aValue = a.averageWeight
+                      bValue = b.averageWeight
+                    }
+                    
+                    if (typeof aValue === 'string') {
+                      return bullSort.direction === 'asc' 
+                        ? aValue.localeCompare(bValue as string)
+                        : (bValue as string).localeCompare(aValue)
+                    } else {
+                      return bullSort.direction === 'asc' 
+                        ? (aValue as number) - (bValue as number)
+                        : (bValue as number) - (aValue as number)
+                    }
+                  })
+
+                if (bullStats.length === 0) return null
+
+                return (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">Métricas por Toro</CardTitle>
+                      <CardDescription>
+                        Rendimiento de toros por inseminaciones y crías
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="border-b">
+                              <th 
+                                className="text-left p-3 font-semibold text-sm cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                                onClick={() => handleBullSort('bullName')}
+                              >
+                                <div className="flex items-center gap-1">
+                                  Toro
+                                  {bullSort.column === 'bullName' && (
+                                    <span className="text-xs">{bullSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                  )}
+                                </div>
+                              </th>
+                              <th 
+                                className="text-center p-3 font-semibold text-sm cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                                onClick={() => handleBullSort('totalInseminations')}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Inseminaciones
+                                  {bullSort.column === 'totalInseminations' && (
+                                    <span className="text-xs">{bullSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                  )}
+                                </div>
+                              </th>
+                              <th 
+                                className="text-center p-3 font-semibold text-sm cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                                onClick={() => handleBullSort('aliveNewborns')}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Nacidos Vivos
+                                  {bullSort.column === 'aliveNewborns' && (
+                                    <span className="text-xs">{bullSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                  )}
+                                </div>
+                              </th>
+                              <th 
+                                className="text-center p-3 font-semibold text-sm cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                                onClick={() => handleBullSort('averageWeight')}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Peso Promedio
+                                  {bullSort.column === 'averageWeight' && (
+                                    <span className="text-xs">{bullSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                  )}
+                                </div>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bullStats.map((bull) => (
+                              <tr key={bull.bullName} className="border-b hover:bg-muted/30 transition-colors">
+                                <td className="p-3">
+                                  <span className="font-medium">{bull.bullName}</span>
+                                </td>
+                                <td className="p-3 text-center">
+                                  <Badge variant="secondary">{bull.totalInseminations}</Badge>
+                                </td>
+                                <td className="p-3 text-center">
+                                  <Badge variant="default">{bull.aliveNewborns}</Badge>
+                                </td>
+                                <td className="p-3 text-center">
+                                  {bull.averageWeight > 0 ? (
+                                    <span className="font-medium">{formatWeight(bull.averageWeight)}</span>
+                                  ) : (
+                                    <span className="text-muted-foreground">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })()}
             </div>
           )}
         </CardContent>
@@ -519,17 +853,86 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left p-3 font-semibold text-sm">Ronda</th>
-                    <th className="text-center p-3 font-semibold text-sm">Nacimientos</th>
-                    <th className="text-center p-3 font-semibold text-sm">Peso Promedio</th>
-                    <th className="text-center p-3 font-semibold text-sm">Muertes</th>
+                    <th 
+                      className="text-left p-3 font-semibold text-sm cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                      onClick={() => handleComparisonSort('roundId')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Ronda
+                        {comparisonSort.column === 'roundId' && (
+                          <span className="text-xs">{comparisonSort.direction === 'asc' ? '↑' : '↓'}</span>
+                        )}
+                      </div>
+                    </th>
+                    <th 
+                      className="text-center p-3 font-semibold text-sm cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                      onClick={() => handleComparisonSort('count')}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        Nacimientos
+                        {comparisonSort.column === 'count' && (
+                          <span className="text-xs">{comparisonSort.direction === 'asc' ? '↑' : '↓'}</span>
+                        )}
+                      </div>
+                    </th>
+                    <th 
+                      className="text-center p-3 font-semibold text-sm cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                      onClick={() => handleComparisonSort('averageWeight')}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        Peso Promedio
+                        {comparisonSort.column === 'averageWeight' && (
+                          <span className="text-xs">{comparisonSort.direction === 'asc' ? '↑' : '↓'}</span>
+                        )}
+                      </div>
+                    </th>
+                    <th 
+                      className="text-center p-3 font-semibold text-sm cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                      onClick={() => handleComparisonSort('deadCount')}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        Muertes
+                        {comparisonSort.column === 'deadCount' && (
+                          <span className="text-xs">{comparisonSort.direction === 'asc' ? '↑' : '↓'}</span>
+                        )}
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {(comparisonLimit === 'all' 
                     ? comparisonData 
                     : comparisonData.slice(-comparisonLimit)
-                  ).map((round) => (
+                  )
+                  .sort((a, b) => {
+                    let aValue: string | number
+                    let bValue: string | number
+                    
+                    if (comparisonSort.column === 'roundId') {
+                      aValue = a.roundId
+                      bValue = b.roundId
+                    } else if (comparisonSort.column === 'count') {
+                      aValue = a.count
+                      bValue = b.count
+                    } else if (comparisonSort.column === 'averageWeight') {
+                      aValue = a.averageWeight
+                      bValue = b.averageWeight
+                    } else {
+                      aValue = a.deadCount
+                      bValue = b.deadCount
+                    }
+                    
+                    if (typeof aValue === 'string') {
+                      return comparisonSort.direction === 'asc' 
+                        ? aValue.localeCompare(bValue as string)
+                        : (bValue as string).localeCompare(aValue)
+                    } else {
+                      return comparisonSort.direction === 'asc' 
+                        ? (aValue as number) - (bValue as number)
+                        : (bValue as number) - (aValue as number)
+                    }
+                  })
+                  .map((round) => (
                     <tr key={round.roundId} className="border-b hover:bg-muted/30 transition-colors">
                       <td className="p-3">
                         <span className="font-medium">Ronda {round.roundId}</span>
