@@ -107,11 +107,29 @@ Cuando expliques diferencias entre métricas, usa lenguaje claro y conceptual, S
 
 **CONTEXTO CRÍTICO DE LA BASE DE DATOS:**
 
+**⚠️ IMPORTANTE - IDENTIFICADORES DE ANIMALES vs IDs TÉCNICOS:**
+
+**CUANDO EL USUARIO PREGUNTA SOBRE "ID", "IDENTIFICADOR", "NÚMERO", "CÓDIGO":**
+- El usuario SIEMPRE se refiere a identificadores de ANIMALES (animal_number, mother_id, father_id, bull_id), NO a los IDs técnicos internos.
+- Los campos `id` (INTEGER PRIMARY KEY) en las tablas son identificadores técnicos internos que NUNCA deben mostrarse al usuario ni usarse en consultas cuando el usuario pregunta por "id".
+- Cuando el usuario pregunta por "id de un animal", "identificador", "número de animal", "código", "ID de madre", "ID de toro", etc., debes usar:
+  - `animal_number` para animales/terneros registrados
+  - `mother_id` para madres
+  - `father_id` o `bull_id` para toros/padres
+  - `insemination_identifier` para identificadores de inseminación
+  - `insemination_round_id` para rondas de inseminación
+
+**REGLA CRÍTICA:**
+- NUNCA uses el campo `id` (INTEGER PRIMARY KEY) cuando el usuario pregunta por "id" de animales, madres, toros, etc.
+- El campo `id` es solo un identificador técnico interno de la base de datos y NO tiene significado para el usuario.
+- Si el usuario pregunta "dame el id del animal", "muéstrame los ids", "identificadores", etc., SIEMPRE usa `animal_number`, `mother_id`, `father_id`, `bull_id`, etc., según el contexto.
+
 **Tabla `registrations` (Registros de animales):**
 - Esta tabla contiene los TERNEROS/ANIMALES RECIÉN NACIDOS o REGISTRADOS, NO las madres adultas.
-- `animal_number`: Es el ID del animal REGISTRADO (el ternero/recién nacido). Ejemplo: "COW-002" es un ternero registrado.
-- `mother_id`: Es el ID de la MADRE (la vaca adulta que parió). Ejemplo: "MOTHER-002" es la madre.
-- `father_id` o `bull_id`: Es el ID del TORO/PADRE (el semental).
+- `id`: IDENTIFICADOR TÉCNICO INTERNO - NUNCA usar cuando el usuario pregunta por "id" de animales. Solo para relaciones técnicas.
+- `animal_number`: Es el ID del animal REGISTRADO (el ternero/recién nacido). Ejemplo: "COW-002" es un ternero registrado. **USA ESTE cuando el usuario pregunta por "id de animal", "identificador de animal", "número de animal".**
+- `mother_id`: Es el ID de la MADRE (la vaca adulta que parió). Ejemplo: "MOTHER-002" es la madre. **USA ESTE cuando el usuario pregunta por "id de madre", "identificador de madre", "código de madre".**
+- `father_id`: Es el ID del TORO/PADRE (el semental). **USA ESTE cuando el usuario pregunta por "id de toro", "identificador de toro", "código de toro", "id del padre".**
 - `born_date`: Fecha de nacimiento del ternero.
 - `weight`: Peso del TERNERO registrado (NO el peso de la madre).
 - `mother_weight`: Peso de la MADRE (si está disponible).
@@ -120,14 +138,17 @@ Cuando expliques diferencias entre métricas, usa lenguaje claro y conceptual, S
 
 **Tabla `inseminations` (Inseminaciones):**
 - Contiene registros de inseminaciones realizadas a las MADRES (vacas adultas).
-- `mother_id`: ID de la madre inseminada.
-- `bull_id`: ID del toro usado para la inseminación.
+- `id`: IDENTIFICADOR TÉCNICO INTERNO - NUNCA usar cuando el usuario pregunta por "id" de inseminaciones.
+- `mother_id`: ID de la madre inseminada. **USA ESTE cuando el usuario pregunta por "id de madre" en contexto de inseminaciones.**
+- `bull_id`: ID del toro usado para la inseminación. **USA ESTE cuando el usuario pregunta por "id de toro" en contexto de inseminaciones.**
+- `insemination_identifier`: Identificador de la inseminación. **USA ESTE cuando el usuario pregunta por "id de inseminación", "identificador de inseminación".**
 - `insemination_date`: Fecha de la inseminación.
-- `insemination_round_id`: ID de la ronda de inseminación.
+- `insemination_round_id`: ID de la ronda de inseminación. **USA ESTE cuando el usuario pregunta por "id de ronda", "identificador de ronda".**
 
 **Tabla `inseminations_ids` (Rondas de inseminación):**
 - Agrupa inseminaciones por ronda.
-- `insemination_round_id`: ID de la ronda.
+- `id`: IDENTIFICADOR TÉCNICO INTERNO - NUNCA usar cuando el usuario pregunta por "id" de rondas.
+- `insemination_round_id`: ID de la ronda. **USA ESTE cuando el usuario pregunta por "id de ronda", "identificador de ronda".**
 - `initial_date` y `end_date`: Fechas de la ronda.
 
 **RELACIONES IMPORTANTES:**
@@ -142,15 +163,19 @@ Cuando expliques diferencias entre métricas, usa lenguaje claro y conceptual, S
 - NO confundas `weight` (peso del ternero) con `mother_weight` (peso de la madre).
 - Para identificar madres, usa `mother_id` como identificador principal.
 - Para encontrar madres, agrupa por `mother_id` o busca registros donde el animal es una madre (puede requerir JOIN o subconsultas).
+- Si pregunta "id de las madres", "identificadores de madres", "códigos de madres", usa `mother_id`, NUNCA el campo técnico `id`.
 
 **CUANDO EL USUARIO PREGUNTA SOBRE "TERNEROS":**
 - Busca en `registrations` usando `animal_number` o filtros por `born_date`, `weight`, etc.
 - Los terneros están relacionados con sus madres a través de `mother_id`.
+- Si pregunta "id de los terneros", "identificadores de animales", "números de animal", "códigos", usa `animal_number`, NUNCA el campo técnico `id`.
 
 **CUANDO EL USUARIO PREGUNTA SOBRE "INSEMINACIONES":**
 - Busca en la tabla `inseminations`.
 - Usa `mother_id` para identificar la madre inseminada.
 - Usa `insemination_round_id` para agrupar por ronda.
+- Si pregunta "id de inseminaciones", "identificadores de inseminaciones", usa `insemination_identifier`, NUNCA el campo técnico `id`.
+- Si pregunta "id de toros", "identificadores de toros", usa `bull_id`, NUNCA el campo técnico `id`.
 
 {history_context}
 
@@ -164,6 +189,18 @@ SQL: SELECT * FROM events_state WHERE company_id = {company_id} ORDER BY created
 
 Usuario: "Dame los terneros de las madres MOTHER-002 y AC988"
 SQL: SELECT * FROM registrations WHERE company_id = {company_id} AND mother_id IN ('MOTHER-002', 'AC988');
+
+Usuario: "Dame los ids de los animales"
+SQL: SELECT animal_number FROM registrations WHERE company_id = {company_id};
+
+Usuario: "Muestra los identificadores de las madres"
+SQL: SELECT DISTINCT mother_id FROM registrations WHERE company_id = {company_id} AND mother_id IS NOT NULL;
+
+Usuario: "¿Cuál es el id del animal con mayor peso?"
+SQL: SELECT animal_number FROM registrations WHERE company_id = {company_id} ORDER BY weight DESC LIMIT 1;
+
+Usuario: "Dame los códigos de los toros"
+SQL: SELECT DISTINCT bull_id FROM inseminations WHERE company_id = {company_id} AND bull_id IS NOT NULL;
 
 Pregunta actual: {question}
 SQL:
@@ -812,11 +849,22 @@ Resultados de la consulta (JSON):
 
 **CONTEXTO CRÍTICO DE LA BASE DE DATOS:**
 
+**IMPORTANTE - IDENTIFICADORES DE ANIMALES vs IDs TÉCNICOS:**
+- Los campos `id` (INTEGER PRIMARY KEY) son identificadores técnicos internos que NUNCA deben mostrarse al usuario.
+- Cuando el usuario pregunta por "id", "identificador", "número", "código", se refiere a:
+  - `animal_number` para animales/terneros
+  - `mother_id` para madres
+  - `father_id` o `bull_id` para toros
+  - `insemination_identifier` para inseminaciones
+  - `insemination_round_id` para rondas
+- NUNCA muestres el campo técnico `id` en las respuestas, incluso si está en los resultados.
+
 **Tabla `registrations` (Registros de animales):**
 - Esta tabla contiene TERNEROS/ANIMALES RECIÉN NACIDOS, NO las madres adultas.
-- `animal_number`: Es el ID del ANIMAL REGISTRADO (el ternero/recién nacido). Ejemplo: "COW-002" es un ternero.
-- `mother_id`: Es el ID de la MADRE (la vaca adulta que parió). Ejemplo: "MOTHER-002" es la madre.
-- `father_id` o `bull_id`: Es el ID del TORO/PADRE.
+- `id`: IDENTIFICADOR TÉCNICO INTERNO - NUNCA mostrar al usuario.
+- `animal_number`: Es el ID del ANIMAL REGISTRADO (el ternero/recién nacido). Ejemplo: "COW-002" es un ternero. **Este es el "id" que el usuario quiere ver cuando pregunta por "id de animal".**
+- `mother_id`: Es el ID de la MADRE (la vaca adulta que parió). Ejemplo: "MOTHER-002" es la madre. **Este es el "id" que el usuario quiere ver cuando pregunta por "id de madre".**
+- `father_id`: Es el ID del TORO/PADRE. **Este es el "id" que el usuario quiere ver cuando pregunta por "id de toro" o "id del padre".**
 - `weight`: Peso del TERNERO registrado (NO el peso de la madre).
 - `mother_weight`: Peso de la MADRE (si está disponible).
 - `born_date`: Fecha de nacimiento del ternero.
@@ -824,16 +872,18 @@ Resultados de la consulta (JSON):
 **DIFERENCIAS IMPORTANTES:**
 - Si la pregunta es sobre "MADRES", el campo relevante es `mother_id`, NO `animal_number`.
 - Si la pregunta es sobre "TERNEROS" o "animales registrados", el campo relevante es `animal_number`.
-- `animal_number` = el ternero/animal registrado
-- `mother_id` = la madre (vaca adulta)
-- `father_id`/`bull_id` = el toro/padre
+- `animal_number` = el ternero/animal registrado (el "id" del animal para el usuario)
+- `mother_id` = la madre (vaca adulta) (el "id" de la madre para el usuario)
+- `father_id`/`bull_id` = el toro/padre (el "id" del toro para el usuario)
 - `weight` = peso del TERNERO (NO de la madre)
 - `mother_weight` = peso de la MADRE
 
 **Tabla `inseminations` (Inseminaciones):**
 - Contiene registros de inseminaciones a MADRES (vacas adultas).
-- `mother_id`: ID de la madre inseminada.
-- `bull_id`: ID del toro usado.
+- `id`: IDENTIFICADOR TÉCNICO INTERNO - NUNCA mostrar al usuario.
+- `mother_id`: ID de la madre inseminada. **Este es el "id" que el usuario quiere ver cuando pregunta por "id de madre" en inseminaciones.**
+- `bull_id`: ID del toro usado. **Este es el "id" que el usuario quiere ver cuando pregunta por "id de toro" en inseminaciones.**
+- `insemination_identifier`: Identificador de la inseminación. **Este es el "id" que el usuario quiere ver cuando pregunta por "id de inseminación".**
 
 **MÉTRICAS DISPONIBLES (para explicaciones):**
 Cuando expliques métricas, usa lenguaje conceptual y claro, SIN mencionar SQL, tablas, campos técnicos, filtros, o detalles de implementación:
@@ -848,10 +898,12 @@ Cuando expliques métricas, usa lenguaje conceptual y claro, SIN mencionar SQL, 
 **INSTRUCCIONES DE FORMATEO:**
 1. Natural y fácil de leer
 2. Mostrando solo la información relevante (evita IDs técnicos como `id`, `company_id`, timestamps como `created_at`, `updated_at`, `user_id`, `firebase_uid`)
-3. Organizada y clara
-4. En español
-5. Si hay múltiples resultados, usa una lista numerada o formato de tabla simple
-6. Si la pregunta es sobre métricas o diferencias entre métricas, incluye una explicación clara y breve
+3. **CRÍTICO**: NUNCA muestres el campo técnico `id` (INTEGER PRIMARY KEY) al usuario. Si está en los resultados, omítelo completamente.
+4. Cuando el usuario pregunta por "id", "identificador", "número", "código", muestra `animal_number`, `mother_id`, `father_id`, `bull_id`, `insemination_identifier`, etc., según corresponda.
+5. Organizada y clara
+6. En español
+7. Si hay múltiples resultados, usa una lista numerada o formato de tabla simple
+8. Si la pregunta es sobre métricas o diferencias entre métricas, incluye una explicación clara y breve
 
 **IMPORTANTE - PROHIBIDO REVELAR DETALLES TÉCNICOS:**
 - **NUNCA** menciones SQL, queries, tablas, campos técnicos, filtros, o detalles de implementación cuando expliques métricas.
@@ -860,13 +912,16 @@ Cuando expliques métricas, usa lenguaje conceptual y claro, SIN mencionar SQL, 
 - NO confundas `animal_number` (ternero) con `mother_id` (madre).
 - Si la pregunta es sobre "madres", identifica correctamente que `mother_id` es la madre, NO `animal_number`.
 - Si la pregunta es sobre "terneros" o "animales registrados", `animal_number` es el animal.
+- **CRÍTICO**: NUNCA muestres el campo técnico `id` (INTEGER PRIMARY KEY) al usuario. Si aparece en los resultados, omítelo completamente de la respuesta formateada.
+- Cuando el usuario pregunta por "id", "identificador", "número", "código", interpreta que se refiere a `animal_number`, `mother_id`, `father_id`, `bull_id`, etc., NO al campo técnico `id`.
 - No inventes información que no esté en los resultados.
 - Si hay muchos resultados, muestra los primeros y menciona cuántos hay en total.
 - Si la pregunta es sobre métricas o diferencias, explica claramente qué significa cada métrica usando lenguaje simple y conceptual.
 - Usa nombres de columnas legibles (pero solo cuando muestres datos, no en explicaciones de métricas):
-  - `animal_number` → "Número de animal" o "ID del animal registrado" (si es ternero)
-  - `mother_id` → "ID de madre" o "Madre"
-  - `father_id`/`bull_id` → "ID de toro" o "Toro"
+  - `animal_number` → "Número de animal", "ID del animal", "Identificador del animal", o "Código del animal" (si es ternero)
+  - `mother_id` → "ID de madre", "Identificador de madre", "Código de madre", o "Madre"
+  - `father_id`/`bull_id` → "ID de toro", "Identificador de toro", "Código de toro", o "Toro"
+  - `insemination_identifier` → "ID de inseminación", "Identificador de inseminación", o "Código de inseminación"
   - `weight` → "Peso"
   - `born_date` → "Fecha de nacimiento"
   - `gender` → "Género"
