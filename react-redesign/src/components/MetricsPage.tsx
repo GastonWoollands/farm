@@ -377,9 +377,11 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                               <span className="text-sm">
                                 {item.gender === 'FEMALE' ? 'Hembras' : item.gender === 'MALE' ? 'Machos' : 'Desconocido'}
                               </span>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="secondary" className="font-semibold">{item.count}</Badge>
-                                <span className="text-xs text-muted-foreground">
+                              <div className="flex items-center gap-2 justify-end" style={{ minWidth: '6rem' }}>
+                                <div className="w-[2.5rem] flex justify-end">
+                                  <Badge variant="secondary" className="font-semibold">{item.count}</Badge>
+                                </div>
+                                <span className="text-xs text-muted-foreground w-[2.5rem] text-right">
                                   {percentage}%
                                 </span>
                               </div>
@@ -400,17 +402,19 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                               <span className="text-sm">
                                 {item.status === 'ALIVE' ? 'Vivos' : item.status === 'DEAD' ? 'Muertos' : 'Desconocido'}
                               </span>
-                              <div className="flex items-center gap-2">
-                                {isDead ? (
-                                  <span className="font-semibold text-red-600 dark:text-red-400">
-                                    {item.count}
-                                  </span>
-                                ) : (
-                                  <Badge variant="secondary" className="font-semibold">
-                                    {item.count}
-                                  </Badge>
-                                )}
-                                <span className="text-xs text-muted-foreground">
+                              <div className="flex items-center gap-2 justify-end" style={{ minWidth: '6rem' }}>
+                                <div className="w-[2.5rem] flex justify-end">
+                                  {isDead ? (
+                                    <Badge variant="secondary" className="font-semibold">
+                                      <span className="text-red-600 dark:text-red-400">{item.count}</span>
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="secondary" className="font-semibold">
+                                      {item.count}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <span className="text-xs text-muted-foreground w-[2.5rem] text-right">
                                   {percentage}%
                                 </span>
                               </div>
@@ -1007,7 +1011,9 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                       </td>
                       <td className="p-3 text-center">
                         {round.deadCount > 0 ? (
-                          <Badge variant="destructive" className="font-semibold">{round.deadCount}</Badge>
+                          <Badge variant="secondary" className="font-semibold">
+                            <span className="text-red-600 dark:text-red-400">{round.deadCount}</span>
+                          </Badge>
                         ) : (
                           <Badge variant="secondary" className="font-semibold">0</Badge>
                         )}
