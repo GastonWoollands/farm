@@ -177,6 +177,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
   const defaultRound = availableRounds.includes('Todos') ? 'Todos' : availableRounds[0] || 'Todos'
   
   const [selectedRound, setSelectedRound] = useState(defaultRound)
+  const [comparisonLimit, setComparisonLimit] = useState<number | 'all'>(4)
   const currentRound = metrics.inseminationRounds[selectedRound as keyof typeof metrics.inseminationRounds]
 
   // Prepare comparison data: sort rounds by initial_date (lower to greater)
@@ -485,10 +486,33 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
       {comparisonData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl">Comparación entre Rondas</CardTitle>
-            <CardDescription>
-              Comparación de rendimiento entre campañas de inseminación {comparisonData.length > 1 ? '(ordenadas por fecha)' : ''}
-            </CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <CardTitle className="text-xl">Comparación entre Rondas</CardTitle>
+                <CardDescription>
+                  Comparación de rendimiento entre campañas de inseminación
+                </CardDescription>
+              </div>
+              {comparisonData.length > 4 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium whitespace-nowrap">Mostrar:</label>
+                  <Select 
+                    value={comparisonLimit === 'all' ? 'all' : comparisonLimit.toString()} 
+                    onValueChange={(value) => setComparisonLimit(value === 'all' ? 'all' : parseInt(value))}
+                  >
+                    <SelectTrigger className="w-[100px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="4">4</SelectItem>
+                      <SelectItem value="8">8</SelectItem>
+                      <SelectItem value="12">12</SelectItem>
+                      <SelectItem value="all">Todas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -502,7 +526,10 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {comparisonData.map((round) => (
+                  {(comparisonLimit === 'all' 
+                    ? comparisonData 
+                    : comparisonData.slice(-comparisonLimit)
+                  ).map((round) => (
                     <tr key={round.roundId} className="border-b hover:bg-muted/30 transition-colors">
                       <td className="p-3">
                         <span className="font-medium">Ronda {round.roundId}</span>
