@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ScatterChart, Scatter, Cell } from 'recharts'
 // Icons removed - not currently used in this component
 import { formatWeight, formatPercentage } from '@/lib/utils'
 import { Animal, RegistrationStats, InseminationRound, apiService } from '@/services/api'
@@ -192,6 +192,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
     column: 'roundId',
     direction: 'asc'
   })
+  const [plotType, setPlotType] = useState<'births' | 'weights'>('births')
   const currentRound = metrics.inseminationRounds[selectedRound as keyof typeof metrics.inseminationRounds]
 
   // Helper function to handle column sorting
@@ -268,6 +269,62 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
     if (dataPoints.length === 0) return null
 
     return { dataPoints }
+  }, [animals, selectedRound, currentRound])
+
+  // Prepare weight distribution data - individual animals with weight per date
+  const weightData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, weight: number, animalNumber: string }> } | null>(() => {
+    if (!currentRound || selectedRound === 'Todos' || selectedRound === 'Sin Ronda') {
+      return null
+    }
+
+    // Filter animals by selected round, ALIVE status, with both birth date and weight
+    const filteredAnimals = animals.filter(a => {
+      const matchesRound = a.insemination_round_id === selectedRound
+      const isAlive = a.status === 'ALIVE' || a.status === 'alive'
+      const hasBornDate = a.born_date && a.born_date.trim() !== ''
+      const hasWeight = a.weight !== undefined && a.weight !== null && a.weight > 0
+      
+      return matchesRound && isAlive && hasBornDate && hasWeight
+    })
+
+    if (filteredAnimals.length === 0) return null
+
+    // Create data points for each animal with weight
+    const dataPoints = filteredAnimals
+      .map(animal => {
+        const rawDate = animal.born_date!.trim()
+        let normalizedDate = rawDate
+
+        // Normalize to YYYY-MM-DD when possible
+        if (!rawDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          const parsed = new Date(rawDate)
+          if (!isNaN(parsed.getTime())) {
+            normalizedDate = parsed.toISOString().split('T')[0]
+          }
+        }
+
+        const dateObj = new Date(normalizedDate)
+        if (isNaN(dateObj.getTime())) {
+          return null
+        }
+
+        const formattedDate = `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}`
+        
+        return {
+          date: normalizedDate,
+          formattedDate,
+          weight: animal.weight!,
+          animalNumber: animal.animal_number
+        }
+      })
+      .filter((point): point is { date: string, formattedDate: string, weight: number, animalNumber: string } => point !== null)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+    if (dataPoints.length === 0) return null
+
+    return {
+      dataPoints
+    }
   }, [animals, selectedRound, currentRound])
 
   // Prepare comparison data: get all rounds with their metrics
@@ -413,64 +470,143 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                 </div>
               </div>
 
-              {/* Birth Distribution Plot */}
-              {distributionData && distributionData.dataPoints && distributionData.dataPoints.length > 0 ? (
+              {/* Birth/Weight Distribution Plot */}
+              {((plotType === 'births' && distributionData && distributionData.dataPoints && distributionData.dataPoints.length > 0) ||
+                (plotType === 'weights' && weightData && weightData.dataPoints && weightData.dataPoints.length > 0)) ? (
                 <Card className="border border-muted-foreground/20 shadow-sm">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">Distribución de Nacimientos</CardTitle>
-                    <CardDescription>
-                      Nacimientos diarios de crías vivas durante la campaña
-                    </CardDescription>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg">Distribución de Nacimientos</CardTitle>
+                        <CardDescription>
+                          {plotType === 'births' 
+                            ? 'Nacimientos diarios de crías vivas durante la campaña'
+                            : 'Peso de crías vivas por fecha de nacimiento'}
+                        </CardDescription>
+                      </div>
+                      <Select value={plotType} onValueChange={(value) => setPlotType(value as 'births' | 'weights')}>
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="births">Nacimientos</SelectItem>
+                          <SelectItem value="weights">Pesos</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="w-full" style={{ minHeight: '260px', height: '260px' }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={distributionData.dataPoints}
-                          margin={{ top: 10, right: 12, bottom: 24, left: 8 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                          <XAxis
-                            dataKey="formattedDate"
-                            className="text-xs"
-                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                            label={{
-                              value: 'Fecha de nacimiento',
-                              position: 'insideBottom',
-                              offset: -12,
-                              style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
-                            }}
-                          />
-                          <YAxis
-                            className="text-xs"
-                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                            allowDecimals={false}
-                            label={{
-                              value: 'Nacimientos',
-                              angle: -90,
-                              position: 'insideLeft',
-                              style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
-                            }}
-                          />
-                          <Tooltip
-                            cursor={{ fill: 'hsl(var(--muted)/0.25)' }}
-                            contentStyle={{
-                              backgroundColor: 'hsl(var(--card))',
-                              border: '1px solid hsl(var(--border))',
-                              borderRadius: 8,
-                              padding: '6px 8px'
-                            }}
-                            formatter={(value: number) => [`${value}`, 'Nacimientos']}
-                            labelFormatter={(label) => `Fecha: ${label}`}
-                          />
-                          <Bar
-                            dataKey="count"
-                            // Softer color for light & dark modes (less contrast than pure primary)
-                            fill="hsl(var(--primary) / 0.7)"
-                            radius={[4, 4, 0, 0]}
-                            maxBarSize={32}
-                          />
-                        </BarChart>
+                        {plotType === 'births' && distributionData ? (
+                          <BarChart
+                            data={distributionData.dataPoints}
+                            margin={{ top: 10, right: 12, bottom: 24, left: 8 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis
+                              dataKey="formattedDate"
+                              className="text-xs"
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              label={{
+                                value: 'Fecha de nacimiento',
+                                position: 'insideBottom',
+                                offset: -12,
+                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                              }}
+                            />
+                            <YAxis
+                              className="text-xs"
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              allowDecimals={false}
+                              label={{
+                                value: 'Nacimientos',
+                                angle: -90,
+                                position: 'insideLeft',
+                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                              }}
+                            />
+                            <Tooltip
+                              cursor={{ fill: 'hsl(var(--muted)/0.25)' }}
+                              contentStyle={{
+                                backgroundColor: 'hsl(var(--card))',
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: 8,
+                                padding: '6px 8px'
+                              }}
+                              formatter={(value: number) => [`${value}`, 'Nacimientos']}
+                              labelFormatter={(label) => `Fecha: ${label}`}
+                            />
+                            <Bar
+                              dataKey="count"
+                              fill="hsl(var(--primary) / 0.7)"
+                              radius={[4, 4, 0, 0]}
+                              maxBarSize={32}
+                            />
+                          </BarChart>
+                        ) : plotType === 'weights' && weightData ? (
+                          <ScatterChart
+                            data={[weightData.dataPoints]}
+                            margin={{ top: 10, right: 12, bottom: 24, left: 8 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis
+                              type="category"
+                              dataKey="formattedDate"
+                              className="text-xs"
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              label={{
+                                value: 'Fecha de nacimiento',
+                                position: 'insideBottom',
+                                offset: -12,
+                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                              }}
+                            />
+                            <YAxis
+                              type="number"
+                              dataKey="weight"
+                              className="text-xs"
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              label={{
+                                value: 'Peso (kg)',
+                                angle: -90,
+                                position: 'insideLeft',
+                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                              }}
+                            />
+                            <Tooltip
+                              cursor={{ strokeDasharray: '3 3' }}
+                              contentStyle={{
+                                backgroundColor: 'hsl(var(--card))',
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: 8,
+                                padding: '6px 8px'
+                              }}
+                              content={({ active, payload }) => {
+                                if (active && payload && payload.length > 0) {
+                                  const data = payload[0].payload
+                                  return (
+                                    <div>
+                                      <p className="font-semibold mb-1">Fecha: {data.formattedDate}</p>
+                                      <p className="text-sm">Animal: {data.animalNumber}</p>
+                                      <p className="text-sm">Peso: {formatWeight(data.weight)} kg</p>
+                                    </div>
+                                  )
+                                }
+                                return null
+                              }}
+                            />
+                            <Scatter
+                              name="Pesos"
+                              data={weightData.dataPoints}
+                              fill="hsl(var(--primary) / 0.7)"
+                            >
+                              {weightData.dataPoints.map((_: any, index: number) => (
+                                <Cell key={`cell-${index}`} fill="hsl(var(--primary) / 0.7)" />
+                              ))}
+                            </Scatter>
+                          </ScatterChart>
+                        ) : null}
                       </ResponsiveContainer>
                     </div>
                   </CardContent>
