@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ScatterChart, Scatter, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ScatterChart, Scatter, Cell, ReferenceLine } from 'recharts'
 // Icons removed - not currently used in this component
 import { formatWeight, formatPercentage } from '@/lib/utils'
 import { Animal, RegistrationStats, InseminationRound, apiService } from '@/services/api'
@@ -218,7 +218,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
   }
 
   // Prepare birth distribution data - newborn count per day
-  const distributionData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, count: number }> } | null>(() => {
+  const distributionData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, count: number }>, phases?: { initial: { end: string }, middle: { start: string, end: string }, final: { start: string } } } | null>(() => {
     if (!currentRound || selectedRound === 'Todos' || selectedRound === 'Sin Ronda') {
       return null
     }
@@ -268,11 +268,40 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
 
     if (dataPoints.length === 0) return null
 
-    return { dataPoints }
+    // Calculate phase boundaries (three equal parts)
+    const firstDate = new Date(dataPoints[0].date)
+    const lastDate = new Date(dataPoints[dataPoints.length - 1].date)
+    const totalDays = Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24))
+    const phase1End = new Date(firstDate)
+    phase1End.setDate(phase1End.getDate() + Math.floor(totalDays / 3))
+    const phase2End = new Date(firstDate)
+    phase2End.setDate(phase2End.getDate() + Math.floor((totalDays * 2) / 3))
+
+    // Find closest data points to phase boundaries
+    const findClosestDate = (targetDate: Date) => {
+      return dataPoints.reduce((closest, point) => {
+        const pointDate = new Date(point.date)
+        const closestDate = new Date(closest.date)
+        return Math.abs(pointDate.getTime() - targetDate.getTime()) < Math.abs(closestDate.getTime() - targetDate.getTime())
+          ? point : closest
+      })
+    }
+
+    const phase1EndPoint = findClosestDate(phase1End)
+    const phase2EndPoint = findClosestDate(phase2End)
+
+    return { 
+      dataPoints,
+      phases: {
+        initial: { end: phase1EndPoint.formattedDate },
+        middle: { start: phase1EndPoint.formattedDate, end: phase2EndPoint.formattedDate },
+        final: { start: phase2EndPoint.formattedDate }
+      }
+    }
   }, [animals, selectedRound, currentRound])
 
   // Prepare weight distribution data - individual animals with weight per date
-  const weightData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, weight: number, animalNumber: string }> } | null>(() => {
+  const weightData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, weight: number, animalNumber: string }>, phases?: { initial: { end: string }, middle: { start: string, end: string }, final: { start: string } } } | null>(() => {
     if (!currentRound || selectedRound === 'Todos' || selectedRound === 'Sin Ronda') {
       return null
     }
@@ -322,8 +351,35 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
 
     if (dataPoints.length === 0) return null
 
+    // Calculate phase boundaries (three equal parts)
+    const firstDate = new Date(dataPoints[0].date)
+    const lastDate = new Date(dataPoints[dataPoints.length - 1].date)
+    const totalDays = Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24))
+    const phase1End = new Date(firstDate)
+    phase1End.setDate(phase1End.getDate() + Math.floor(totalDays / 3))
+    const phase2End = new Date(firstDate)
+    phase2End.setDate(phase2End.getDate() + Math.floor((totalDays * 2) / 3))
+
+    // Find closest data points to phase boundaries
+    const findClosestDate = (targetDate: Date) => {
+      return dataPoints.reduce((closest, point) => {
+        const pointDate = new Date(point.date)
+        const closestDate = new Date(closest.date)
+        return Math.abs(pointDate.getTime() - targetDate.getTime()) < Math.abs(closestDate.getTime() - targetDate.getTime())
+          ? point : closest
+      })
+    }
+
+    const phase1EndPoint = findClosestDate(phase1End)
+    const phase2EndPoint = findClosestDate(phase2End)
+
     return {
-      dataPoints
+      dataPoints,
+      phases: {
+        initial: { end: phase1EndPoint.formattedDate },
+        middle: { start: phase1EndPoint.formattedDate, end: phase2EndPoint.formattedDate },
+        final: { start: phase2EndPoint.formattedDate }
+      }
     }
   }, [animals, selectedRound, currentRound])
 
@@ -501,7 +557,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         {plotType === 'births' && distributionData ? (
                           <BarChart
                             data={distributionData.dataPoints}
-                            margin={{ top: 10, right: 12, bottom: 24, left: 8 }}
+                            margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                             <XAxis
@@ -537,6 +593,22 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                               formatter={(value: number) => [`${value}`, 'Nacimientos']}
                               labelFormatter={(label) => `Fecha: ${label}`}
                             />
+                            {distributionData.phases && (
+                              <>
+                                <ReferenceLine 
+                                  x={distributionData.phases.initial.end} 
+                                  stroke="hsl(var(--muted-foreground) / 0.4)" 
+                                  strokeDasharray="2 2"
+                                  strokeWidth={1}
+                                />
+                                <ReferenceLine 
+                                  x={distributionData.phases.middle.end} 
+                                  stroke="hsl(var(--muted-foreground) / 0.4)" 
+                                  strokeDasharray="2 2"
+                                  strokeWidth={1}
+                                />
+                              </>
+                            )}
                             <Bar
                               dataKey="count"
                               fill="hsl(var(--primary) / 0.7)"
@@ -547,7 +619,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         ) : plotType === 'weights' && weightData ? (
                           <ScatterChart
                             data={[weightData.dataPoints]}
-                            margin={{ top: 10, right: 12, bottom: 24, left: 8 }}
+                            margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                             <XAxis
@@ -596,6 +668,22 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                 return null
                               }}
                             />
+                            {weightData.phases && (
+                              <>
+                                <ReferenceLine 
+                                  x={weightData.phases.initial.end} 
+                                  stroke="hsl(var(--muted-foreground) / 0.4)" 
+                                  strokeDasharray="2 2"
+                                  strokeWidth={1}
+                                />
+                                <ReferenceLine 
+                                  x={weightData.phases.middle.end} 
+                                  stroke="hsl(var(--muted-foreground) / 0.4)" 
+                                  strokeDasharray="2 2"
+                                  strokeWidth={1}
+                                />
+                              </>
+                            )}
                             <Scatter
                               name="Pesos"
                               data={weightData.dataPoints}
@@ -609,6 +697,14 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         ) : null}
                       </ResponsiveContainer>
                     </div>
+                    {/* Phase labels */}
+                    {((plotType === 'births' && distributionData?.phases) || (plotType === 'weights' && weightData?.phases)) && (
+                      <div className="flex items-center justify-between mt-2 px-2 text-xs text-muted-foreground">
+                        <span>Fase Inicial</span>
+                        <span>Fase Media</span>
+                        <span>Fase Final</span>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ) : selectedRound !== 'Todos' && selectedRound !== 'Sin Ronda' ? (
