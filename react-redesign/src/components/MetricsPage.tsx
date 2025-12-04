@@ -290,13 +290,18 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
     const phase1EndPoint = findClosestDate(phase1End)
     const phase2EndPoint = findClosestDate(phase2End)
 
-    // Calculate moving average for trend line (window of 3 days)
-    const windowSize = Math.min(3, Math.max(1, Math.floor(dataPoints.length / 3)))
+    // Calculate moving average for trend line with adaptive window size
+    // Use 10-15% of data points, with minimum 5 and maximum 15 days
+    const adaptiveWindowSize = Math.max(5, Math.min(15, Math.floor(dataPoints.length * 0.12)))
+    const windowSize = dataPoints.length >= 5 ? adaptiveWindowSize : Math.max(1, Math.floor(dataPoints.length / 2))
+    
     const dataPointsWithTrend = dataPoints.map((point, index) => {
-      const start = Math.max(0, index - Math.floor(windowSize / 2))
-      const end = Math.min(dataPoints.length, index + Math.ceil(windowSize / 2))
+      // Use centered moving average
+      const halfWindow = Math.floor(windowSize / 2)
+      const start = Math.max(0, index - halfWindow)
+      const end = Math.min(dataPoints.length, index + halfWindow + 1)
       const window = dataPoints.slice(start, end)
-      const average = window.reduce((sum, p) => sum + p.count, 0) / window.length
+      const average = window.length > 0 ? window.reduce((sum, p) => sum + p.count, 0) / window.length : point.count
       return {
         ...point,
         trend: Math.round(average * 10) / 10 // Round to 1 decimal
@@ -403,27 +408,54 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
       }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-    // Calculate moving average for trend line (window of 3 days)
-    const windowSize = Math.min(3, Math.max(1, Math.floor(dailyAverages.length / 3)))
+    // Calculate moving average for trend line with adaptive window size
+    // Use 10-15% of data points, with minimum 5 and maximum 15 days
+    const adaptiveWindowSize = Math.max(5, Math.min(15, Math.floor(dailyAverages.length * 0.12)))
+    const windowSize = dailyAverages.length >= 5 ? adaptiveWindowSize : Math.max(1, Math.floor(dailyAverages.length / 2))
+    
     const trendData = dailyAverages.map((point, index) => {
-      const start = Math.max(0, index - Math.floor(windowSize / 2))
-      const end = Math.min(dailyAverages.length, index + Math.ceil(windowSize / 2))
+      // Use centered moving average
+      const halfWindow = Math.floor(windowSize / 2)
+      const start = Math.max(0, index - halfWindow)
+      const end = Math.min(dailyAverages.length, index + halfWindow + 1)
       const window = dailyAverages.slice(start, end)
-      const average = window.reduce((sum, p) => sum + p.avgWeight, 0) / window.length
+      const average = window.length > 0 ? window.reduce((sum, p) => sum + p.avgWeight, 0) / window.length : point.avgWeight
       return {
         formattedDate: point.formattedDate,
+        date: point.date,
         trend: Math.round(average * 10) / 10 // Round to 1 decimal
       }
     })
 
+    // Validation: Ensure trend data covers all dates
+    if (trendData.length > 0 && dailyAverages.length > 0) {
+      console.log('Trend Calculation Validation:', {
+        dailyAveragesCount: dailyAverages.length,
+        trendDataCount: trendData.length,
+        windowSize,
+        firstDate: dailyAverages[0].formattedDate,
+        lastDate: dailyAverages[dailyAverages.length - 1].formattedDate,
+        firstTrend: trendData[0].formattedDate,
+        lastTrend: trendData[trendData.length - 1].formattedDate
+      })
+    }
+
     // Add trend to each data point based on its date
+    // Create a map for faster lookup
+    const trendMap = new Map(trendData.map(t => [t.formattedDate, t.trend]))
     const dataPointsWithTrend = dataPoints.map(point => {
-      const trendPoint = trendData.find(t => t.formattedDate === point.formattedDate)
+      const trendValue = trendMap.get(point.formattedDate)
       return {
         ...point,
-        trend: trendPoint?.trend || point.weight
+        trend: trendValue !== undefined ? trendValue : point.weight
       }
     })
+    
+    // Validation: Check if all data points have trend values
+    const pointsWithoutTrend = dataPointsWithTrend.filter(p => !trendMap.has(p.formattedDate))
+    if (pointsWithoutTrend.length > 0) {
+      console.warn('Data points without trend values:', pointsWithoutTrend.length, 'out of', dataPointsWithTrend.length)
+    }
 
     return {
       dataPoints: dataPointsWithTrend,
@@ -604,8 +636,8 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="w-full" style={{ minHeight: '260px', height: '260px' }}>
-                      <ResponsiveContainer width="100%" height="100%">
+                    <div className="w-full" style={{ minHeight: '260px', height: '260px', minWidth: 0 }}>
+                      <ResponsiveContainer width="100%" height={260}>
                         {plotType === 'births' && distributionData ? (
                           <BarChart
                             data={distributionData.dataPoints}
@@ -688,13 +720,28 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                 return acc
                               }, {} as Record<string, { weights: number[], formattedDate: string, date: string, trend: number }>)
 
-                              return Object.values(trendDataMap)
+                              const trendLineData = Object.values(trendDataMap)
                                 .map(data => ({
                                   formattedDate: data.formattedDate,
                                   date: data.date,
                                   trend: data.trend
                                 }))
+                                .filter(item => item.trend !== undefined && !isNaN(item.trend) && item.trend > 0)
                                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                              
+                              // Validation: Log trend line data to verify it includes all dates
+                              if (trendLineData.length > 0) {
+                                console.log('Trend Line Validation:', {
+                                  totalDates: trendLineData.length,
+                                  firstDate: trendLineData[0].formattedDate,
+                                  lastDate: trendLineData[trendLineData.length - 1].formattedDate,
+                                  totalDataPoints: weightData.dataPoints.length,
+                                  uniqueDates: new Set(weightData.dataPoints.map(p => p.formattedDate)).size,
+                                  sampleTrends: trendLineData.slice(0, 5).map(d => ({ date: d.formattedDate, trend: d.trend }))
+                                })
+                              }
+                              
+                              return trendLineData
                             })()}
                             margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
                           >
