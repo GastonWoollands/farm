@@ -218,7 +218,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
   }
 
   // Prepare birth distribution data - newborn count per day
-  const distributionData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, count: number, trend: number }>, phases?: { initial: { end: string }, middle: { start: string, end: string }, final: { start: string } } } | null>(() => {
+  const distributionData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, count: number, trend: number }>, phases?: { initial: { end: string, total: number }, middle: { start: string, end: string, total: number }, final: { start: string, total: number } } } | null>(() => {
     if (!currentRound || selectedRound === 'Todos' || selectedRound === 'Sin Ronda') {
       return null
     }
@@ -308,12 +308,31 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
       }
     })
 
+    // Calculate phase totals (sum of births per phase)
+    const phase1EndDate = new Date(phase1EndPoint.date)
+    const phase2EndDate = new Date(phase2EndPoint.date)
+    
+    let initialPhaseTotal = 0
+    let middlePhaseTotal = 0
+    let finalPhaseTotal = 0
+
+    dataPoints.forEach(point => {
+      const pointDate = new Date(point.date)
+      if (pointDate <= phase1EndDate) {
+        initialPhaseTotal += point.count
+      } else if (pointDate <= phase2EndDate) {
+        middlePhaseTotal += point.count
+      } else {
+        finalPhaseTotal += point.count
+      }
+    })
+
     return { 
       dataPoints: dataPointsWithTrend,
       phases: {
-        initial: { end: phase1EndPoint.formattedDate },
-        middle: { start: phase1EndPoint.formattedDate, end: phase2EndPoint.formattedDate },
-        final: { start: phase2EndPoint.formattedDate }
+        initial: { end: phase1EndPoint.formattedDate, total: initialPhaseTotal },
+        middle: { start: phase1EndPoint.formattedDate, end: phase2EndPoint.formattedDate, total: middlePhaseTotal },
+        final: { start: phase2EndPoint.formattedDate, total: finalPhaseTotal }
       }
     }
   }, [animals, selectedRound, currentRound])
@@ -684,23 +703,32 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                               radius={[4, 4, 0, 0]}
                               maxBarSize={32}
                             />
-                            <Line
-                              type="monotone"
-                              dataKey="trend"
-                              stroke="hsl(var(--primary))"
-                              strokeWidth={2}
-                              dot={false}
-                              activeDot={false}
-                              isAnimationActive={false}
-                            />
                           </BarChart>
                         ) : plotType === 'weights' && weightData && weightData.trendData ? (
                           <ComposedChart
-                            data={weightData.trendData.map((t: { formattedDate: string, date: string, trend: number }) => ({
-                              formattedDate: t.formattedDate,
-                              date: t.date,
-                              trend: t.trend
-                            }))}
+                            data={(() => {
+                              // Use trendData as base - this defines the X-axis categories
+                              const trendLineData = weightData.trendData.map((t: { formattedDate: string, date: string, trend: number }) => ({
+                                formattedDate: t.formattedDate,
+                                date: t.date,
+                                trend: t.trend
+                              }))
+                              
+                              // Verify all dates are present and sorted
+                              const sortedData = trendLineData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                              
+                              // Log to verify data structure
+                              console.log('ComposedChart Trend Data:', {
+                                count: sortedData.length,
+                                first: sortedData[0],
+                                last: sortedData[sortedData.length - 1],
+                                hasAllTrends: sortedData.every(d => d.trend !== undefined && !isNaN(d.trend) && d.trend > 0),
+                                sample: sortedData.slice(0, 5).map(d => ({ date: d.formattedDate, trend: d.trend })),
+                                lastSample: sortedData.slice(-5).map(d => ({ date: d.formattedDate, trend: d.trend }))
+                              })
+                              
+                              return sortedData
+                            })()}
                             margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
@@ -709,6 +737,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                               dataKey="formattedDate"
                               className="text-xs"
                               tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              allowDuplicatedCategory={false}
                               label={{
                                 value: 'Fecha de nacimiento',
                                 position: 'insideBottom',
@@ -757,7 +786,6 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                       <p className="font-semibold mb-1">Fecha: {data.formattedDate}</p>
                                       {animalsForDate.length > 0 && (
                                         <>
-                                          <p className="text-sm">Tendencia: {formatWeight(data.trend)} kg</p>
                                           {animalsForDate.length <= 3 && animalsForDate.map((animal, idx) => (
                                             <p key={idx} className="text-sm">Animal {animal.animalNumber}: {formatWeight(animal.weight)} kg</p>
                                           ))}
@@ -772,18 +800,20 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                 return null
                               }}
                             />
-                            {/* Trend line */}
+                            {/* Trend line - render first to ensure it's visible */}
                             <Line
                               type="monotone"
                               dataKey="trend"
                               yAxisId="weight"
                               stroke="hsl(var(--primary))"
-                              strokeWidth={2}
+                              strokeWidth={2.5}
                               dot={false}
-                              activeDot={{ r: 4 }}
+                              activeDot={{ r: 5, fill: 'hsl(var(--primary))', strokeWidth: 2 }}
                               isAnimationActive={false}
+                              connectNulls={true}
+                              name="Tendencia"
                             />
-                            {/* Scatter points for individual animals */}
+                            {/* Scatter points for individual animals - render after Line */}
                             <Scatter
                               name="Pesos"
                               yAxisId="weight"
@@ -803,6 +833,62 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         ) : null}
                       </ResponsiveContainer>
                     </div>
+                    {/* Phase Performance Visualization */}
+                    {plotType === 'births' && distributionData?.phases && (() => {
+                      const maxTotal = Math.max(distributionData.phases.initial.total, distributionData.phases.middle.total, distributionData.phases.final.total)
+                      const initialHeight = maxTotal > 0 ? (distributionData.phases.initial.total / maxTotal) * 40 : 0
+                      const middleHeight = maxTotal > 0 ? (distributionData.phases.middle.total / maxTotal) * 40 : 0
+                      const finalHeight = maxTotal > 0 ? (distributionData.phases.final.total / maxTotal) * 40 : 0
+                      
+                      return (
+                        <div className="mt-4 pt-4 border-t border-border">
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-sm font-medium text-muted-foreground">Rendimiento por Fase</span>
+                          </div>
+                          <div className="relative h-16 flex items-end justify-between px-2">
+                            {/* Line connecting the three phases */}
+                            <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ height: '64px' }}>
+                              <line
+                                x1="12.5%"
+                                y1={48 - initialHeight}
+                                x2="50%"
+                                y2={48 - middleHeight}
+                                stroke="hsl(var(--primary))"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                opacity={0.6}
+                              />
+                              <line
+                                x1="50%"
+                                y1={48 - middleHeight}
+                                x2="87.5%"
+                                y2={48 - finalHeight}
+                                stroke="hsl(var(--primary))"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                opacity={0.6}
+                              />
+                            </svg>
+                            {/* Phase points and labels */}
+                            <div className="relative z-10 flex-1 flex flex-col items-center">
+                              <div className="w-2 h-2 rounded-full bg-primary border-2 border-background mb-auto" style={{ marginTop: `${48 - initialHeight - 4}px` }} />
+                              <span className="text-xs text-muted-foreground mt-2">Inicial</span>
+                              <span className="text-xs font-semibold">{distributionData.phases.initial.total}</span>
+                            </div>
+                            <div className="relative z-10 flex-1 flex flex-col items-center">
+                              <div className="w-2 h-2 rounded-full bg-primary border-2 border-background mb-auto" style={{ marginTop: `${48 - middleHeight - 4}px` }} />
+                              <span className="text-xs text-muted-foreground mt-2">Media</span>
+                              <span className="text-xs font-semibold">{distributionData.phases.middle.total}</span>
+                            </div>
+                            <div className="relative z-10 flex-1 flex flex-col items-center">
+                              <div className="w-2 h-2 rounded-full bg-primary border-2 border-background mb-auto" style={{ marginTop: `${48 - finalHeight - 4}px` }} />
+                              <span className="text-xs text-muted-foreground mt-2">Final</span>
+                              <span className="text-xs font-semibold">{distributionData.phases.final.total}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </CardContent>
                 </Card>
               ) : selectedRound !== 'Todos' && selectedRound !== 'Sin Ronda' ? (
