@@ -694,14 +694,38 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                 borderRadius: 8,
                                 padding: '6px 8px'
                               }}
-                              formatter={(value: number) => [`${value}`, 'Nacimientos']}
-                              labelFormatter={(label) => `Fecha: ${label}`}
+                              content={({ active, payload, label }) => {
+                                if (active && payload && payload.length > 0) {
+                                  // Find the count value (from Bar), ignore trend (from Line)
+                                  const countPayload = payload.find(p => p.dataKey === 'count')
+                                  if (countPayload) {
+                                    return (
+                                      <div>
+                                        <p className="font-semibold mb-1">Fecha: {label}</p>
+                                        <p className="text-sm">Nacimientos: {countPayload.value}</p>
+                                      </div>
+                                    )
+                                  }
+                                }
+                                return null
+                              }}
                             />
                             <Bar
+                              name="count"
                               dataKey="count"
                               fill="hsl(var(--primary) / 0.7)"
                               radius={[4, 4, 0, 0]}
                               maxBarSize={32}
+                            />
+                            <Line
+                              name="trend"
+                              type="monotone"
+                              dataKey="trend"
+                              stroke="hsl(var(--primary))"
+                              strokeWidth={2}
+                              dot={false}
+                              activeDot={false}
+                              isAnimationActive={false}
                             />
                           </BarChart>
                         ) : plotType === 'weights' && weightData && weightData.trendData ? (
