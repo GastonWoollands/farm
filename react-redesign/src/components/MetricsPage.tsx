@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ScatterChart, Scatter, Cell, ReferenceLine } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter, Cell, ReferenceLine, Line, ComposedChart } from 'recharts'
 // Icons removed - not currently used in this component
 import { formatWeight, formatPercentage } from '@/lib/utils'
 import { Animal, RegistrationStats, InseminationRound, apiService } from '@/services/api'
@@ -218,7 +218,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
   }
 
   // Prepare birth distribution data - newborn count per day
-  const distributionData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, count: number }>, phases?: { initial: { end: string }, middle: { start: string, end: string }, final: { start: string } } } | null>(() => {
+  const distributionData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, count: number, trend: number }>, phases?: { initial: { end: string }, middle: { start: string, end: string }, final: { start: string } } } | null>(() => {
     if (!currentRound || selectedRound === 'Todos' || selectedRound === 'Sin Ronda') {
       return null
     }
@@ -290,8 +290,21 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
     const phase1EndPoint = findClosestDate(phase1End)
     const phase2EndPoint = findClosestDate(phase2End)
 
+    // Calculate moving average for trend line (window of 3 days)
+    const windowSize = Math.min(3, Math.max(1, Math.floor(dataPoints.length / 3)))
+    const dataPointsWithTrend = dataPoints.map((point, index) => {
+      const start = Math.max(0, index - Math.floor(windowSize / 2))
+      const end = Math.min(dataPoints.length, index + Math.ceil(windowSize / 2))
+      const window = dataPoints.slice(start, end)
+      const average = window.reduce((sum, p) => sum + p.count, 0) / window.length
+      return {
+        ...point,
+        trend: Math.round(average * 10) / 10 // Round to 1 decimal
+      }
+    })
+
     return { 
-      dataPoints,
+      dataPoints: dataPointsWithTrend,
       phases: {
         initial: { end: phase1EndPoint.formattedDate },
         middle: { start: phase1EndPoint.formattedDate, end: phase2EndPoint.formattedDate },
@@ -301,7 +314,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
   }, [animals, selectedRound, currentRound])
 
   // Prepare weight distribution data - individual animals with weight per date
-  const weightData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, weight: number, animalNumber: string }>, phases?: { initial: { end: string }, middle: { start: string, end: string }, final: { start: string } } } | null>(() => {
+  const weightData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, weight: number, animalNumber: string, trend: number }>, phases?: { initial: { end: string }, middle: { start: string, end: string }, final: { start: string } } } | null>(() => {
     if (!currentRound || selectedRound === 'Todos' || selectedRound === 'Sin Ronda') {
       return null
     }
@@ -373,8 +386,47 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
     const phase1EndPoint = findClosestDate(phase1End)
     const phase2EndPoint = findClosestDate(phase2End)
 
+    // Group weights by date and calculate average per date for trend calculation
+    const weightsByDate = dataPoints.reduce((acc, point) => {
+      if (!acc[point.date]) {
+        acc[point.date] = { weights: [], formattedDate: point.formattedDate }
+      }
+      acc[point.date].weights.push(point.weight)
+      return acc
+    }, {} as Record<string, { weights: number[], formattedDate: string }>)
+
+    const dailyAverages = Object.entries(weightsByDate)
+      .map(([date, data]) => ({
+        date,
+        formattedDate: data.formattedDate,
+        avgWeight: data.weights.reduce((sum, w) => sum + w, 0) / data.weights.length
+      }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+    // Calculate moving average for trend line (window of 3 days)
+    const windowSize = Math.min(3, Math.max(1, Math.floor(dailyAverages.length / 3)))
+    const trendData = dailyAverages.map((point, index) => {
+      const start = Math.max(0, index - Math.floor(windowSize / 2))
+      const end = Math.min(dailyAverages.length, index + Math.ceil(windowSize / 2))
+      const window = dailyAverages.slice(start, end)
+      const average = window.reduce((sum, p) => sum + p.avgWeight, 0) / window.length
+      return {
+        formattedDate: point.formattedDate,
+        trend: Math.round(average * 10) / 10 // Round to 1 decimal
+      }
+    })
+
+    // Add trend to each data point based on its date
+    const dataPointsWithTrend = dataPoints.map(point => {
+      const trendPoint = trendData.find(t => t.formattedDate === point.formattedDate)
+      return {
+        ...point,
+        trend: trendPoint?.trend || point.weight
+      }
+    })
+
     return {
-      dataPoints,
+      dataPoints: dataPointsWithTrend,
       phases: {
         initial: { end: phase1EndPoint.formattedDate },
         middle: { start: phase1EndPoint.formattedDate, end: phase2EndPoint.formattedDate },
@@ -615,10 +667,35 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                               radius={[4, 4, 0, 0]}
                               maxBarSize={32}
                             />
+                            <Line
+                              type="monotone"
+                              dataKey="trend"
+                              stroke="hsl(var(--primary))"
+                              strokeWidth={2}
+                              dot={false}
+                              activeDot={false}
+                              isAnimationActive={false}
+                            />
                           </BarChart>
                         ) : plotType === 'weights' && weightData ? (
-                          <ScatterChart
-                            data={[weightData.dataPoints]}
+                          <ComposedChart
+                            data={(() => {
+                              // Group by date to create trend line data
+                              const trendDataMap = weightData.dataPoints.reduce((acc, point) => {
+                                if (!acc[point.formattedDate]) {
+                                  acc[point.formattedDate] = { weights: [], formattedDate: point.formattedDate, date: point.date, trend: point.trend }
+                                }
+                                return acc
+                              }, {} as Record<string, { weights: number[], formattedDate: string, date: string, trend: number }>)
+
+                              return Object.values(trendDataMap)
+                                .map(data => ({
+                                  formattedDate: data.formattedDate,
+                                  date: data.date,
+                                  trend: data.trend
+                                }))
+                                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                            })()}
                             margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
@@ -636,7 +713,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                             />
                             <YAxis
                               type="number"
-                              dataKey="weight"
+                              yAxisId="weight"
                               className="text-xs"
                               tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
                               label={{
@@ -645,6 +722,17 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                 position: 'insideLeft',
                                 style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
                               }}
+                              domain={(() => {
+                                // Calculate domain from both trend and weight values
+                                const allValues = [
+                                  ...weightData.dataPoints.map(p => p.trend),
+                                  ...weightData.dataPoints.map(p => p.weight)
+                                ]
+                                const min = Math.min(...allValues)
+                                const max = Math.max(...allValues)
+                                const padding = (max - min) * 0.1
+                                return [Math.max(0, min - padding), max + padding]
+                              })()}
                             />
                             <Tooltip
                               cursor={{ strokeDasharray: '3 3' }}
@@ -657,11 +745,22 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                               content={({ active, payload }) => {
                                 if (active && payload && payload.length > 0) {
                                   const data = payload[0].payload
+                                  // Find all animals for this date
+                                  const animalsForDate = weightData.dataPoints.filter(p => p.formattedDate === data.formattedDate)
                                   return (
                                     <div>
                                       <p className="font-semibold mb-1">Fecha: {data.formattedDate}</p>
-                                      <p className="text-sm">Animal: {data.animalNumber}</p>
-                                      <p className="text-sm">Peso: {formatWeight(data.weight)} kg</p>
+                                      {animalsForDate.length > 0 && (
+                                        <>
+                                          <p className="text-sm">Tendencia: {formatWeight(data.trend)} kg</p>
+                                          {animalsForDate.length <= 3 && animalsForDate.map((animal, idx) => (
+                                            <p key={idx} className="text-sm">Animal {animal.animalNumber}: {formatWeight(animal.weight)} kg</p>
+                                          ))}
+                                          {animalsForDate.length > 3 && (
+                                            <p className="text-sm text-muted-foreground">+{animalsForDate.length - 3} más</p>
+                                          )}
+                                        </>
+                                      )}
                                     </div>
                                   )
                                 }
@@ -684,16 +783,34 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                 />
                               </>
                             )}
+                            {/* Trend line */}
+                            <Line
+                              type="monotone"
+                              dataKey="trend"
+                              yAxisId="weight"
+                              stroke="hsl(var(--primary))"
+                              strokeWidth={2}
+                              dot={false}
+                              activeDot={{ r: 4 }}
+                              isAnimationActive={false}
+                            />
+                            {/* Scatter points for individual animals */}
                             <Scatter
                               name="Pesos"
-                              data={weightData.dataPoints}
+                              yAxisId="weight"
+                              data={weightData.dataPoints.map(p => ({
+                                formattedDate: p.formattedDate,
+                                weight: p.weight,
+                                animalNumber: p.animalNumber
+                              }))}
+                              dataKey="weight"
                               fill="hsl(var(--primary) / 0.7)"
                             >
                               {weightData.dataPoints.map((_: any, index: number) => (
                                 <Cell key={`cell-${index}`} fill="hsl(var(--primary) / 0.7)" />
                               ))}
                             </Scatter>
-                          </ScatterChart>
+                          </ComposedChart>
                         ) : null}
                       </ResponsiveContainer>
                     </div>
