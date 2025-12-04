@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter, Cell, ReferenceLine, Line, ComposedChart } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter, Cell, Line, ComposedChart } from 'recharts'
 // Icons removed - not currently used in this component
 import { formatWeight, formatPercentage } from '@/lib/utils'
 import { Animal, RegistrationStats, InseminationRound, apiService } from '@/services/api'
@@ -677,22 +677,6 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                               formatter={(value: number) => [`${value}`, 'Nacimientos']}
                               labelFormatter={(label) => `Fecha: ${label}`}
                             />
-                            {distributionData.phases && (
-                              <>
-                                <ReferenceLine 
-                                  x={distributionData.phases.initial.end} 
-                                  stroke="hsl(var(--muted-foreground) / 0.4)" 
-                                  strokeDasharray="2 2"
-                                  strokeWidth={1}
-                                />
-                                <ReferenceLine 
-                                  x={distributionData.phases.middle.end} 
-                                  stroke="hsl(var(--muted-foreground) / 0.4)" 
-                                  strokeDasharray="2 2"
-                                  strokeWidth={1}
-                                />
-                              </>
-                            )}
                             <Bar
                               dataKey="count"
                               fill="hsl(var(--primary) / 0.7)"
@@ -814,22 +798,6 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                                 return null
                               }}
                             />
-                            {weightData.phases && (
-                              <>
-                                <ReferenceLine 
-                                  x={weightData.phases.initial.end} 
-                                  stroke="hsl(var(--muted-foreground) / 0.4)" 
-                                  strokeDasharray="2 2"
-                                  strokeWidth={1}
-                                />
-                                <ReferenceLine 
-                                  x={weightData.phases.middle.end} 
-                                  stroke="hsl(var(--muted-foreground) / 0.4)" 
-                                  strokeDasharray="2 2"
-                                  strokeWidth={1}
-                                />
-                              </>
-                            )}
                             {/* Trend line */}
                             <Line
                               type="monotone"
@@ -861,14 +829,6 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         ) : null}
                       </ResponsiveContainer>
                     </div>
-                    {/* Phase labels */}
-                    {((plotType === 'births' && distributionData?.phases) || (plotType === 'weights' && weightData?.phases)) && (
-                      <div className="flex items-center justify-between mt-2 px-2 text-xs text-muted-foreground">
-                        <span>Fase Inicial</span>
-                        <span>Fase Media</span>
-                        <span>Fase Final</span>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               ) : selectedRound !== 'Todos' && selectedRound !== 'Sin Ronda' ? (
