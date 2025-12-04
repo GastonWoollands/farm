@@ -319,7 +319,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
   }, [animals, selectedRound, currentRound])
 
   // Prepare weight distribution data - individual animals with weight per date
-  const weightData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, weight: number, animalNumber: string, trend: number }>, phases?: { initial: { end: string }, middle: { start: string, end: string }, final: { start: string } } } | null>(() => {
+  const weightData = useMemo<{ dataPoints: Array<{ date: string, formattedDate: string, weight: number, animalNumber: string, trend: number }>, trendData: Array<{ formattedDate: string, date: string, trend: number }>, phases?: { initial: { end: string }, middle: { start: string, end: string }, final: { start: string } } } | null>(() => {
     if (!currentRound || selectedRound === 'Todos' || selectedRound === 'Sin Ronda') {
       return null
     }
@@ -409,12 +409,12 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
     // Calculate moving average for trend line with adaptive window size
-    // Use 10-15% of data points, with minimum 5 and maximum 15 days
+    // Use 12% of data points, with minimum 5 and maximum 15 days
     const adaptiveWindowSize = Math.max(5, Math.min(15, Math.floor(dailyAverages.length * 0.12)))
     const windowSize = dailyAverages.length >= 5 ? adaptiveWindowSize : Math.max(1, Math.floor(dailyAverages.length / 2))
     
     const trendData = dailyAverages.map((point, index) => {
-      // Use centered moving average
+      // Use centered moving average with proper window
       const halfWindow = Math.floor(windowSize / 2)
       const start = Math.max(0, index - halfWindow)
       const end = Math.min(dailyAverages.length, index + halfWindow + 1)
@@ -459,6 +459,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
 
     return {
       dataPoints: dataPointsWithTrend,
+      trendData: trendData, // Include trend data for direct use in chart
       phases: {
         initial: { end: phase1EndPoint.formattedDate },
         middle: { start: phase1EndPoint.formattedDate, end: phase2EndPoint.formattedDate },
@@ -693,40 +694,13 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                               isAnimationActive={false}
                             />
                           </BarChart>
-                        ) : plotType === 'weights' && weightData ? (
+                        ) : plotType === 'weights' && weightData && weightData.trendData ? (
                           <ComposedChart
-                            data={(() => {
-                              // Group by date to create trend line data
-                              const trendDataMap = weightData.dataPoints.reduce((acc, point) => {
-                                if (!acc[point.formattedDate]) {
-                                  acc[point.formattedDate] = { weights: [], formattedDate: point.formattedDate, date: point.date, trend: point.trend }
-                                }
-                                return acc
-                              }, {} as Record<string, { weights: number[], formattedDate: string, date: string, trend: number }>)
-
-                              const trendLineData = Object.values(trendDataMap)
-                                .map(data => ({
-                                  formattedDate: data.formattedDate,
-                                  date: data.date,
-                                  trend: data.trend
-                                }))
-                                .filter(item => item.trend !== undefined && !isNaN(item.trend) && item.trend > 0)
-                                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                              
-                              // Validation: Log trend line data to verify it includes all dates
-                              if (trendLineData.length > 0) {
-                                console.log('Trend Line Validation:', {
-                                  totalDates: trendLineData.length,
-                                  firstDate: trendLineData[0].formattedDate,
-                                  lastDate: trendLineData[trendLineData.length - 1].formattedDate,
-                                  totalDataPoints: weightData.dataPoints.length,
-                                  uniqueDates: new Set(weightData.dataPoints.map(p => p.formattedDate)).size,
-                                  sampleTrends: trendLineData.slice(0, 5).map(d => ({ date: d.formattedDate, trend: d.trend }))
-                                })
-                              }
-                              
-                              return trendLineData
-                            })()}
+                            data={weightData.trendData.map((t: { formattedDate: string, date: string, trend: number }) => ({
+                              formattedDate: t.formattedDate,
+                              date: t.date,
+                              trend: t.trend
+                            }))}
                             margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
