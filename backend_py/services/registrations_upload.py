@@ -289,32 +289,34 @@ async def upload_registrations_from_file(
                     # Extract weight
                     weight = None
                     if weight_col and weight_col in row and not pd.isna(row[weight_col]):
-                        try:
-                            weight_val = float(row[weight_col])
-                            if not (0 <= weight_val <= 10000):
-                                skipped_count += 1
-                                errors.append(f"Row {index + 2}: Weight must be between 0 and 10000 kg")
-                                continue
-                            weight = weight_val
-                        except (ValueError, TypeError):
-                            skipped_count += 1
-                            errors.append(f"Row {index + 2}: Invalid weight value")
-                            continue
+                        weight_raw = replace_nd_value(row[weight_col])
+                        if weight_raw is not None and weight_raw.strip():
+                            try:
+                                weight_val = float(weight_raw)
+                                if not (0 <= weight_val <= 10000):
+                                    skipped_count += 1
+                                    errors.append(f"Row {index + 2}: Weight must be between 0 and 10000 kg")
+                                    continue
+                                weight = weight_val
+                            except (ValueError, TypeError):
+                                # If it's not a valid number, just set to None (don't error)
+                                weight = None
                     
                     # Extract weaning_weight
                     weaning_weight = None
                     if weaning_weight_col and weaning_weight_col in row and not pd.isna(row[weaning_weight_col]):
-                        try:
-                            weaning_weight_val = float(row[weaning_weight_col])
-                            if not (0 <= weaning_weight_val <= 10000):
-                                skipped_count += 1
-                                errors.append(f"Row {index + 2}: Weaning weight must be between 0 and 10000 kg")
-                                continue
-                            weaning_weight = weaning_weight_val
-                        except (ValueError, TypeError):
-                            skipped_count += 1
-                            errors.append(f"Row {index + 2}: Invalid weaning weight value")
-                            continue
+                        weaning_weight_raw = replace_nd_value(row[weaning_weight_col])
+                        if weaning_weight_raw is not None and weaning_weight_raw.strip():
+                            try:
+                                weaning_weight_val = float(weaning_weight_raw)
+                                if not (0 <= weaning_weight_val <= 10000):
+                                    skipped_count += 1
+                                    errors.append(f"Row {index + 2}: Weaning weight must be between 0 and 10000 kg")
+                                    continue
+                                weaning_weight = weaning_weight_val
+                            except (ValueError, TypeError):
+                                # If it's not a valid number, just set to None (don't error)
+                                weaning_weight = None
                     
                     # Extract and normalize gender
                     gender = None
