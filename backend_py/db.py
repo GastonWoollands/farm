@@ -284,6 +284,19 @@ def create_events_trigger():
                 animal_id, animal_number, event_type, modified_field, old_value, new_value, 
                 user_id, event_date, notes
             ) 
+            SELECT NEW.id, NEW.animal_number, 'correccion', 'weaning_weight', 
+                   COALESCE(CAST(OLD.weaning_weight AS TEXT), 'NULL'), 
+                   COALESCE(CAST(NEW.weaning_weight AS TEXT), 'NULL'), 
+                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
+                   datetime('now'), NEW.notes
+            WHERE (OLD.weaning_weight IS NULL AND NEW.weaning_weight IS NOT NULL) 
+               OR (OLD.weaning_weight IS NOT NULL AND NEW.weaning_weight IS NULL) 
+               OR (OLD.weaning_weight != NEW.weaning_weight);
+            
+            INSERT INTO events_state (
+                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
+                user_id, event_date, notes
+            ) 
             SELECT NEW.id, NEW.animal_number, 'correccion', 'gender', 
                    COALESCE(OLD.gender, 'NULL'), 
                    COALESCE(NEW.gender, 'NULL'), 

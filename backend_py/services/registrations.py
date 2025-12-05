@@ -71,6 +71,16 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="Invalid mother weight value")
 
+    # Handle weaning_weight validation
+    weaning_weight = None
+    if body.weaningWeight is not None:
+        try:
+            weaning_weight = float(body.weaningWeight)
+            if not (0 <= weaning_weight <= 10000):
+                raise HTTPException(status_code=400, detail="Weaning weight must be between 0 and 10000 kg")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid weaning weight value")
+
     if gender and gender not in VALID_GENDERS:
         raise HTTPException(status_code=400, detail=f"Invalid gender. Must be one of: {', '.join(VALID_GENDERS)}")
     if status and status not in VALID_STATUSES:
@@ -85,9 +95,9 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                 INSERT INTO registrations (
                     animal_number, created_at, user_key, created_by, company_id,
                     mother_id, father_id, born_date, weight, gender, animal_type, status, color, notes, notes_mother, short_id,
-                    insemination_round_id, insemination_identifier, scrotal_circumference, rp_animal, rp_mother, mother_weight
+                    insemination_round_id, insemination_identifier, scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     animal,
@@ -111,6 +121,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                     rp_animal,
                     rp_mother,
                     mother_weight,
+                    weaning_weight,
                 ),
             )
             # Return the ID of the inserted record
@@ -207,6 +218,16 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="Invalid mother weight value")
 
+    # Handle weaning_weight validation
+    weaning_weight = None
+    if body.weaningWeight is not None:
+        try:
+            weaning_weight = float(body.weaningWeight)
+            if not (0 <= weaning_weight <= 10000):
+                raise HTTPException(status_code=400, detail="Weaning weight must be between 0 and 10000 kg")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid weaning weight value")
+
     if gender and gender not in VALID_GENDERS:
         raise HTTPException(status_code=400, detail=f"Invalid gender. Must be one of: {', '.join(VALID_GENDERS)}")
     if status and status not in VALID_STATUSES:
@@ -234,7 +255,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
                     animal_number = ?, mother_id = ?, father_id = ?, born_date = ?, weight = ?,
                     gender = ?, animal_type = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
                     insemination_round_id = ?, insemination_identifier = ?, scrotal_circumference = ?,
-                    rp_animal = ?, rp_mother = ?, mother_weight = ?,
+                    rp_animal = ?, rp_mother = ?, mother_weight = ?, weaning_weight = ?,
                     updated_at = datetime('now')
                 WHERE id = ?
                 """,
@@ -242,7 +263,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
                     animal, mother, father, body.bornDate, weight,
                     gender, animal_type, status, color, notes, notes_mother,
                     insemination_round_id, insemination_identifier, scrotal_circumference,
-                    rp_animal, rp_mother, mother_weight,
+                    rp_animal, rp_mother, mother_weight, weaning_weight,
                     animal_id
                 )
             )
@@ -291,6 +312,7 @@ def find_and_update_registration(created_by_or_key: str, body) -> bool:
                 bornDate=body.bornDate,
                 weight=body.weight,
                 motherWeight=body.motherWeight,
+                weaningWeight=body.weaningWeight,
                 gender=body.gender,
                 status=body.status,
                 color=body.color,
@@ -328,7 +350,7 @@ def export_rows(created_by_or_key: str, date: str | None, start: str | None, end
         SELECT animal_number, born_date, mother_id, father_id,
                weight, gender, animal_type, status, color, notes, notes_mother, created_at,
                insemination_round_id, insemination_identifier, scrotal_circumference,
-               rp_animal, rp_mother, mother_weight
+               rp_animal, rp_mother, mother_weight, weaning_weight
         FROM registrations
         WHERE {where_sql}
         ORDER BY id ASC
@@ -354,7 +376,7 @@ def get_registrations_multi_tenant(user: dict, limit: int = 100) -> list[dict]:
             SELECT id, animal_number, created_at, mother_id, born_date, weight, 
                    gender, status, color, notes, notes_mother, insemination_round_id,
                    insemination_identifier, scrotal_circumference, animal_type,
-                   rp_animal, rp_mother, mother_weight
+                   rp_animal, rp_mother, mother_weight, weaning_weight
             FROM registrations
             WHERE {where_clause}
             ORDER BY id DESC
@@ -380,7 +402,11 @@ def get_registrations_multi_tenant(user: dict, limit: int = 100) -> list[dict]:
                 "inseminationRoundId": row[11],
                 "inseminationIdentifier": row[12],
                 "scrotalCircumference": row[13],
-                "animalType": row[14]
+                "animalType": row[14],
+                "rpAnimal": row[15] if len(row) > 15 else None,
+                "rpMother": row[16] if len(row) > 16 else None,
+                "motherWeight": row[17] if len(row) > 17 else None,
+                "weaningWeight": row[18] if len(row) > 18 else None
             }
             for row in rows
         ]
@@ -412,7 +438,7 @@ def export_rows_multi_tenant(user: dict, date: str = None, start: str = None, en
             SELECT animal_number, born_date, mother_id, father_id,
                    weight, gender, animal_type, status, color, notes, notes_mother, 
                    created_at, insemination_round_id, insemination_identifier, 
-                   scrotal_circumference, rp_animal, rp_mother, mother_weight
+                   scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight
             FROM registrations
             WHERE {where_clause}
             ORDER BY id ASC

@@ -22,6 +22,7 @@ export interface Animal {
   rp_animal?: string
   rp_mother?: string
   mother_weight?: number
+  weaning_weight?: number
   synced?: boolean
 }
 
@@ -34,6 +35,7 @@ export interface RegisterBody {
   bornDate?: string
   weight?: number
   motherWeight?: number
+  weaningWeight?: number
   gender?: string
   animalType?: number
   status: string
@@ -55,6 +57,7 @@ export interface UpdateBody {
   bornDate?: string
   weight?: number
   motherWeight?: number
+  weaningWeight?: number
   gender?: string
   status?: string
   color?: string
@@ -427,7 +430,8 @@ class ApiService {
               notesMother: record.notes_mother ?? null,
               rpAnimal: record.rp_animal ?? null,
               rpMother: record.rp_mother ?? null,
-              motherWeight: record.mother_weight ?? null
+              motherWeight: record.mother_weight ?? null,
+              weaningWeight: record.weaning_weight ?? null
             })
           })
         } else {
@@ -456,7 +460,8 @@ class ApiService {
               notesMother: record.notes_mother ?? null,
               rpAnimal: record.rp_animal ?? null,
               rpMother: record.rp_mother ?? null,
-              motherWeight: record.mother_weight ?? null
+              motherWeight: record.mother_weight ?? null,
+              weaningWeight: record.weaning_weight ?? null
             })
           })
         }

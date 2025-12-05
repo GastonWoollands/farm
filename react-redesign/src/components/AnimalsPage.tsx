@@ -52,6 +52,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
     bornDate: '',
     weight: '',
     motherWeight: '',
+    weaningWeight: '',
     gender: '',
     status: 'ALIVE',
     color: '',
@@ -105,6 +106,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         bornDate: formData.bornDate || undefined,
         weight: formData.weight ? parseFloat(formData.weight) : undefined,
         motherWeight: formData.motherWeight ? parseFloat(formData.motherWeight) : undefined,
+        weaningWeight: formData.weaningWeight ? parseFloat(formData.weaningWeight) : undefined,
         gender: formData.gender || undefined,
         status: formData.status,
         color: formData.color || undefined,
@@ -133,7 +135,8 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         scrotal_circumference: registerData.scrotalCircumference,
         rp_animal: registerData.rpAnimal,
         rp_mother: registerData.rpMother,
-        mother_weight: registerData.motherWeight
+        mother_weight: registerData.motherWeight,
+        weaning_weight: registerData.weaningWeight
       }
       await apiService.addLocalRecord(animalData)
       
@@ -154,6 +157,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         bornDate: '',
         weight: '',
         motherWeight: '',
+        weaningWeight: '',
         gender: '',
         status: 'ALIVE',
         color: '',
@@ -204,7 +208,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         'Animal Number', 'Born Date', 'Mother ID', 'Father ID', 'Weight', 
         'Gender', 'Status', 'Color', 'Notes', 'Notes Mother', 'Created At',
         'Insemination Round ID', 'Insemination Identifier', 'Scrotal Circumference',
-        'RP Animal', 'RP Mother', 'Mother Weight', 'Synced'
+        'RP Animal', 'RP Mother', 'Mother Weight', 'Weaning Weight', 'Synced'
       ]
       
       const csvRows = localRecords.map(record => [
@@ -225,6 +229,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         record.rp_animal || '',
         record.rp_mother || '',
         record.mother_weight || '',
+        record.weaning_weight || '',
         record.synced !== false ? 'Yes' : 'No'
       ])
       
@@ -413,6 +418,18 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                       />
                     </div>
                     <div className="space-y-2">
+                      <Label htmlFor="weaningWeight">Peso al Destete (kg)</Label>
+                      <Input
+                        id="weaningWeight"
+                        name="weaningWeight"
+                        type="number"
+                        step="0.1"
+                        value={formData.weaningWeight}
+                        onChange={handleInputChange}
+                        placeholder="e.g., 180.0"
+                      />
+                    </div>
+                    <div className="space-y-2">
                       <Label htmlFor="gender">Sexo</Label>
                       <Select name="gender" value={formData.gender} onValueChange={(value) => setFormData(prev => ({ ...prev, gender: value }))}>
                         <SelectTrigger>
@@ -520,6 +537,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         bornDate: '',
                         weight: '',
                         motherWeight: '',
+                        weaningWeight: '',
                         gender: '',
                         status: 'ALIVE',
                         color: '',

@@ -219,6 +219,7 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           bornDate: editFormData.born_date || undefined,
           weight: editFormData.weight || undefined,
           motherWeight: editFormData.mother_weight || undefined,
+          weaningWeight: editFormData.weaning_weight || undefined,
           gender: editFormData.gender || undefined,
           status: editFormData.status || undefined,
           color: editFormData.color || undefined,
@@ -626,12 +627,19 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                       {animal.weight && (
                         <div className="flex items-center gap-2">
                           <Weight className="h-4 w-4 text-muted-foreground" />
-                          <span>{animal.weight} kg</span>
+                          <span>Nacimiento: {animal.weight} kg</span>
                           {animal.mother_weight && (
                             <span className="text-muted-foreground">
                               (Madre: {animal.mother_weight} kg)
                             </span>
                           )}
+                        </div>
+                      )}
+
+                      {animal.weaning_weight && (
+                        <div className="flex items-center gap-2">
+                          <Weight className="h-4 w-4 text-muted-foreground" />
+                          <span>Destete: {animal.weaning_weight} kg</span>
                         </div>
                       )}
 
@@ -788,6 +796,17 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                 step="0.1"
                 value={editFormData.mother_weight || ''}
                 onChange={(e) => setEditFormData({ ...editFormData, mother_weight: parseFloat(e.target.value) || undefined })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-weaning-weight">Peso al Destete</Label>
+              <Input
+                id="edit-weaning-weight"
+                type="number"
+                step="0.1"
+                value={editFormData.weaning_weight || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, weaning_weight: parseFloat(e.target.value) || undefined })}
               />
             </div>
 
