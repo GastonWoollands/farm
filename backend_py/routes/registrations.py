@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Header, HTTPException, Response, Request
+from fastapi import APIRouter, Header, HTTPException, Response, Request, UploadFile, File, Query
 import csv
 import io
-from ..config import VALID_KEYS
+from ..config import VALID_KEYS, ADMIN_SECRET
 from ..models import RegisterBody, DeleteBody, UpdateBody
 from ..services.registrations import (
     insert_registration, delete_registration as svc_delete, update_registration, export_rows,
@@ -9,6 +9,7 @@ from ..services.registrations import (
 )
 from ..services.firebase_auth import verify_bearer_id_token
 from ..services.auth_service import authenticate_user
+from ..services.registrations_upload import upload_registrations_from_file
 
 router = APIRouter()
 
@@ -144,5 +145,62 @@ def export_registrations_multi_tenant(
         return Response(content=csv_data, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=export.csv"})
     
     return {"count": len(rows), "items": rows}
+
+
+@router.post("/upload")
+async def upload_registrations(
+    request: Request,
+    file: UploadFile = File(...),
+    x_admin_secret: str | None = Header(default=None),
+    year: int = Query(2024, description="Year to use for date normalization (default: 2024)", ge=1900, le=2100)
+):
+    """
+    Upload registrations from CSV/XLSX file with admin secret authentication
+    
+    Args:
+        file: CSV or XLSX file with birth registration data
+        x_admin_secret: Admin secret credential (required)
+        year: Year to use for date normalization (default: 2024, range: 1900-2100)
+    
+    Returns:
+        Upload results with counts and errors
+    """
+    # Validate admin secret
+    if not x_admin_secret or not ADMIN_SECRET or x_admin_secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Validate file type
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File name is required")
+    
+    filename_lower = file.filename.lower()
+    if not (filename_lower.endswith('.csv') or filename_lower.endswith('.xlsx') or filename_lower.endswith('.xls')):
+        raise HTTPException(status_code=400, detail="File must be CSV or XLSX format")
+    
+    # Upload and process file
+    try:
+        result = await upload_registrations_from_file(
+            file=file,
+            created_by="admin_upload",
+            year=year
+        )
+        
+        message = f"Successfully uploaded {result['uploaded']} registrations. {result['skipped']} rows skipped."
+        if result['errors']:
+            message += f" {len(result['errors'])} errors occurred."
+        
+        return {
+            "ok": True,
+            "message": message,
+            "uploaded": result["uploaded"],
+            "skipped": result["skipped"],
+            "total_rows": result["total_rows"],
+            "errors": result["errors"],
+            "warnings": result["warnings"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
 
 
