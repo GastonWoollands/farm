@@ -1,5 +1,7 @@
 import sqlite3
 import datetime as _dt
+from datetime import timedelta
+from typing import Optional
 from fastapi import HTTPException
 from ..db import conn
 from .auth_service import get_data_filter_clause
@@ -10,6 +12,82 @@ VALID_COLORS = {"COLORADO", "MARRON", "NEGRO", "OTHERS"}
 
 def _normalize_text(value: str | None) -> str | None:
     return (value or "").strip().upper() or None
+
+def _auto_assign_insemination_round_id(born_date: str, company_id: int | None) -> Optional[str]:
+    """
+    Auto-assign insemination_round_id based on birth date.
+    Logic: born_date - 300 days = estimated insemination_date, extract year,
+    find matching insemination_round_id in inseminations_ids table (round definitions) 
+    or inseminations table (actual insemination records) for company.
+    
+    Args:
+        born_date: Birth date in YYYY-MM-DD format
+        company_id: Company ID to filter inseminations (can be None for legacy records)
+    
+    Returns:
+        Matching insemination_round_id if found, None otherwise
+    """
+    if not born_date:
+        return None
+    
+    try:
+        # Parse birth date
+        birth_dt = _dt.datetime.strptime(born_date, '%Y-%m-%d').date()
+        # Calculate estimated insemination date (300 days before birth)
+        estimated_insem_date = birth_dt - timedelta(days=300)
+        estimated_year = str(estimated_insem_date.year)
+        
+        # First, try to find in inseminations_ids table (round definitions) - this is more reliable
+        if company_id:
+            cursor = conn.execute("""
+                SELECT insemination_round_id 
+                FROM inseminations_ids 
+                WHERE company_id = ? 
+                AND (insemination_round_id = ? OR insemination_round_id LIKE ?)
+                ORDER BY insemination_round_id DESC
+                LIMIT 1
+            """, (company_id, estimated_year, f"{estimated_year}%"))
+        else:
+            # For legacy records without company_id
+            cursor = conn.execute("""
+                SELECT insemination_round_id 
+                FROM inseminations_ids 
+                WHERE (insemination_round_id = ? OR insemination_round_id LIKE ?)
+                ORDER BY insemination_round_id DESC
+                LIMIT 1
+            """, (estimated_year, f"{estimated_year}%"))
+        
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+        
+        # If not found in inseminations_ids, try inseminations table as fallback
+        if company_id:
+            cursor = conn.execute("""
+                SELECT DISTINCT insemination_round_id 
+                FROM inseminations 
+                WHERE company_id = ? 
+                AND (insemination_round_id = ? OR insemination_round_id LIKE ?)
+                ORDER BY insemination_round_id DESC
+                LIMIT 1
+            """, (company_id, estimated_year, f"{estimated_year}%"))
+        else:
+            # For legacy records without company_id
+            cursor = conn.execute("""
+                SELECT DISTINCT insemination_round_id 
+                FROM inseminations 
+                WHERE (insemination_round_id = ? OR insemination_round_id LIKE ?)
+                ORDER BY insemination_round_id DESC
+                LIMIT 1
+            """, (estimated_year, f"{estimated_year}%"))
+        
+        result = cursor.fetchone()
+        return result[0] if result else None
+    except Exception as e:
+        # Log the error for debugging but don't raise
+        import logging
+        logging.error(f"Error in _auto_assign_insemination_round_id: {e}")
+        return None
 
 def insert_registration(created_by_or_key: str, body, company_id: int = None) -> None:
     if not body.animalNumber:
@@ -80,6 +158,12 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                 raise HTTPException(status_code=400, detail="Weaning weight must be between 0 and 10000 kg")
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="Invalid weaning weight value")
+
+    # Auto-assign insemination_round_id if missing and born_date is provided
+    if not insemination_round_id and body.bornDate:
+        auto_assigned_round_id = _auto_assign_insemination_round_id(body.bornDate, company_id)
+        if auto_assigned_round_id:
+            insemination_round_id = _normalize_text(auto_assigned_round_id)
 
     if gender and gender not in VALID_GENDERS:
         raise HTTPException(status_code=400, detail=f"Invalid gender. Must be one of: {', '.join(VALID_GENDERS)}")
@@ -237,17 +321,26 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
 
     try:
         with conn:
-            # Check if record exists and belongs to user
+            # Check if record exists and belongs to user, and get company_id for auto-assignment
             cursor = conn.execute(
                 """
-                SELECT id FROM registrations 
+                SELECT company_id FROM registrations 
                 WHERE id = ? AND ((created_by = ?) OR (user_key = ?))
                 """,
                 (animal_id, created_by_or_key, created_by_or_key)
             )
-            if not cursor.fetchone():
+            record = cursor.fetchone()
+            if not record:
                 raise HTTPException(status_code=404, detail="Record not found or access denied")
-
+            
+            company_id = record[0]
+            
+            # Auto-assign insemination_round_id if missing and born_date is provided
+            if not insemination_round_id and body.bornDate:
+                auto_assigned_round_id = _auto_assign_insemination_round_id(body.bornDate, company_id)
+                if auto_assigned_round_id:
+                    insemination_round_id = _normalize_text(auto_assigned_round_id)
+            
             # Update the record
             conn.execute(
                 """

@@ -11,7 +11,7 @@ import datetime as _dt
 from typing import Dict, Optional
 from fastapi import HTTPException, UploadFile
 from ..db import conn
-from .registrations import _normalize_text, VALID_GENDERS, VALID_STATUSES, VALID_COLORS
+from .registrations import _normalize_text, VALID_GENDERS, VALID_STATUSES, VALID_COLORS, _auto_assign_insemination_round_id
 from .inseminations import _validate_date
 
 
@@ -358,6 +358,13 @@ async def upload_registrations_from_file(
                     if notes_col and notes_col in row and not pd.isna(row[notes_col]):
                         notes = _normalize_text(replace_nd_value(row[notes_col]))
                     
+                    # Auto-assign insemination_round_id if missing and born_date is provided
+                    insemination_round_id = None
+                    if born_date:
+                        auto_assigned_round_id = _auto_assign_insemination_round_id(born_date, company_id)
+                        if auto_assigned_round_id:
+                            insemination_round_id = _normalize_text(auto_assigned_round_id)
+                    
                     # Validate gender
                     if gender and gender not in VALID_GENDERS:
                         skipped_count += 1
@@ -393,9 +400,9 @@ async def upload_registrations_from_file(
                         INSERT INTO registrations (
                             animal_number, created_at, user_key, created_by, company_id,
                             mother_id, father_id, born_date, weight, gender, animal_type, status, color, notes,
-                            short_id, rp_mother, weaning_weight
+                            short_id, rp_mother, weaning_weight, insemination_round_id
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?)
                         """,
                         (
                             animal_number,
@@ -414,6 +421,7 @@ async def upload_registrations_from_file(
                             notes,
                             rp_mother,
                             weaning_weight,
+                            insemination_round_id,
                         ),
                     )
                     uploaded_count += 1

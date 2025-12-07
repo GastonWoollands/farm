@@ -37,7 +37,7 @@ class FatherAssignmentService:
         """Get all inseminations for a specific mother, ordered by date"""
         try:
             cursor = conn.execute("""
-                SELECT id, mother_id, bull_id, insemination_date, insemination_identifier
+                SELECT id, mother_id, bull_id, insemination_date, insemination_identifier, insemination_round_id
                 FROM inseminations 
                 WHERE mother_id = ?
                 ORDER BY insemination_date DESC
@@ -96,15 +96,27 @@ class FatherAssignmentService:
         # If gestation is less than min_gestation_days, return None (no assignment)
         return best_match
     
-    def assign_father_id(self, registration_id: int, father_id: str, insemination_identifier: str = None) -> bool:
-        """Assign father_id and insemination_identifier to a registration"""
+    def assign_father_id(self, registration_id: int, father_id: str, insemination_identifier: str = None, insemination_round_id: str = None) -> bool:
+        """Assign father_id, insemination_identifier, and insemination_round_id to a registration.
+        Only updates insemination_round_id if it's currently missing (NULL or empty).
+        """
         try:
             with conn:
-                cursor = conn.execute("""
-                    UPDATE registrations 
-                    SET father_id = ?, insemination_identifier = ?, updated_at = datetime('now')
-                    WHERE id = ?
-                """, (father_id, insemination_identifier, registration_id))
+                # Only update insemination_round_id if it's provided and registration doesn't already have one
+                if insemination_round_id:
+                    cursor = conn.execute("""
+                        UPDATE registrations 
+                        SET father_id = ?, insemination_identifier = ?, 
+                            insemination_round_id = COALESCE(NULLIF(insemination_round_id, ''), ?), 
+                            updated_at = datetime('now')
+                        WHERE id = ?
+                    """, (father_id, insemination_identifier, insemination_round_id, registration_id))
+                else:
+                    cursor = conn.execute("""
+                        UPDATE registrations 
+                        SET father_id = ?, insemination_identifier = ?, updated_at = datetime('now')
+                        WHERE id = ?
+                    """, (father_id, insemination_identifier, registration_id))
                 
                 return cursor.rowcount > 0
         except sqlite3.Error as e:
@@ -161,9 +173,11 @@ class FatherAssignmentService:
             
             # Update registration
             insemination_identifier = matching_insem.get('insemination_identifier')
-            if self.assign_father_id(registration['id'], assigned_father, insemination_identifier):
+            insemination_round_id = matching_insem.get('insemination_round_id')
+            if self.assign_father_id(registration['id'], assigned_father, insemination_identifier, insemination_round_id):
                 result['assigned_father'] = assigned_father
                 result['insemination_identifier'] = insemination_identifier
+                result['insemination_round_id'] = insemination_round_id
             else:
                 result['error'] = 'Failed to update registration'
                 result['status'] = 'error'
