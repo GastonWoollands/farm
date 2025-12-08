@@ -181,6 +181,13 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
 
   const handleEditSave = async () => {
     if (!editingAnimal || !editFormData.animal_number) {
+      setError('Animal number is required')
+      return
+    }
+
+    // Validate created_at is present for backend updates
+    if (!editingAnimal.created_at) {
+      setError('Created date is required to update this animal. Please contact support if this error persists.')
       return
     }
 
@@ -230,14 +237,30 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
         }
 
         await apiService.updateAnimal(updateData)
+        
+        // Refresh animals from backend after successful update
+        try {
+          const refreshedData = await apiService.getRegistrations(1000)
+          onAnimalsChange(refreshedData.registrations)
+        } catch (refreshError) {
+          console.warn('Failed to refresh animals after update:', refreshError)
+          // Fallback to local update if refresh fails
+          onAnimalsChange(animals.map(a => 
+            a.animal_number === editingAnimal.animal_number 
+              ? { ...a, ...editFormData }
+              : a
+          ))
+        }
       }
 
-      // Update the parent component with edited data
-      onAnimalsChange(animals.map(a => 
-        a.animal_number === editingAnimal.animal_number 
-          ? { ...a, ...editFormData }
-          : a
-      ))
+      // For local records, update the parent component with edited data
+      if (localRecord) {
+        onAnimalsChange(animals.map(a => 
+          a.animal_number === editingAnimal.animal_number 
+            ? { ...a, ...editFormData }
+            : a
+        ))
+      }
 
       setIsEditDialogOpen(false)
       setEditingAnimal(null)

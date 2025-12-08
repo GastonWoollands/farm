@@ -365,7 +365,8 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
 
 def find_and_update_registration(created_by_or_key: str, body) -> bool:
     """Find and update a registration record by animalNumber and createdAt"""
-    animal_number = body.animalNumber
+    # Normalize animal_number to match database storage format
+    animal_number = _normalize_text(body.animalNumber)
     created_at = body.createdAt
     
     print(f"find_and_update_registration called with: animal_number={animal_number}, created_at={created_at}, user={created_by_or_key}")
@@ -377,6 +378,7 @@ def find_and_update_registration(created_by_or_key: str, body) -> bool:
     try:
         with conn:
             # Find the record by animalNumber and createdAt
+            # animal_number is already normalized to match database storage format
             cursor = conn.execute(
                 """
                 SELECT id FROM registrations 
@@ -388,7 +390,19 @@ def find_and_update_registration(created_by_or_key: str, body) -> bool:
             record = cursor.fetchone()
             
             if not record:
-                print("No record found in database")
+                # Try to find if record exists but with different user
+                cursor_check = conn.execute(
+                    """
+                    SELECT id, created_by, user_key FROM registrations 
+                    WHERE animal_number = ? AND created_at = ?
+                    """,
+                    (animal_number, created_at)
+                )
+                check_record = cursor_check.fetchone()
+                if check_record:
+                    print(f"Record exists but belongs to different user. Record user_key={check_record[2]}, created_by={check_record[1]}, requested user={created_by_or_key}")
+                else:
+                    print(f"No record found in database for animal_number={animal_number}, created_at={created_at}")
                 return False
             
             animal_id = record[0]

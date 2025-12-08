@@ -44,10 +44,18 @@ def update_registration_by_identifier(body: UpdateBody, request: Request, x_user
     
     # Find the record by animalNumber and createdAt
     from ..services.registrations import find_and_update_registration
-    result = find_and_update_registration(user_id, body)
-    if not result:
-        raise HTTPException(status_code=404, detail="Record not found")
-    return {"ok": True}
+    try:
+        result = find_and_update_registration(user_id, body)
+        if not result:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Record not found for animal_number={body.animalNumber}, created_at={body.createdAt}. Please verify the animal exists and you have permission to update it."
+            )
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating record: {str(e)}")
 
 @router.put("/register/{animal_id}")
 def update_registration_endpoint(animal_id: int, body: RegisterBody, request: Request, x_user_key: str | None = Header(default=None)):
