@@ -231,7 +231,7 @@ class ApiService {
   }
 
   async updateAnimal(animal: UpdateBody): Promise<{ ok: boolean }> {
-    return this.request<{ ok: boolean }>(`${API_ENDPOINTS.REGISTRATIONS}/register/update`, {
+    return this.request<{ ok: boolean }>(`${API_ENDPOINTS.REGISTER}/update`, {
       method: 'PUT',
       body: JSON.stringify(animal)
     })
