@@ -245,8 +245,14 @@ def delete_registration(created_by_or_key: str, animal_number: str, created_at: 
     except sqlite3.Error:
         raise HTTPException(status_code=500, detail="DB error")
 
-def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
-    """Update an existing registration record"""
+def update_registration(created_by_or_key: str, animal_id: int, body, company_id: int | None = None) -> None:
+    """Update an existing registration record.
+    Requires company_id - only users within the same company can update records.
+    """
+    # Require company_id for all updates
+    if not company_id:
+        raise HTTPException(status_code=403, detail="Company assignment required to update records")
+    
     if not body.animalNumber:
         raise HTTPException(status_code=400, detail="animalNumber required")
 
@@ -321,19 +327,19 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
 
     try:
         with conn:
-            # Check if record exists and belongs to user, and get company_id for auto-assignment
+            # Check if record exists and belongs to the same company
             cursor = conn.execute(
                 """
                 SELECT company_id FROM registrations 
-                WHERE id = ? AND ((created_by = ?) OR (user_key = ?))
+                WHERE id = ? AND company_id = ?
                 """,
-                (animal_id, created_by_or_key, created_by_or_key)
+                (animal_id, company_id)
             )
             record = cursor.fetchone()
             if not record:
                 raise HTTPException(status_code=404, detail="Record not found or access denied")
             
-            company_id = record[0]
+            # company_id is already available from parameter
             
             # Auto-assign insemination_round_id if missing and born_date is provided
             if not insemination_round_id and body.bornDate:
@@ -440,7 +446,7 @@ def find_and_update_registration(created_by_or_key: str, body, company_id: int |
                 scrotalCircumference=body.scrotalCircumference
             )
             
-            update_registration(created_by_or_key, animal_id, update_body)
+            update_registration(created_by_or_key, animal_id, update_body, company_id)
             print("Record updated successfully")
             return True
             

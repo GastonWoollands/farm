@@ -70,13 +70,28 @@ def update_registration_by_identifier(body: UpdateBody, request: Request, x_user
 
 @router.put("/register/{animal_id}")
 def update_registration_endpoint(animal_id: int, body: RegisterBody, request: Request, x_user_key: str | None = Header(default=None)):
-    decoded = verify_bearer_id_token(request.headers.get('Authorization'))
-    user_id = decoded.get('uid') if decoded else None
-    if not user_id:
+    # Try new authentication first (creates user automatically)
+    user, company_id = authenticate_user(request)
+    if user:
+        user_id = user.get('firebase_uid')
+    else:
         # Fallback to legacy key if token missing
         if not x_user_key or x_user_key not in VALID_KEYS:
             raise HTTPException(status_code=401, detail="Unauthorized")
-    update_registration(user_id or x_user_key, animal_id, body)
+        # Block legacy users without company_id from updating records
+        raise HTTPException(
+            status_code=403, 
+            detail="Legacy users without company assignment cannot update records. Please use authenticated access with company assignment."
+        )
+    
+    # Require company_id for all updates
+    if not company_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Company assignment required to update records. Please ensure your user account is assigned to a company."
+        )
+    
+    update_registration(user_id, animal_id, body, company_id)
     return {"ok": True}
 
 @router.delete("/register")
