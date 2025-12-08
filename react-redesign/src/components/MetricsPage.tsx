@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter, Cell, Line, ComposedChart } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter, Cell, Line, ComposedChart, ScatterChart } from 'recharts'
 // Icons removed - not currently used in this component
 import { formatWeight, formatPercentage } from '@/lib/utils'
 import { Animal, RegistrationStats, InseminationRound, apiService } from '@/services/api'
@@ -192,7 +192,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
     column: 'roundId',
     direction: 'asc'
   })
-  const [plotType, setPlotType] = useState<'births' | 'weights'>('births')
+  const [plotType, setPlotType] = useState<'births' | 'weights' | 'weaning'>('births')
   const currentRound = metrics.inseminationRounds[selectedRound as keyof typeof metrics.inseminationRounds]
 
   // Helper function to handle column sorting
@@ -487,6 +487,106 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
     }
   }, [animals, selectedRound, currentRound])
 
+  // Prepare weaning weight distribution data - binned distribution
+  const weaningWeightDistribution = useMemo<Array<{ bin: string, count: number, min: number, max: number }> | null>(() => {
+    if (!currentRound || selectedRound === 'Todos' || selectedRound === 'Sin Ronda') {
+      return null
+    }
+
+    // Filter animals by selected round, ALIVE status, with weaning weight
+    const filteredAnimals = animals.filter(a => {
+      const matchesRound = a.insemination_round_id === selectedRound
+      const isAlive = a.status === 'ALIVE' || a.status === 'alive'
+      const hasWeaningWeight = a.weaning_weight !== undefined && a.weaning_weight !== null && a.weaning_weight > 0
+      
+      return matchesRound && isAlive && hasWeaningWeight
+    })
+
+    if (filteredAnimals.length === 0) return null
+
+    // Get all weaning weights
+    const weaningWeights = filteredAnimals.map(a => a.weaning_weight!).sort((a, b) => a - b)
+    const minWeight = Math.min(...weaningWeights)
+    const maxWeight = Math.max(...weaningWeights)
+
+    // Create bins (e.g., 0-50, 50-100, 100-150, etc.)
+    // Use dynamic bin size based on data range
+    const range = maxWeight - minWeight
+    let binSize = 50 // Default bin size
+    
+    if (range > 500) {
+      binSize = 100
+    } else if (range > 200) {
+      binSize = 50
+    } else if (range > 100) {
+      binSize = 25
+    } else {
+      binSize = 10
+    }
+
+    // Create bins
+    const bins: Record<string, { count: number, min: number, max: number }> = {}
+    weaningWeights.forEach(weight => {
+      const binIndex = Math.floor(weight / binSize)
+      const binMin = binIndex * binSize
+      const binMax = (binIndex + 1) * binSize
+      const binKey = `${binMin}-${binMax}`
+      
+      if (!bins[binKey]) {
+        bins[binKey] = { count: 0, min: binMin, max: binMax }
+      }
+      bins[binKey].count++
+    })
+
+    // Convert to array and sort by bin min value
+    return Object.entries(bins)
+      .map(([bin, data]) => ({
+        bin,
+        count: data.count,
+        min: data.min,
+        max: data.max
+      }))
+      .sort((a, b) => a.min - b.min)
+  }, [animals, selectedRound, currentRound])
+
+  // Prepare weight comparison data for scatter plot (birth weight vs weaning weight)
+  const weightComparisonData = useMemo<Array<{ animalNumber: string, birthWeight: number, weaningWeight: number, weightGain: number, gainPercentage: number }>>(() => {
+    if (!currentRound || selectedRound === 'Todos' || selectedRound === 'Sin Ronda') {
+      return []
+    }
+
+    // Filter animals with both birth weight and weaning weight
+    const filteredAnimals = animals.filter(a => {
+      const matchesRound = a.insemination_round_id === selectedRound
+      const isAlive = a.status === 'ALIVE' || a.status === 'alive'
+      const hasBirthWeight = a.weight !== undefined && a.weight !== null && a.weight > 0
+      const hasWeaningWeight = a.weaning_weight !== undefined && a.weaning_weight !== null && a.weaning_weight > 0
+      
+      return matchesRound && isAlive && hasBirthWeight && hasWeaningWeight
+    })
+
+    if (filteredAnimals.length === 0) return []
+
+    // Calculate gain percentage: (weaning_weight / (weight - 1)) * 100
+    return filteredAnimals
+      .map(animal => {
+        const birthWeight = animal.weight!
+        const weaningWeight = animal.weaning_weight!
+        const weightGain = weaningWeight - birthWeight
+        // Gain percentage formula: ((weaning_weight / birth_weight) - 1) * 100
+        const gainPercentage = birthWeight > 0 ? ((weaningWeight / birthWeight) - 1) * 100 : 0
+        
+        return {
+          animalNumber: animal.animal_number,
+          birthWeight,
+          weaningWeight,
+          weightGain,
+          gainPercentage
+        }
+      })
+      .sort((a, b) => b.gainPercentage - a.gainPercentage) // Sort by gain percentage descending
+  }, [animals, selectedRound, currentRound])
+
   // Prepare comparison data: get all rounds with their metrics
   const comparisonData = useMemo(() => {
     // Get all rounds from metrics (excluding "Todos" and "Sin Ronda")
@@ -630,9 +730,10 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                 </div>
               </div>
 
-              {/* Birth/Weight Distribution Plot */}
+              {/* Birth/Weight/Weaning Distribution Plot */}
               {((plotType === 'births' && distributionData && distributionData.dataPoints && distributionData.dataPoints.length > 0) ||
-                (plotType === 'weights' && weightData && weightData.dataPoints && weightData.dataPoints.length > 0)) ? (
+                (plotType === 'weights' && weightData && weightData.dataPoints && weightData.dataPoints.length > 0) ||
+                (plotType === 'weaning' && weaningWeightDistribution && weaningWeightDistribution.length > 0)) ? (
                 <Card className="border border-muted-foreground/20 shadow-sm">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
@@ -641,16 +742,19 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         <CardDescription>
                           {plotType === 'births' 
                             ? 'Nacimientos diarios de crías vivas durante la campaña'
-                            : 'Peso de crías vivas por fecha de nacimiento'}
+                            : plotType === 'weights'
+                            ? 'Peso de crías vivas por fecha de nacimiento'
+                            : 'Peso al destete de crías vivas por fecha de nacimiento'}
                         </CardDescription>
                       </div>
-                      <Select value={plotType} onValueChange={(value) => setPlotType(value as 'births' | 'weights')}>
+                      <Select value={plotType} onValueChange={(value) => setPlotType(value as 'births' | 'weights' | 'weaning')}>
                         <SelectTrigger className="w-[140px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="births">Nacimientos</SelectItem>
                           <SelectItem value="weights">Pesos</SelectItem>
+                          <SelectItem value="weaning">Peso al Destete</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -854,6 +958,66 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                               ))}
                             </Scatter>
                           </ComposedChart>
+                        ) : plotType === 'weaning' && weaningWeightDistribution ? (
+                          <BarChart
+                            data={weaningWeightDistribution}
+                            margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis
+                              dataKey="bin"
+                              className="text-xs"
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              label={{
+                                value: 'Rango de Peso (kg)',
+                                position: 'insideBottom',
+                                offset: -12,
+                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                              }}
+                            />
+                            <YAxis
+                              className="text-xs"
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              allowDecimals={false}
+                              label={{
+                                value: 'Cantidad de Animales',
+                                angle: -90,
+                                position: 'insideLeft',
+                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                              }}
+                            />
+                            <Tooltip
+                              cursor={{ fill: 'hsl(var(--muted)/0.25)' }}
+                              contentStyle={{
+                                backgroundColor: 'hsl(var(--card))',
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: 8,
+                                padding: '6px 8px'
+                              }}
+                              content={({ active, payload }) => {
+                                if (active && payload && payload.length > 0) {
+                                  const countPayload = payload.find(p => p.dataKey === 'count')
+                                  if (countPayload) {
+                                    const data = payload[0].payload as { bin: string, count: number, min: number, max: number }
+                                    return (
+                                      <div>
+                                        <p className="font-semibold mb-1">Rango: {data.bin} kg</p>
+                                        <p className="text-sm">Cantidad: {countPayload.value}</p>
+                                      </div>
+                                    )
+                                  }
+                                }
+                                return null
+                              }}
+                            />
+                            <Bar
+                              name="count"
+                              dataKey="count"
+                              fill="hsl(var(--primary) / 0.7)"
+                              radius={[4, 4, 0, 0]}
+                              maxBarSize={32}
+                            />
+                          </BarChart>
                         ) : null}
                       </ResponsiveContainer>
                     </div>
@@ -918,19 +1082,166 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
               ) : selectedRound !== 'Todos' && selectedRound !== 'Sin Ronda' ? (
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">Distribución de Nacimientos</CardTitle>
+                    <CardTitle className="text-lg">
+                      {plotType === 'births' ? 'Distribución de Nacimientos' : 
+                       plotType === 'weights' ? 'Distribución de Pesos' : 
+                       'Distribución de Peso al Destete'}
+                    </CardTitle>
                     <CardDescription>
-                      Nacimientos diarios de crías vivas durante la campaña
+                      {plotType === 'births' 
+                        ? 'Nacimientos diarios de crías vivas durante la campaña'
+                        : plotType === 'weights'
+                        ? 'Peso de crías vivas por fecha de nacimiento'
+                        : 'Peso al destete de crías vivas por fecha de nacimiento'}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="text-center py-8 text-muted-foreground">
-                      <p>No hay datos disponibles para mostrar la distribución de nacimientos.</p>
-                      <p className="text-sm mt-2">Se requieren crías vivas con fecha de nacimiento registrada.</p>
+                      <p>
+                        {plotType === 'births' 
+                          ? 'No hay datos disponibles para mostrar la distribución de nacimientos.'
+                          : plotType === 'weights'
+                          ? 'No hay datos disponibles para mostrar la distribución de pesos.'
+                          : 'No hay datos disponibles para mostrar la distribución de peso al destete.'}
+                      </p>
+                      <p className="text-sm mt-2">
+                        {plotType === 'births'
+                          ? 'Se requieren crías vivas con fecha de nacimiento registrada.'
+                          : plotType === 'weights'
+                          ? 'Se requieren crías vivas con fecha de nacimiento y peso registrados.'
+                          : 'Se requieren crías vivas con peso al destete registrado.'}
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
               ) : null}
+
+              {/* Weight Comparison Scatter Plot - shown when weaning plot type is selected */}
+              {plotType === 'weaning' && weightComparisonData.length > 0 && selectedRound !== 'Todos' && selectedRound !== 'Sin Ronda' && (
+                <Card className="border border-muted-foreground/20 shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Comparación Peso al Nacer vs Peso al Destete</CardTitle>
+                    <CardDescription>
+                      Identificación de animales con mayor y menor ganancia de peso
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="w-full" style={{ minHeight: '260px', height: '260px', minWidth: 0 }}>
+                      <ResponsiveContainer width="100%" height={260}>
+                        <ScatterChart
+                          data={weightComparisonData}
+                          margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis
+                            type="number"
+                            dataKey="birthWeight"
+                            name="Peso al Nacer"
+                            unit=" kg"
+                            className="text-xs"
+                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                            label={{
+                              value: 'Peso al Nacer (kg)',
+                              position: 'insideBottom',
+                              offset: -12,
+                              style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                            }}
+                          />
+                          <YAxis
+                            type="number"
+                            dataKey="weaningWeight"
+                            name="Peso al Destete"
+                            unit=" kg"
+                            className="text-xs"
+                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                            label={{
+                              value: 'Peso al Destete (kg)',
+                              angle: -90,
+                              position: 'insideLeft',
+                              style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                            }}
+                          />
+                          <Tooltip
+                            cursor={{ strokeDasharray: '3 3', stroke: 'hsl(var(--primary))', strokeWidth: 2 }}
+                            contentStyle={{
+                              backgroundColor: 'hsl(var(--popover))',
+                              border: '2px solid hsl(var(--primary))',
+                              borderRadius: 8,
+                              padding: '10px 12px',
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                              zIndex: 9999,
+                              fontSize: '13px',
+                              fontWeight: 500
+                            }}
+                            wrapperStyle={{
+                              zIndex: 9999,
+                              pointerEvents: 'none'
+                            }}
+                            itemStyle={{
+                              padding: '2px 0'
+                            }}
+                            labelStyle={{
+                              marginBottom: '6px',
+                              fontWeight: 600,
+                              fontSize: '14px',
+                              color: 'hsl(var(--primary))'
+                            }}
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length > 0) {
+                                const data = payload[0].payload
+                                return (
+                                  <div style={{ zIndex: 9999 }}>
+                                    <p style={{ 
+                                      fontWeight: 600, 
+                                      marginBottom: '8px', 
+                                      fontSize: '14px',
+                                      color: 'hsl(var(--primary))'
+                                    }}>
+                                      {data.animalNumber}
+                                    </p>
+                                    <p style={{ marginBottom: '4px', fontSize: '13px' }}>
+                                      Peso al Nacer: {formatWeight(data.birthWeight)} kg
+                                    </p>
+                                    <p style={{ marginBottom: '4px', fontSize: '13px' }}>
+                                      Peso al Destete: {formatWeight(data.weaningWeight)} kg
+                                    </p>
+                                    <p style={{ 
+                                      fontWeight: 600, 
+                                      fontSize: '13px',
+                                      color: 'hsl(var(--primary))',
+                                      marginTop: '4px'
+                                    }}>
+                                      {formatPercentage(data.gainPercentage)}
+                                    </p>
+                                  </div>
+                                )
+                              }
+                              return null
+                            }}
+                          />
+                          <Scatter
+                            name="Comparación"
+                            data={weightComparisonData}
+                            fill="hsl(var(--primary) / 0.7)"
+                          >
+                            {weightComparisonData.map((entry, index) => {
+                              // Color by gain percentage: green for high gain, red for low gain
+                              const avgGain = weightComparisonData.reduce((sum, e) => sum + e.gainPercentage, 0) / weightComparisonData.length
+                              const isHighGain = entry.gainPercentage >= avgGain
+                              return (
+                                <Cell 
+                                  key={`cell-${index}`} 
+                                  fill={isHighGain ? 'hsl(var(--primary) / 0.7)' : 'hsl(var(--destructive) / 0.7)'} 
+                                />
+                              )
+                            })}
+                          </Scatter>
+                        </ScatterChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Detailed Analysis - Grouped by Category */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1006,23 +1317,101 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                     <CardTitle className="text-lg">Estadísticas de Peso</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="text-center p-3 bg-muted/30 rounded">
-                        <div className="text-xl font-bold text-primary">{formatWeight(currentRound.weight.average)}</div>
-                        <div className="text-xs text-muted-foreground">Promedio</div>
+                    <div className="space-y-4">
+                      {/* Birth Weight Statistics */}
+                      <div>
+                        <h5 className="font-medium mb-2 text-sm">Peso al Nacer</h5>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="text-center p-3 bg-muted/30 rounded">
+                            <div className="text-xl font-bold text-primary">{formatWeight(currentRound.weight.average)}</div>
+                            <div className="text-xs text-muted-foreground">Promedio</div>
+                          </div>
+                          <div className="text-center p-3 bg-muted/30 rounded">
+                            <div className="text-xl font-bold text-primary">{formatWeight(currentRound.weight.median)}</div>
+                            <div className="text-xs text-muted-foreground">Mediana</div>
+                          </div>
+                          <div className="text-center p-3 bg-muted/30 rounded">
+                            <div className="text-lg font-semibold text-red-600 dark:text-red-400">{formatWeight(currentRound.weight.min)}</div>
+                            <div className="text-xs text-muted-foreground">Mínimo</div>
+                          </div>
+                          <div className="text-center p-3 bg-muted/30 rounded">
+                            <div className="text-lg font-semibold text-green-600 dark:text-green-400">{formatWeight(currentRound.weight.max)}</div>
+                            <div className="text-xs text-muted-foreground">Máximo</div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-center p-3 bg-muted/30 rounded">
-                        <div className="text-xl font-bold text-primary">{formatWeight(currentRound.weight.median)}</div>
-                        <div className="text-xs text-muted-foreground">Mediana</div>
-                      </div>
-                      <div className="text-center p-3 bg-muted/30 rounded">
-                        <div className="text-lg font-semibold text-red-600 dark:text-red-400">{formatWeight(currentRound.weight.min)}</div>
-                        <div className="text-xs text-muted-foreground">Mínimo</div>
-                      </div>
-                      <div className="text-center p-3 bg-muted/30 rounded">
-                        <div className="text-lg font-semibold text-green-600 dark:text-green-400">{formatWeight(currentRound.weight.max)}</div>
-                        <div className="text-xs text-muted-foreground">Máximo</div>
-                      </div>
+                      {/* Weaning Weight Statistics - only show if data exists */}
+                      {(() => {
+                        const filteredAnimals = selectedRound === 'Todos' 
+                          ? animals 
+                          : animals.filter(a => a.insemination_round_id === selectedRound || (selectedRound === 'Sin Ronda' && !a.insemination_round_id))
+                        
+                        const weaningWeights = filteredAnimals
+                          .filter(a => a.weaning_weight !== undefined && a.weaning_weight !== null && a.weaning_weight > 0)
+                          .map(a => a.weaning_weight!)
+                        
+                        if (weaningWeights.length === 0) return null
+                        
+                        const sortedWeights = [...weaningWeights].sort((a, b) => a - b)
+                        const avgWeaning = weaningWeights.reduce((sum, w) => sum + w, 0) / weaningWeights.length
+                        const medianWeaning = sortedWeights.length % 2 === 0
+                          ? (sortedWeights[sortedWeights.length / 2 - 1] + sortedWeights[sortedWeights.length / 2]) / 2
+                          : sortedWeights[Math.floor(sortedWeights.length / 2)]
+                        const minWeaning = Math.min(...weaningWeights)
+                        const maxWeaning = Math.max(...weaningWeights)
+                        
+                        // Calculate average weight gain and gain percentage
+                        const animalsWithBothWeights = filteredAnimals.filter(a => 
+                          a.weight && a.weight > 0 && a.weaning_weight && a.weaning_weight > 0
+                        )
+                        const avgWeightGain = animalsWithBothWeights.length > 0
+                          ? animalsWithBothWeights.reduce((sum, a) => sum + (a.weaning_weight! - a.weight!), 0) / animalsWithBothWeights.length
+                          : 0
+                        const avgGainPercentage = animalsWithBothWeights.length > 0
+                          ? animalsWithBothWeights.reduce((sum, a) => {
+                              const gainPct = a.weight! > 0 ? ((a.weaning_weight! / a.weight!) - 1) * 100 : 0
+                              return sum + gainPct
+                            }, 0) / animalsWithBothWeights.length
+                          : 0
+                        
+                        return (
+                          <div>
+                            <h5 className="font-medium mb-2 text-sm">Peso al Destete</h5>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="text-center p-3 bg-muted/30 rounded">
+                                <div className="text-xl font-bold text-primary">{formatWeight(avgWeaning)}</div>
+                                <div className="text-xs text-muted-foreground">Promedio</div>
+                              </div>
+                              <div className="text-center p-3 bg-muted/30 rounded">
+                                <div className="text-xl font-bold text-primary">{formatWeight(medianWeaning)}</div>
+                                <div className="text-xs text-muted-foreground">Mediana</div>
+                              </div>
+                              <div className="text-center p-3 bg-muted/30 rounded">
+                                <div className="text-lg font-semibold text-red-600 dark:text-red-400">{formatWeight(minWeaning)}</div>
+                                <div className="text-xs text-muted-foreground">Mínimo</div>
+                              </div>
+                              <div className="text-center p-3 bg-muted/30 rounded">
+                                <div className="text-lg font-semibold text-green-600 dark:text-green-400">{formatWeight(maxWeaning)}</div>
+                                <div className="text-xs text-muted-foreground">Máximo</div>
+                              </div>
+                            </div>
+                            {animalsWithBothWeights.length > 0 && (
+                              <div className="mt-3 pt-3 border-t border-border">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="text-center p-3 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800">
+                                    <div className="text-lg font-semibold text-blue-700 dark:text-blue-400">{formatWeight(avgWeightGain)}</div>
+                                    <div className="text-xs text-muted-foreground">Ganancia Promedio</div>
+                                  </div>
+                                  <div className="text-center p-3 bg-purple-50 dark:bg-purple-950/20 rounded border border-purple-200 dark:border-purple-800">
+                                    <div className="text-lg font-semibold text-purple-700 dark:text-purple-400">{formatPercentage(avgGainPercentage)}</div>
+                                    <div className="text-xs text-muted-foreground">Ganancia % Promedio</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
                   </CardContent>
                 </Card>
