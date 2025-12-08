@@ -592,23 +592,10 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
 
     // Get all weaning weights
     const weaningWeights = filteredAnimals.map(a => a.weaning_weight!).sort((a, b) => a - b)
-    const minWeight = Math.min(...weaningWeights)
-    const maxWeight = Math.max(...weaningWeights)
 
-    // Create bins (e.g., 0-50, 50-100, 100-150, etc.)
-    // Use dynamic bin size based on data range
-    const range = maxWeight - minWeight
-    let binSize = 50 // Default bin size
-    
-    if (range > 500) {
-      binSize = 100
-    } else if (range > 200) {
-      binSize = 50
-    } else if (range > 100) {
-      binSize = 25
-    } else {
-      binSize = 10
-    }
+    // Create bins (e.g., 0-10, 10-20, 20-30, etc.)
+    // Use 10kg bins for granular distribution
+    const binSize = 10
 
     // Create bins
     const bins: Record<string, { count: number, min: number, max: number }> = {}
