@@ -289,17 +289,58 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
     phase2End.setDate(phase2End.getDate() + Math.floor((totalDays * 2) / 3))
 
     // Find closest data points to phase boundaries
-    const findClosestDate = (targetDate: Date) => {
+    // Ensure we find points that are at or after the target date to maintain proper ordering
+    const findClosestDate = (targetDate: Date, preferAfter: boolean = true) => {
+      const targetTime = targetDate.getTime()
+      
+      // First, try to find the closest point at or after the target date
+      if (preferAfter) {
+        const afterPoints = dataPoints.filter(point => {
+          const pointTime = new Date(point.date).getTime()
+          return pointTime >= targetTime
+        })
+        
+        if (afterPoints.length > 0) {
+          return afterPoints.reduce((closest, point) => {
+            const pointDate = new Date(point.date)
+            const closestDate = new Date(closest.date)
+            return Math.abs(pointDate.getTime() - targetTime) < Math.abs(closestDate.getTime() - targetTime)
+              ? point : closest
+          })
+        }
+      }
+      
+      // Fallback to closest point overall
       return dataPoints.reduce((closest, point) => {
         const pointDate = new Date(point.date)
         const closestDate = new Date(closest.date)
-        return Math.abs(pointDate.getTime() - targetDate.getTime()) < Math.abs(closestDate.getTime() - targetDate.getTime())
+        return Math.abs(pointDate.getTime() - targetTime) < Math.abs(closestDate.getTime() - targetTime)
           ? point : closest
       })
     }
 
-    const phase1EndPoint = findClosestDate(phase1End)
-    const phase2EndPoint = findClosestDate(phase2End)
+    let phase1EndPoint = findClosestDate(phase1End, true)
+    let phase2EndPoint = findClosestDate(phase2End, true)
+    
+    // Ensure phase1EndPoint comes before phase2EndPoint in the sorted array
+    // If they're out of order, use index-based boundaries instead
+    const phase1Index = dataPoints.findIndex(p => p.date === phase1EndPoint.date)
+    const phase2Index = dataPoints.findIndex(p => p.date === phase2EndPoint.date)
+    
+    // If phase boundaries are out of order or the same, recalculate using indices
+    if (phase2Index <= phase1Index) {
+      const adjustedPhase1Index = Math.floor(dataPoints.length / 3)
+      const adjustedPhase2Index = Math.floor((dataPoints.length * 2) / 3)
+      const adjustedPhase1EndPoint = dataPoints[Math.min(adjustedPhase1Index, dataPoints.length - 1)]
+      const adjustedPhase2EndPoint = dataPoints[Math.min(adjustedPhase2Index, dataPoints.length - 1)]
+      
+      // Only update if the adjusted points are different and in order
+      if (adjustedPhase1EndPoint.date !== adjustedPhase2EndPoint.date && 
+          new Date(adjustedPhase1EndPoint.date).getTime() < new Date(adjustedPhase2EndPoint.date).getTime()) {
+        phase1EndPoint = adjustedPhase1EndPoint
+        phase2EndPoint = adjustedPhase2EndPoint
+      }
+    }
 
     // Calculate moving average for trend line with adaptive window size
     // Use 10-15% of data points, with minimum 5 and maximum 15 days
@@ -320,23 +361,57 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
     })
 
     // Calculate phase totals (sum of births per phase)
-    const phase1EndDate = new Date(phase1EndPoint.date)
-    const phase2EndDate = new Date(phase2EndPoint.date)
+    // Normalize dates to midnight for proper comparison (YYYY-MM-DD format)
+    const normalizeDate = (dateStr: string): Date => {
+      const date = new Date(dateStr)
+      date.setHours(0, 0, 0, 0)
+      return date
+    }
+    
+    const phase1EndDate = normalizeDate(phase1EndPoint.date)
+    const phase2EndDate = normalizeDate(phase2EndPoint.date)
+    
+    // Ensure phase boundaries are properly ordered
+    // If phase2EndPoint is before or equal to phase1EndPoint, adjust the logic
+    const phase1EndTime = phase1EndDate.getTime()
+    const phase2EndTime = phase2EndDate.getTime()
+    
+    // If boundaries are the same or out of order, use index-based splitting instead
+    const useIndexBased = phase2EndTime <= phase1EndTime || phase1EndPoint.date === phase2EndPoint.date
     
     let initialPhaseTotal = 0
     let middlePhaseTotal = 0
     let finalPhaseTotal = 0
 
-    dataPoints.forEach(point => {
-      const pointDate = new Date(point.date)
-      if (pointDate <= phase1EndDate) {
-        initialPhaseTotal += point.count
-      } else if (pointDate <= phase2EndDate) {
-        middlePhaseTotal += point.count
-      } else {
-        finalPhaseTotal += point.count
-      }
-    })
+    if (useIndexBased) {
+      // Fallback to index-based splitting if date boundaries are problematic
+      const phase1Index = Math.floor(dataPoints.length / 3)
+      const phase2Index = Math.floor((dataPoints.length * 2) / 3)
+      
+      dataPoints.forEach((point, index) => {
+        if (index <= phase1Index) {
+          initialPhaseTotal += point.count
+        } else if (index <= phase2Index) {
+          middlePhaseTotal += point.count
+        } else {
+          finalPhaseTotal += point.count
+        }
+      })
+    } else {
+      // Use date-based splitting with proper boundary handling
+      dataPoints.forEach(point => {
+        const pointDate = normalizeDate(point.date)
+        const pointTime = pointDate.getTime()
+        
+        if (pointTime <= phase1EndTime) {
+          initialPhaseTotal += point.count
+        } else if (pointTime <= phase2EndTime) {
+          middlePhaseTotal += point.count
+        } else {
+          finalPhaseTotal += point.count
+        }
+      })
+    }
 
     return { 
       dataPoints: dataPointsWithTrend,
