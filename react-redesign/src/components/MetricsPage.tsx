@@ -159,6 +159,17 @@ const calculateMetrics = (animals: Animal[], stats: RegistrationStats) => {
 export function MetricsPage({ animals, stats }: MetricsPageProps) {
   const metrics = calculateMetrics(animals, stats)
   const [inseminationRounds, setInseminationRounds] = useState<InseminationRound[]>([])
+  const [isMobile, setIsMobile] = useState(false)
+  
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 640)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
   
   // Fetch insemination rounds with dates
   useEffect(() => {
@@ -760,34 +771,40 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="w-full" style={{ minHeight: '260px', height: '260px', minWidth: 0 }}>
-                      <ResponsiveContainer width="100%" height={260}>
+                    <div className="w-full" style={{ minHeight: isMobile ? '200px' : '260px', height: isMobile ? '200px' : '260px', minWidth: 0 }}>
+                      <ResponsiveContainer width="100%" height={isMobile ? 200 : 260}>
                         {plotType === 'births' && distributionData ? (
                           <BarChart
                             data={distributionData.dataPoints}
-                            margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
+                            margin={{ 
+                              top: 10, 
+                              right: isMobile ? 5 : 12, 
+                              bottom: isMobile ? 50 : 40, 
+                              left: isMobile ? 40 : 8 
+                            }}
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                             <XAxis
                               dataKey="formattedDate"
                               className="text-xs"
-                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 9 : 11 }}
                               label={{
                                 value: 'Fecha de nacimiento',
                                 position: 'insideBottom',
-                                offset: -12,
-                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                                offset: isMobile ? -8 : -12,
+                                style: { textAnchor: 'middle', fontSize: isMobile ? 9 : 11, fill: 'hsl(var(--muted-foreground))' }
                               }}
                             />
                             <YAxis
                               className="text-xs"
-                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 9 : 11 }}
                               allowDecimals={false}
                               label={{
                                 value: 'Nacimientos',
                                 angle: -90,
-                                position: 'insideLeft',
-                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                                position: isMobile ? 'left' : 'insideLeft',
+                                offset: isMobile ? 5 : 0,
+                                style: { textAnchor: 'middle', fontSize: isMobile ? 9 : 11, fill: 'hsl(var(--muted-foreground))' }
                               }}
                             />
                             <Tooltip
@@ -857,32 +874,38 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                               
                               return sortedData
                             })()}
-                            margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
+                            margin={{ 
+                              top: 10, 
+                              right: isMobile ? 5 : 12, 
+                              bottom: isMobile ? 50 : 40, 
+                              left: isMobile ? 40 : 8 
+                            }}
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                             <XAxis
                               type="category"
                               dataKey="formattedDate"
                               className="text-xs"
-                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 9 : 11 }}
                               allowDuplicatedCategory={false}
                               label={{
                                 value: 'Fecha de nacimiento',
                                 position: 'insideBottom',
-                                offset: -12,
-                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                                offset: isMobile ? -8 : -12,
+                                style: { textAnchor: 'middle', fontSize: isMobile ? 9 : 11, fill: 'hsl(var(--muted-foreground))' }
                               }}
                             />
                             <YAxis
                               type="number"
                               yAxisId="weight"
                               className="text-xs"
-                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 9 : 11 }}
                               label={{
                                 value: 'Peso (kg)',
                                 angle: -90,
-                                position: 'insideLeft',
-                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                                position: isMobile ? 'left' : 'insideLeft',
+                                offset: isMobile ? 5 : 0,
+                                style: { textAnchor: 'middle', fontSize: isMobile ? 9 : 11, fill: 'hsl(var(--muted-foreground))' }
                               }}
                               domain={(() => {
                                 // Calculate domain from both trend and weight values
@@ -961,29 +984,35 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         ) : plotType === 'weaning' && weaningWeightDistribution ? (
                           <BarChart
                             data={weaningWeightDistribution}
-                            margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
+                            margin={{ 
+                              top: 10, 
+                              right: isMobile ? 5 : 12, 
+                              bottom: isMobile ? 50 : 40, 
+                              left: isMobile ? 40 : 50 
+                            }}
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                             <XAxis
                               dataKey="bin"
                               className="text-xs"
-                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 9 : 11 }}
                               label={{
                                 value: 'Rango de Peso (kg)',
                                 position: 'insideBottom',
-                                offset: -12,
-                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                                offset: isMobile ? -8 : -12,
+                                style: { textAnchor: 'middle', fontSize: isMobile ? 9 : 11, fill: 'hsl(var(--muted-foreground))' }
                               }}
                             />
                             <YAxis
                               className="text-xs"
-                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 9 : 11 }}
                               allowDecimals={false}
                               label={{
                                 value: 'Cantidad de Animales',
                                 angle: -90,
-                                position: 'insideLeft',
-                                style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                                position: 'left',
+                                offset: isMobile ? 5 : 10,
+                                style: { textAnchor: 'middle', fontSize: isMobile ? 9 : 11, fill: 'hsl(var(--muted-foreground))' }
                               }}
                             />
                             <Tooltip
@@ -1126,11 +1155,16 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="w-full" style={{ minHeight: '260px', height: '260px', minWidth: 0 }}>
-                      <ResponsiveContainer width="100%" height={260}>
+                    <div className="w-full" style={{ minHeight: isMobile ? '200px' : '260px', height: isMobile ? '200px' : '260px', minWidth: 0 }}>
+                      <ResponsiveContainer width="100%" height={isMobile ? 200 : 260}>
                         <ScatterChart
                           data={weightComparisonData}
-                          margin={{ top: 10, right: 12, bottom: 40, left: 8 }}
+                          margin={{ 
+                            top: 10, 
+                            right: isMobile ? 5 : 12, 
+                            bottom: isMobile ? 50 : 40, 
+                            left: isMobile ? 40 : 50 
+                          }}
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                           <XAxis
@@ -1139,7 +1173,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                             name="Peso al Nacer"
                             unit=" kg"
                             className="text-xs"
-                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 9 : 11 }}
                             domain={(() => {
                               if (weightComparisonData.length === 0) return ['auto', 'auto']
                               const min = Math.min(...weightComparisonData.map(d => d.birthWeight))
@@ -1150,8 +1184,8 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                             label={{
                               value: 'Peso al Nacer (kg)',
                               position: 'insideBottom',
-                              offset: -12,
-                              style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                              offset: isMobile ? -8 : -12,
+                              style: { textAnchor: 'middle', fontSize: isMobile ? 9 : 11, fill: 'hsl(var(--muted-foreground))' }
                             }}
                           />
                           <YAxis
@@ -1160,7 +1194,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                             name="Peso al Destete"
                             unit=" kg"
                             className="text-xs"
-                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 9 : 11 }}
                             domain={(() => {
                               if (weightComparisonData.length === 0) return ['auto', 'auto']
                               const min = Math.min(...weightComparisonData.map(d => d.weaningWeight))
@@ -1171,8 +1205,9 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                             label={{
                               value: 'Peso al Destete (kg)',
                               angle: -90,
-                              position: 'insideLeft',
-                              style: { textAnchor: 'middle', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }
+                              position: 'left',
+                              offset: isMobile ? 5 : 10,
+                              style: { textAnchor: 'middle', fontSize: isMobile ? 9 : 11, fill: 'hsl(var(--muted-foreground))' }
                             }}
                           />
                           <Tooltip
