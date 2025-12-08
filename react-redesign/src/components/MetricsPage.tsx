@@ -1140,6 +1140,13 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                             unit=" kg"
                             className="text-xs"
                             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                            domain={(() => {
+                              if (weightComparisonData.length === 0) return ['auto', 'auto']
+                              const min = Math.min(...weightComparisonData.map(d => d.birthWeight))
+                              const max = Math.max(...weightComparisonData.map(d => d.birthWeight))
+                              const padding = (max - min) * 0.05 // 5% padding
+                              return [Math.max(0, min - padding), max + padding]
+                            })()}
                             label={{
                               value: 'Peso al Nacer (kg)',
                               position: 'insideBottom',
@@ -1154,6 +1161,13 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                             unit=" kg"
                             className="text-xs"
                             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                            domain={(() => {
+                              if (weightComparisonData.length === 0) return ['auto', 'auto']
+                              const min = Math.min(...weightComparisonData.map(d => d.weaningWeight))
+                              const max = Math.max(...weightComparisonData.map(d => d.weaningWeight))
+                              const padding = (max - min) * 0.05 // 5% padding
+                              return [Math.max(0, min - padding), max + padding]
+                            })()}
                             label={{
                               value: 'Peso al Destete (kg)',
                               angle: -90,
@@ -1223,19 +1237,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                             name="Comparación"
                             data={weightComparisonData}
                             fill="hsl(var(--primary) / 0.7)"
-                          >
-                            {weightComparisonData.map((entry, index) => {
-                              // Color by gain percentage: green for high gain, red for low gain
-                              const avgGain = weightComparisonData.reduce((sum, e) => sum + e.gainPercentage, 0) / weightComparisonData.length
-                              const isHighGain = entry.gainPercentage >= avgGain
-                              return (
-                                <Cell 
-                                  key={`cell-${index}`} 
-                                  fill={isHighGain ? 'hsl(var(--primary) / 0.7)' : 'hsl(var(--destructive) / 0.7)'} 
-                                />
-                              )
-                            })}
-                          </Scatter>
+                          />
                         </ScatterChart>
                       </ResponsiveContainer>
                     </div>
