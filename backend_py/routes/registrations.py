@@ -40,12 +40,23 @@ def update_registration_by_identifier(body: UpdateBody, request: Request, x_user
         # Fallback to legacy key if token missing
         if not x_user_key or x_user_key not in VALID_KEYS:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        user_id = x_user_key
+        # Block legacy users without company_id from updating records
+        raise HTTPException(
+            status_code=403, 
+            detail="Legacy users without company assignment cannot update records. Please use authenticated access with company assignment."
+        )
+    
+    # Require company_id for all updates
+    if not company_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Company assignment required to update records. Please ensure your user account is assigned to a company."
+        )
     
     # Find the record by animalNumber and createdAt
     from ..services.registrations import find_and_update_registration
     try:
-        result = find_and_update_registration(user_id, body)
+        result = find_and_update_registration(user_id, body, company_id)
         if not result:
             raise HTTPException(
                 status_code=404, 

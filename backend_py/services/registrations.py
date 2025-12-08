@@ -363,13 +363,20 @@ def update_registration(created_by_or_key: str, animal_id: int, body) -> None:
     except sqlite3.Error as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
-def find_and_update_registration(created_by_or_key: str, body) -> bool:
-    """Find and update a registration record by animalNumber and createdAt"""
+def find_and_update_registration(created_by_or_key: str, body, company_id: int | None = None) -> bool:
+    """Find and update a registration record by animalNumber and createdAt.
+    Requires company_id - only users within the same company can update records.
+    """
+    # Require company_id for all updates
+    if not company_id:
+        print(f"Access denied: company_id required. User={created_by_or_key} attempted update without company assignment.")
+        return False
+    
     # Normalize animal_number to match database storage format
     animal_number = _normalize_text(body.animalNumber)
     created_at = body.createdAt
     
-    print(f"find_and_update_registration called with: animal_number={animal_number}, created_at={created_at}, user={created_by_or_key}")
+    print(f"find_and_update_registration called with: animal_number={animal_number}, created_at={created_at}, user={created_by_or_key}, company_id={company_id}")
     
     if not animal_number or not created_at:
         print("Missing animal_number or created_at")
@@ -377,30 +384,33 @@ def find_and_update_registration(created_by_or_key: str, body) -> bool:
     
     try:
         with conn:
+            # Multi-tenant: only users in same company can update records
+            where_clause = "animal_number = ? AND created_at = ? AND company_id = ?"
+            params = (animal_number, created_at, company_id)
+            
             # Find the record by animalNumber and createdAt
             # animal_number is already normalized to match database storage format
             cursor = conn.execute(
-                """
+                f"""
                 SELECT id FROM registrations 
-                WHERE animal_number = ? AND created_at = ? 
-                AND ((created_by = ?) OR (user_key = ?))
+                WHERE {where_clause}
                 """,
-                (animal_number, created_at, created_by_or_key, created_by_or_key)
+                params
             )
             record = cursor.fetchone()
             
             if not record:
-                # Try to find if record exists but with different user
+                # Try to find if record exists but with different access
                 cursor_check = conn.execute(
                     """
-                    SELECT id, created_by, user_key FROM registrations 
+                    SELECT id, created_by, user_key, company_id FROM registrations 
                     WHERE animal_number = ? AND created_at = ?
                     """,
                     (animal_number, created_at)
                 )
                 check_record = cursor_check.fetchone()
                 if check_record:
-                    print(f"Record exists but belongs to different user. Record user_key={check_record[2]}, created_by={check_record[1]}, requested user={created_by_or_key}")
+                    print(f"Record exists but access denied. Record user_key={check_record[2]}, created_by={check_record[1]}, company_id={check_record[3]}, requested user={created_by_or_key}, requested company_id={company_id}")
                 else:
                     print(f"No record found in database for animal_number={animal_number}, created_at={created_at}")
                 return False
