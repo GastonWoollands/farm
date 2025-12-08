@@ -440,9 +440,7 @@ function AppContent() {
       {/* Footer - Minimal status info */}
       <footer className="border-t bg-muted/50 py-4">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <span>Status: Idle</span>
-          <span className="mx-2">•</span>
-          <span>API: {import.meta.env.VITE_API_BASE_URL || 'localhost:8000'}</span>
+          <span>🐄 Counting cows • Built by GW</span>
         </div>
       </footer>
 
