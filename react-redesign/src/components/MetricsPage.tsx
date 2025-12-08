@@ -817,9 +817,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
               </div>
 
               {/* Birth/Weight/Weaning Distribution Plot */}
-              {((plotType === 'births' && distributionData && distributionData.dataPoints && distributionData.dataPoints.length > 0) ||
-                (plotType === 'weights' && weightData && weightData.dataPoints && weightData.dataPoints.length > 0) ||
-                (plotType === 'weaning' && weaningWeightDistribution && weaningWeightDistribution.length > 0)) ? (
+              {selectedRound !== 'Todos' && selectedRound !== 'Sin Ronda' ? (
                 <Card className="border border-muted-foreground/20 shadow-sm">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
@@ -846,6 +844,11 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                     </div>
                   </CardHeader>
                   <CardContent>
+                    {/* Show chart if data exists, otherwise show no data message */}
+                    {((plotType === 'births' && distributionData && distributionData.dataPoints && distributionData.dataPoints.length > 0) ||
+                      (plotType === 'weights' && weightData && weightData.dataPoints && weightData.dataPoints.length > 0) ||
+                      (plotType === 'weaning' && weaningWeightDistribution && weaningWeightDistribution.length > 0)) ? (
+                      <>
                     <div className="w-full" style={{ minHeight: isMobile ? '200px' : '260px', height: isMobile ? '200px' : '260px', minWidth: 0 }}>
                       <ResponsiveContainer width="100%" height={isMobile ? 200 : 260}>
                         {plotType === 'births' && distributionData ? (
@@ -1181,41 +1184,25 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                         </div>
                       )
                     })()}
-                  </CardContent>
-                </Card>
-              ) : selectedRound !== 'Todos' && selectedRound !== 'Sin Ronda' ? (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">
-                      {plotType === 'births' ? 'Distribución de Nacimientos' : 
-                       plotType === 'weights' ? 'Distribución de Pesos' : 
-                       'Distribución de Peso al Destete'}
-                    </CardTitle>
-                    <CardDescription>
-                      {plotType === 'births' 
-                        ? 'Nacimientos diarios de crías vivas durante la campaña'
-                        : plotType === 'weights'
-                        ? 'Peso de crías vivas por fecha de nacimiento'
-                        : 'Peso al destete de crías vivas por fecha de nacimiento'}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                      <p>
-                        {plotType === 'births' 
-                          ? 'No hay datos disponibles para mostrar la distribución de nacimientos.'
-                          : plotType === 'weights'
-                          ? 'No hay datos disponibles para mostrar la distribución de pesos.'
-                          : 'No hay datos disponibles para mostrar la distribución de peso al destete.'}
-                      </p>
-                      <p className="text-sm mt-2">
-                        {plotType === 'births'
-                          ? 'Se requieren crías vivas con fecha de nacimiento registrada.'
-                          : plotType === 'weights'
-                          ? 'Se requieren crías vivas con fecha de nacimiento y peso registrados.'
-                          : 'Se requieren crías vivas con peso al destete registrado.'}
-                      </p>
-                    </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p>
+                          {plotType === 'births' 
+                            ? 'No hay datos disponibles para mostrar la distribución de nacimientos.'
+                            : plotType === 'weights'
+                            ? 'No hay datos disponibles para mostrar la distribución de pesos.'
+                            : 'No hay datos disponibles para mostrar la distribución de peso al destete.'}
+                        </p>
+                        <p className="text-sm mt-2">
+                          {plotType === 'births'
+                            ? 'Se requieren crías vivas con fecha de nacimiento registrada.'
+                            : plotType === 'weights'
+                            ? 'Se requieren crías vivas con fecha de nacimiento y peso registrados.'
+                            : 'Se requieren crías vivas con peso al destete registrado.'}
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ) : null}
