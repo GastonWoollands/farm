@@ -17,6 +17,8 @@ python-multipart = "^0.0.20"
 langchain-google-genai = "^3.0.1"
 langchain = "^1.0.3"
 langgraph = "^1.0.2"
+asyncpg = "^0.31.0"
+psycopg2-binary = "^2.9.11"
 
 [tool.poetry.group.dev.dependencies]
 commitizen = "^4.9.1"
