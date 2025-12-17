@@ -89,6 +89,7 @@ function AppContent() {
 
   const [activeTab, setActiveTab] = useState('metrics')
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [backendError] = useState<string | null>(null)
   const { theme, toggleTheme } = useTheme()
 
@@ -269,6 +270,42 @@ function AppContent() {
     }
   }
 
+  // Refresh data from server (clears duplicates and gets fresh data)
+  const handleRefresh = async () => {
+    if (!navigator.onLine) {
+      console.warn('[Refresh] Cannot refresh while offline')
+      return
+    }
+
+    setIsRefreshing(true)
+    try {
+      console.log('[Refresh] Starting data refresh...')
+      
+      // Refresh data from server (replaces local cache)
+      await apiService.refreshData()
+      
+      // Reload all data
+      const allRecords = await apiService.getRegistrations(1000)
+      const displayRecords = await apiService.getDisplayRecords(10)
+      const pendingCount = await apiService.getPendingCount()
+      const statsData = await apiService.getStats()
+      
+      setAppState(prev => ({
+        ...prev,
+        animals: allRecords.registrations,
+        displayAnimals: displayRecords,
+        stats: statsData,
+        pendingCount
+      }))
+      
+      console.log('[Refresh] Data refresh completed')
+    } catch (error) {
+      console.error('[Refresh] Failed to refresh data:', error)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
   // Show loading screen while initializing
   if (isLoading) {
     return (
@@ -333,6 +370,17 @@ function AppContent() {
                 >
                   {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                 </Button>
+                {/* Refresh button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={!appState.isOnline || isRefreshing}
+                  className="text-muted-foreground hover:text-foreground p-2"
+                  title="Actualizar datos"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                </Button>
               </div>
               <Button
                 variant="ghost"
@@ -379,6 +427,18 @@ function AppContent() {
                 title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
               >
                 {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              </Button>
+              {/* Refresh button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={!appState.isOnline || isRefreshing}
+                className="text-muted-foreground hover:text-foreground gap-1"
+                title="Actualizar datos desde el servidor"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span className="hidden lg:inline">{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
               </Button>
             </div>
 

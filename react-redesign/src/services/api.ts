@@ -489,7 +489,7 @@ class ApiService {
       }
     }
 
-    // After pushing, pull latest records from server
+    // After pushing, pull latest records from server and REPLACE local cache
     let importedCount = 0
     try {
       const response = await fetch(`${this.baseURL}${API_ENDPOINTS.EXPORT}?format=json`, {
@@ -498,15 +498,46 @@ class ApiService {
 
       if (response.ok) {
         const serverData = await response.json()
-        await localStorageService.importFromServer(serverData)
+        // Use replaceWithServerData to avoid duplicates
+        await localStorageService.replaceWithServerData(serverData)
         importedCount = serverData.items ? serverData.items.length : serverData.length
-        console.log('Imported from server:', importedCount)
+        console.log('[Sync] Replaced local cache with server data:', importedCount)
       }
     } catch (error) {
-      console.warn('Error importing from server:', error)
+      console.warn('[Sync] Error importing from server:', error)
     }
 
     return { synced: syncedCount, imported: importedCount }
+  }
+
+  // Full refresh - fetch fresh data from server and replace local cache
+  async refreshData(): Promise<{ success: boolean, count: number }> {
+    if (!this.authToken) {
+      throw new Error('No authentication token available')
+    }
+
+    console.log('[Refresh] Fetching fresh data from server...')
+    
+    try {
+      const response = await fetch(`${this.baseURL}${API_ENDPOINTS.EXPORT}?format=json`, {
+        headers: { 'Authorization': `Bearer ${this.authToken}` }
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const serverData = await response.json()
+      await localStorageService.replaceWithServerData(serverData)
+      
+      const count = serverData.items ? serverData.items.length : serverData.length
+      console.log('[Refresh] Successfully refreshed data:', count)
+      
+      return { success: true, count }
+    } catch (error) {
+      console.error('[Refresh] Failed to refresh data:', error)
+      throw error
+    }
   }
 
   // Get pending count from local storage

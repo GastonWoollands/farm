@@ -106,26 +106,78 @@ class LocalStorageService {
     // Handle both response formats
     const serverRecords = Array.isArray(serverData) ? serverData : serverData.items || []
     
-    // Convert server records to local format
-    const serverRecordsAsLocal: LocalRecord[] = serverRecords.map((record, index) => ({
+    // Build sets for deduplication - use BOTH backendId AND animal_number
+    const existingBackendIds = new Set(localRecords.map(r => r.backendId).filter(Boolean))
+    const existingAnimalNumbers = new Set(localRecords.map(r => r.animal_number).filter(Boolean))
+    
+    // Filter out duplicates BEFORE creating local records
+    const newServerRecords = serverRecords.filter(record => {
+      // Skip if we already have this record by backendId
+      if (record.id && existingBackendIds.has(record.id)) {
+        return false
+      }
+      // Skip if we already have this animal_number (primary dedup key)
+      if (record.animal_number && existingAnimalNumbers.has(record.animal_number)) {
+        return false
+      }
+      return true
+    })
+    
+    // Convert only NEW server records to local format
+    const baseId = this.getNextId()
+    const newRecordsAsLocal: LocalRecord[] = newServerRecords.map((record, index) => ({
       ...record,
-      id: this.getNextId() + index, // Generate unique local IDs
+      id: baseId + index,
       synced: true,
-      backendId: record.id, // Store server ID as backendId
+      backendId: record.id,
       createdAt: record.created_at || nowIso
     }))
     
-    // Merge with existing local records, avoiding duplicates
-    const existingBackendIds = new Set(localRecords.map(r => r.backendId).filter(Boolean))
-    const newServerRecords = serverRecordsAsLocal.filter(r => !existingBackendIds.has(r.backendId))
-    
-    const mergedRecords = [...localRecords, ...newServerRecords]
+    const mergedRecords = [...localRecords, ...newRecordsAsLocal]
     this.setStorage(mergedRecords)
     
-    console.log('Imported from server:', { 
-      total: serverRecords.length, 
-      new: newServerRecords.length,
-      existing: localRecords.length 
+    console.log('[LocalStorage] Import from server:', { 
+      serverTotal: serverRecords.length, 
+      newRecords: newRecordsAsLocal.length,
+      skippedDuplicates: serverRecords.length - newRecordsAsLocal.length,
+      localTotal: mergedRecords.length
+    })
+  }
+
+  // Clear all synced records and replace with server data (full refresh)
+  async replaceWithServerData(serverData: { count: number, items: Animal[] } | Animal[]): Promise<void> {
+    const localRecords = this.getStorage()
+    const nowIso = new Date().toISOString()
+    
+    // Keep only unsynced local records (pending uploads)
+    const unsyncedRecords = localRecords.filter(r => !r.synced)
+    
+    // Handle both response formats
+    const serverRecords = Array.isArray(serverData) ? serverData : serverData.items || []
+    
+    // Build set of unsynced animal numbers to avoid duplicates
+    const unsyncedAnimalNumbers = new Set(unsyncedRecords.map(r => r.animal_number))
+    
+    // Convert server records, excluding any that match unsynced local records
+    const baseId = this.getNextId()
+    const serverRecordsAsLocal: LocalRecord[] = serverRecords
+      .filter(record => !unsyncedAnimalNumbers.has(record.animal_number))
+      .map((record, index) => ({
+        ...record,
+        id: baseId + index,
+        synced: true,
+        backendId: record.id,
+        createdAt: record.created_at || nowIso
+      }))
+    
+    // Combine: unsynced local + fresh server data
+    const mergedRecords = [...unsyncedRecords, ...serverRecordsAsLocal]
+    this.setStorage(mergedRecords)
+    
+    console.log('[LocalStorage] Replaced with server data:', { 
+      unsyncedKept: unsyncedRecords.length,
+      serverRecords: serverRecordsAsLocal.length,
+      total: mergedRecords.length
     })
   }
 
