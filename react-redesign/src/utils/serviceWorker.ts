@@ -59,10 +59,18 @@ export function register(config?: PWAConfig) {
 /**
  * Trigger the service worker update and reload the page
  */
-export function skipWaitingAndReload() {
+export async function skipWaitingAndReload() {
   if (updateSWCallback) {
     console.log('[PWA] Updating service worker and reloading...')
-    updateSWCallback(true)
+    try {
+      await updateSWCallback(true)
+      // If we get here and page didn't reload, force it
+      console.log('[PWA] Update complete, forcing reload...')
+      window.location.reload()
+    } catch (error) {
+      console.error('[PWA] Update failed, forcing reload anyway:', error)
+      window.location.reload()
+    }
   } else {
     console.log('[PWA] No update callback, reloading page...')
     window.location.reload()
