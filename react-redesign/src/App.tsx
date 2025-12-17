@@ -28,7 +28,38 @@ import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { PrefixesProvider } from './contexts/PrefixesContext'
 import { authService, AuthUser } from './services/auth'
 import { apiService, Animal, RegistrationStats } from './services/api'
+import { localStorageService } from './services/localStorage'
 import { register, registerPWAInstallPrompt, skipWaitingAndReload } from './utils/serviceWorker'
+
+// Helper function to calculate stats from local records (works offline)
+function calculateStatsFromRecords(records: Animal[]): RegistrationStats {
+  const totalAnimals = records.length
+  const aliveAnimals = records.filter(animal => animal.status === 'ALIVE').length
+  const deadAnimals = records.filter(animal => animal.status === 'DEAD').length
+  const maleAnimals = records.filter(animal => animal.gender === 'MALE').length
+  const femaleAnimals = records.filter(animal => animal.gender === 'FEMALE').length
+  
+  const weights = records
+    .filter(animal => animal.weight && animal.weight > 0)
+    .map(animal => animal.weight!)
+  
+  const avgWeight = weights.length > 0 
+    ? weights.reduce((sum, weight) => sum + weight, 0) / weights.length 
+    : 0
+  const minWeight = weights.length > 0 ? Math.min(...weights) : 0
+  const maxWeight = weights.length > 0 ? Math.max(...weights) : 0
+  
+  return {
+    totalAnimals,
+    aliveAnimals,
+    deadAnimals,
+    maleAnimals,
+    femaleAnimals,
+    avgWeight: Math.round(avgWeight * 100) / 100,
+    minWeight,
+    maxWeight
+  }
+}
 
 // Types
 interface AppState {
@@ -61,7 +92,7 @@ function AppContent() {
   const [backendError] = useState<string | null>(null)
   const { theme, toggleTheme } = useTheme()
 
-  // Real authentication and data loading
+  // Real authentication and data loading - OFFLINE-FIRST approach
   useEffect(() => {
     const initializeApp = async () => {
       try {
@@ -70,122 +101,120 @@ function AppContent() {
           if (user) {
             setAppState(prev => ({ ...prev, user }))
             
-            // Load user context and data
+            // ========================================
+            // STEP 1: Load from localStorage FIRST (works offline!)
+            // ========================================
+            console.log('[Offline-First] Loading local data...')
             try {
-              console.log('Loading user context...')
-              const context = await apiService.getUserContext()
-              console.log('User context loaded:', context)
+              const localRecords = await localStorageService.getRecords()
+              const pendingCount = await localStorageService.getPendingCount()
+              
+              // Calculate stats from local data
+              const localStats = calculateStatsFromRecords(localRecords)
+              
+              // Get display records (unsynced first, then recent synced)
+              const displayRecords = await apiService.getDisplayRecords(10)
+              
+              console.log('[Offline-First] Local data loaded:', {
+                records: localRecords.length,
+                pending: pendingCount,
+                stats: localStats
+              })
               
               setAppState(prev => ({
                 ...prev,
-                currentCompany: context.company?.name || 'Personal Data',
-                // Backend returns company.id from user_context endpoint
-                currentCompanyId: context.company?.id || context.company?.company_id || null
+                animals: localRecords,
+                displayAnimals: displayRecords,
+                stats: localStats,
+                pendingCount
               }))
+            } catch (localError) {
+              console.warn('[Offline-First] Could not load local data:', localError)
+            }
+            
+            // Stop loading spinner - user can now see local data
+            setIsLoading(false)
+            
+            // ========================================
+            // STEP 2: Try to fetch fresh data from network (if online)
+            // ========================================
+            if (navigator.onLine) {
+              console.log('[Offline-First] Online - fetching fresh data...')
               
-              // Load all records for metrics calculation
+              // Load user context
               try {
-                console.log('Loading all records for metrics...')
-                const allRecords = await apiService.getRegistrations(1000) // Get all records
-                console.log('All records loaded:', allRecords.registrations.length)
+                const context = await apiService.getUserContext()
+                console.log('[Offline-First] User context loaded:', context)
                 
-                // Also get recent records for display
+                setAppState(prev => ({
+                  ...prev,
+                  currentCompany: context.company?.name || 'Personal Data',
+                  currentCompanyId: context.company?.id || context.company?.company_id || null
+                }))
+              } catch (contextError) {
+                console.warn('[Offline-First] Could not load user context:', contextError)
+              }
+              
+              // Load all records from server
+              try {
+                const allRecords = await apiService.getRegistrations(1000)
+                const statsData = await apiService.getStats()
                 const displayRecords = await apiService.getDisplayRecords(10)
                 
+                console.log('[Offline-First] Server data loaded:', {
+                  records: allRecords.registrations.length
+                })
+                
                 setAppState(prev => ({
                   ...prev,
-                  animals: allRecords.registrations, // All records for metrics
-                  displayAnimals: displayRecords // Recent records for UI
+                  animals: allRecords.registrations,
+                  displayAnimals: displayRecords,
+                  stats: statsData
                 }))
-              } catch (allRecordsError) {
-                console.warn('Could not load all records:', allRecordsError)
-                // Fallback to local records
-                try {
-                  const localRecords = await apiService.getDisplayRecords(10)
-                  setAppState(prev => ({
-                    ...prev,
-                    animals: localRecords, // Use local records for both
-                    displayAnimals: localRecords
-                  }))
-                } catch (localError) {
-                  console.warn('Could not load local records:', localError)
-                  setAppState(prev => ({
-                    ...prev,
-                    animals: [],
-                    displayAnimals: []
-                  }))
-                }
+              } catch (recordsError) {
+                console.warn('[Offline-First] Could not load server records:', recordsError)
+                // Keep using local data - already loaded in step 1
               }
               
-              // Get pending count and load stats
+              // ========================================
+              // STEP 3: Sync local changes to server (background)
+              // ========================================
               try {
-                console.log('Getting pending count...')
-                const pendingCount = await apiService.getPendingCount()
-                console.log('Pending count:', pendingCount)
-                
-                const statsData = await apiService.getStats()
-                console.log('Stats data loaded:', statsData)
-                
-                setAppState(prev => ({
-                  ...prev,
-                  stats: statsData,
-                  pendingCount
-                }))
-              } catch (statsError) {
-                console.warn('Could not load stats data:', statsError)
-                setAppState(prev => ({
-                  ...prev,
-                  stats: null,
-                  pendingCount: 0
-                }))
-              }
-
-              // Trigger sync in background
-              try {
-                console.log('Starting background sync...')
+                console.log('[Offline-First] Syncing local changes...')
                 const syncResult = await apiService.syncLocalRecords()
-                console.log('Sync completed:', syncResult)
+                console.log('[Offline-First] Sync completed:', syncResult)
                 
-                // Reload all data after sync
-                const updatedAllRecords = await apiService.getRegistrations(1000)
+                // Reload data after sync
+                const updatedRecords = await apiService.getRegistrations(1000)
                 const updatedDisplayRecords = await apiService.getDisplayRecords(10)
                 const updatedPendingCount = await apiService.getPendingCount()
                 
                 setAppState(prev => ({
                   ...prev,
-                  animals: updatedAllRecords.registrations,
+                  animals: updatedRecords.registrations,
                   displayAnimals: updatedDisplayRecords,
                   pendingCount: updatedPendingCount
                 }))
               } catch (syncError) {
-                console.warn('Sync failed:', syncError)
+                console.warn('[Offline-First] Sync failed:', syncError)
               }
-            } catch (error) {
-              console.error('Error loading user context:', error)
-              console.error('Error details:', {
-                message: error instanceof Error ? error.message : 'Unknown error',
-                stack: error instanceof Error ? error.stack : undefined
-              })
-              // Set default values if API fails
-              setAppState(prev => ({
-                ...prev,
-                currentCompany: 'Personal Data',
-                animals: [],
-                stats: null,
-                pendingCount: 0
-              }))
+            } else {
+              console.log('[Offline-First] Offline - using cached data only')
             }
           } else {
+            // User not logged in
             setAppState(prev => ({
               ...prev,
               user: null,
               currentCompany: 'Personal Data',
+              currentCompanyId: null,
               animals: [],
+              displayAnimals: [],
               stats: null,
               pendingCount: 0
             }))
+            setIsLoading(false)
           }
-          setIsLoading(false)
         })
 
         // Check online status
