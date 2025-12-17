@@ -1,124 +1,77 @@
-// Service Worker Registration for PWA
-const isLocalhost = Boolean(
-  window.location.hostname === 'localhost' ||
-  window.location.hostname === '[::1]' ||
-  window.location.hostname.match(
-    /^127(?:\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}$/
-  )
-)
+// Service Worker Registration for PWA using vite-plugin-pwa
+import { registerSW } from 'virtual:pwa-register'
 
-type Config = {
-  onSuccess?: (registration: ServiceWorkerRegistration) => void
-  onUpdate?: (registration: ServiceWorkerRegistration) => void
+// Store the update function globally so components can trigger it
+let updateSWCallback: ((reloadPage?: boolean) => Promise<void>) | null = null
+
+interface PWAConfig {
+  onNeedRefresh?: () => void
+  onOfflineReady?: () => void
+  onRegistered?: (registration: ServiceWorkerRegistration | undefined) => void
+  onRegisterError?: (error: Error) => void
 }
 
-export function register(config?: Config) {
+/**
+ * Register the service worker with update callbacks
+ */
+export function register(config?: PWAConfig) {
   if ('serviceWorker' in navigator) {
-    // Use Vite's import.meta.env instead of process.env
-    const publicUrl = new URL(import.meta.env.BASE_URL || '', window.location.href)
-    if (publicUrl.origin !== window.location.origin) {
-      return
-    }
-
-    window.addEventListener('load', () => {
-      const swUrl = `${import.meta.env.BASE_URL || ''}/sw.js`
-
-      if (isLocalhost) {
-        // This is running on localhost. Let's check if a service worker still exists or not.
-        checkValidServiceWorker(swUrl, config)
-
-        // Add some additional logging to localhost, pointing developers to the
-        // service worker/PWA documentation.
-        navigator.serviceWorker.ready.then(() => {
-          console.log(
-            'This web app is being served cache-first by a service ' +
-            'worker. To learn more, visit https://bit.ly/CRA-PWA'
-          )
+    updateSWCallback = registerSW({
+      immediate: true,
+      onNeedRefresh() {
+        console.log('[PWA] New content available, refresh needed')
+        config?.onNeedRefresh?.()
+      },
+      onOfflineReady() {
+        console.log('[PWA] App ready to work offline')
+        config?.onOfflineReady?.()
+      },
+      onRegistered(registration) {
+        console.log('[PWA] Service worker registered:', registration)
+        config?.onRegistered?.(registration)
+        
+        // Check for updates periodically (every 5 minutes)
+        if (registration) {
+          setInterval(() => {
+            console.log('[PWA] Checking for updates...')
+            registration.update()
+          }, 5 * 60 * 1000)
+        }
+      },
+      onRegisterError(error) {
+        console.error('[PWA] Service worker registration failed:', error)
+        config?.onRegisterError?.(error)
+      }
+    })
+    
+    // Also check for updates when app becomes visible
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        navigator.serviceWorker.ready.then((registration) => {
+          console.log('[PWA] App visible, checking for updates...')
+          registration.update()
         })
-      } else {
-        // Is not localhost. Just register service worker
-        registerValidSW(swUrl, config)
       }
     })
   }
 }
 
-function registerValidSW(swUrl: string, config?: Config) {
-  navigator.serviceWorker
-    .register(swUrl)
-    .then((registration) => {
-      console.log('Service Worker registered successfully:', registration)
-      
-      registration.onupdatefound = () => {
-        const installingWorker = registration.installing
-        if (installingWorker == null) {
-          return
-        }
-        installingWorker.onstatechange = () => {
-          if (installingWorker.state === 'installed') {
-            if (navigator.serviceWorker.controller) {
-              // At this point, the updated precached content has been fetched,
-              // but the previous service worker will still serve the older
-              // content until all client tabs are closed.
-              console.log(
-                'New content is available and will be used when all ' +
-                'tabs for this page are closed. See https://bit.ly/CRA-PWA.'
-              )
-
-              // Execute callback
-              if (config && config.onUpdate) {
-                config.onUpdate(registration)
-              }
-            } else {
-              // At this point, everything has been precached.
-              // It's the perfect time to display a
-              // "Content is cached for offline use." message.
-              console.log('Content is cached for offline use.')
-
-              // Execute callback
-              if (config && config.onSuccess) {
-                config.onSuccess(registration)
-              }
-            }
-          }
-        }
-      }
-    })
-    .catch((error) => {
-      console.error('Error during service worker registration:', error)
-    })
+/**
+ * Trigger the service worker update and reload the page
+ */
+export function skipWaitingAndReload() {
+  if (updateSWCallback) {
+    console.log('[PWA] Updating service worker and reloading...')
+    updateSWCallback(true)
+  } else {
+    console.log('[PWA] No update callback, reloading page...')
+    window.location.reload()
+  }
 }
 
-function checkValidServiceWorker(swUrl: string, config?: Config) {
-  // Check if the service worker can be found. If it can't reload the page.
-  fetch(swUrl, {
-    headers: { 'Service-Worker': 'script' },
-  })
-    .then((response) => {
-      // Ensure service worker exists, and that we really are getting a JS file.
-      const contentType = response.headers.get('content-type')
-      if (
-        response.status === 404 ||
-        (contentType != null && contentType.indexOf('javascript') === -1)
-      ) {
-        // No service worker found. Probably a different app. Reload the page.
-        navigator.serviceWorker.ready.then((registration) => {
-          registration.unregister().then(() => {
-            window.location.reload()
-          })
-        })
-      } else {
-        // Service worker found. Proceed normally.
-        registerValidSW(swUrl, config)
-      }
-    })
-    .catch(() => {
-      console.log(
-        'No internet connection found. App is running in offline mode.'
-      )
-    })
-}
-
+/**
+ * Unregister the service worker
+ */
 export function unregister() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready
@@ -126,43 +79,73 @@ export function unregister() {
         registration.unregister()
       })
       .catch((error) => {
-        console.error(error.message)
+        console.error('[PWA] Unregister failed:', error.message)
       })
   }
 }
 
-// PWA Install Prompt
+/**
+ * Force check for updates immediately
+ */
+export async function checkForUpdates(): Promise<boolean> {
+  if ('serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.ready
+      await registration.update()
+      return !!registration.waiting
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+/**
+ * Get current service worker status
+ */
+export function getServiceWorkerStatus() {
+  return {
+    supported: 'serviceWorker' in navigator,
+    hasController: !!navigator.serviceWorker?.controller
+  }
+}
+
+/**
+ * PWA Install Prompt Handler
+ */
 export function registerPWAInstallPrompt() {
-  let deferredPrompt: any
+  let deferredPrompt: BeforeInstallPromptEvent | null = null
 
   window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevent the mini-infobar from appearing on mobile
     e.preventDefault()
-    // Stash the event so it can be triggered later
-    deferredPrompt = e
-    // Show install button or notification
-    console.log('PWA install prompt available')
+    deferredPrompt = e as BeforeInstallPromptEvent
+    console.log('[PWA] Install prompt available')
   })
 
   window.addEventListener('appinstalled', () => {
-    console.log('PWA was installed')
+    console.log('[PWA] App was installed')
     deferredPrompt = null
   })
 
   return {
-    showInstallPrompt: () => {
+    showInstallPrompt: async () => {
       if (deferredPrompt) {
         deferredPrompt.prompt()
-        deferredPrompt.userChoice.then((choiceResult: any) => {
-          if (choiceResult.outcome === 'accepted') {
-            console.log('User accepted the install prompt')
-          } else {
-            console.log('User dismissed the install prompt')
-          }
-          deferredPrompt = null
-        })
+        const choiceResult = await deferredPrompt.userChoice
+        if (choiceResult.outcome === 'accepted') {
+          console.log('[PWA] User accepted the install prompt')
+        } else {
+          console.log('[PWA] User dismissed the install prompt')
+        }
+        deferredPrompt = null
       }
     },
     canInstall: () => !!deferredPrompt
   }
+}
+
+// TypeScript interface for the beforeinstallprompt event
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }

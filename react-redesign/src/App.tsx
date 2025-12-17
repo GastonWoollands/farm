@@ -12,7 +12,9 @@ import {
   LogOut,
   Building2,
   Sun,
-  Moon
+  Moon,
+  Download,
+  RefreshCw
 } from 'lucide-react'
 
 // Import page components
@@ -26,7 +28,7 @@ import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { PrefixesProvider } from './contexts/PrefixesContext'
 import { authService, AuthUser } from './services/auth'
 import { apiService, Animal, RegistrationStats } from './services/api'
-import { register, registerPWAInstallPrompt } from './utils/serviceWorker'
+import { register, registerPWAInstallPrompt, skipWaitingAndReload } from './utils/serviceWorker'
 
 // Types
 interface AppState {
@@ -38,6 +40,7 @@ interface AppState {
   animals: Animal[] // All animals for metrics
   displayAnimals: Animal[] // Recent animals for UI display
   stats: RegistrationStats | null
+  updateAvailable: boolean
 }
 
 function AppContent() {
@@ -49,7 +52,8 @@ function AppContent() {
     currentCompanyId: null,
     animals: [],
     displayAnimals: [],
-    stats: null
+    stats: null,
+    updateAvailable: false
   })
 
   const [activeTab, setActiveTab] = useState('metrics')
@@ -206,19 +210,22 @@ function AppContent() {
 
     initializeApp()
     
-    // Register service worker for PWA (only in production)
-    if (import.meta.env.PROD) {
-      register({
-        onSuccess: (registration) => {
-          console.log('Service Worker registered successfully:', registration)
-        },
-        onUpdate: (registration) => {
-          console.log('Service Worker updated:', registration)
-        }
-      })
-    } else {
-      console.log('Service Worker disabled in development')
-    }
+    // Register service worker for PWA
+    register({
+      onNeedRefresh: () => {
+        console.log('[PWA] New version available! Showing update prompt...')
+        setAppState(prev => ({ ...prev, updateAvailable: true }))
+      },
+      onOfflineReady: () => {
+        console.log('[PWA] App is ready to work offline!')
+      },
+      onRegistered: (registration) => {
+        console.log('[PWA] Service Worker registered:', registration)
+      },
+      onRegisterError: (error) => {
+        console.error('[PWA] Registration error:', error)
+      }
+    })
     
     // Register PWA install prompt
     const installPrompt = registerPWAInstallPrompt()
@@ -252,8 +259,32 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Update Available Banner */}
+      {appState.updateAvailable && (
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-primary text-primary-foreground">
+          <div className="container mx-auto px-4 py-2 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-sm">
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Nueva versión disponible.</span>
+              <span className="sm:hidden">¡Nueva versión!</span>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                skipWaitingAndReload()
+              }}
+              className="gap-1 text-xs"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Actualizar ahora
+            </Button>
+          </div>
+        </div>
+      )}
+      
       {/* Header - Mobile responsive with centered title */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className={`sticky ${appState.updateAvailable ? 'top-10' : 'top-0'} z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60`}>
         <div className="container mx-auto px-4">
           {/* Mobile Layout */}
           <div className="flex flex-col space-y-3 py-4 md:hidden">
