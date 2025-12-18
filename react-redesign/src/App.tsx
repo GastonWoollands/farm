@@ -93,115 +93,79 @@ function AppContent() {
   const [backendError] = useState<string | null>(null)
   const { theme, toggleTheme } = useTheme()
 
-  // Real authentication and data loading - OFFLINE-FIRST approach
+  // Data loading with clean cache architecture
+  // ONLINE: Server is source of truth - fetch from API
+  // OFFLINE: Show cached data + pending records
   useEffect(() => {
     const initializeApp = async () => {
       try {
+        // Migrate legacy data format (one-time migration)
+        await apiService.migrateLegacyData()
+        
         // Listen to auth state changes
         const unsubscribe = authService.onAuthStateChange(async (user) => {
           if (user) {
             setAppState(prev => ({ ...prev, user }))
             
-            // ========================================
-            // STEP 1: Load from localStorage FIRST (works offline!)
-            // ========================================
-            console.log('[Offline-First] Loading local data...')
-            try {
-              const localRecords = await localStorageService.getRecords()
-              const pendingCount = await localStorageService.getPendingCount()
-              
-              // Calculate stats from local data
-              const localStats = calculateStatsFromRecords(localRecords)
-              
-              // Get display records (unsynced first, then recent synced)
-              const displayRecords = await apiService.getDisplayRecords(10)
-              
-              console.log('[Offline-First] Local data loaded:', {
-                records: localRecords.length,
-                pending: pendingCount,
-                stats: localStats
-              })
-              
-              setAppState(prev => ({
-                ...prev,
-                animals: localRecords,
-                displayAnimals: displayRecords,
-                stats: localStats,
-                pendingCount
-              }))
-            } catch (localError) {
-              console.warn('[Offline-First] Could not load local data:', localError)
-            }
+            const isOnline = navigator.onLine
+            console.log('[App] User authenticated, online:', isOnline)
             
-            // Stop loading spinner - user can now see local data
-            setIsLoading(false)
-            
-            // ========================================
-            // STEP 2: Try to fetch fresh data from network (if online)
-            // ========================================
-            if (navigator.onLine) {
-              console.log('[Offline-First] Online - fetching fresh data...')
+            if (isOnline) {
+              // ========================================
+              // ONLINE: Server is the source of truth
+              // ========================================
+              console.log('[App] Online - fetching from server...')
               
-              // Load user context
               try {
+                // Load user context
                 const context = await apiService.getUserContext()
-                console.log('[Offline-First] User context loaded:', context)
-                
                 setAppState(prev => ({
                   ...prev,
                   currentCompany: context.company?.name || 'Personal Data',
                   currentCompanyId: context.company?.id || context.company?.company_id || null
                 }))
-              } catch (contextError) {
-                console.warn('[Offline-First] Could not load user context:', contextError)
-              }
-              
-              // Load all records from server
-              try {
+                
+                // Sync pending records first (push to server, delete from pending)
+                const pendingCount = await apiService.getPendingCount()
+                if (pendingCount > 0) {
+                  console.log('[App] Syncing', pendingCount, 'pending records...')
+                  await apiService.syncLocalRecords()
+                }
+                
+                // Fetch fresh data from server
                 const allRecords = await apiService.getRegistrations(1000)
                 const statsData = await apiService.getStats()
-                const displayRecords = await apiService.getDisplayRecords(10)
                 
-                console.log('[Offline-First] Server data loaded:', {
-                  records: allRecords.registrations.length
-                })
+                // Update cache with server data
+                await localStorageService.setServerCache({ items: allRecords.registrations })
+                
+                // Get display records (pending + cached)
+                const displayRecords = await apiService.getDisplayRecords(10)
+                const updatedPendingCount = await apiService.getPendingCount()
                 
                 setAppState(prev => ({
                   ...prev,
                   animals: allRecords.registrations,
                   displayAnimals: displayRecords,
-                  stats: statsData
-                }))
-              } catch (recordsError) {
-                console.warn('[Offline-First] Could not load server records:', recordsError)
-                // Keep using local data - already loaded in step 1
-              }
-              
-              // ========================================
-              // STEP 3: Sync local changes to server (background)
-              // ========================================
-              try {
-                console.log('[Offline-First] Syncing local changes...')
-                const syncResult = await apiService.syncLocalRecords()
-                console.log('[Offline-First] Sync completed:', syncResult)
-                
-                // Reload data after sync
-                const updatedRecords = await apiService.getRegistrations(1000)
-                const updatedDisplayRecords = await apiService.getDisplayRecords(10)
-                const updatedPendingCount = await apiService.getPendingCount()
-                
-                setAppState(prev => ({
-                  ...prev,
-                  animals: updatedRecords.registrations,
-                  displayAnimals: updatedDisplayRecords,
+                  stats: statsData,
                   pendingCount: updatedPendingCount
                 }))
-              } catch (syncError) {
-                console.warn('[Offline-First] Sync failed:', syncError)
+                
+                console.log('[App] Server data loaded:', allRecords.registrations.length, 'records')
+              } catch (error) {
+                console.warn('[App] Server fetch failed, falling back to cache:', error)
+                // Fall back to cached data
+                await loadFromCache()
               }
             } else {
-              console.log('[Offline-First] Offline - using cached data only')
+              // ========================================
+              // OFFLINE: Load from cache + pending
+              // ========================================
+              console.log('[App] Offline - loading from cache...')
+              await loadFromCache()
             }
+            
+            setIsLoading(false)
           } else {
             // User not logged in
             setAppState(prev => ({
@@ -217,20 +181,83 @@ function AppContent() {
             setIsLoading(false)
           }
         })
-
-        // Check online status
-        const updateOnlineStatus = () => {
-          setAppState(prev => ({ ...prev, isOnline: navigator.onLine }))
+        
+        // Helper to load from cache
+        async function loadFromCache() {
+          try {
+            const allRecords = await apiService.getAllLocalRecords()
+            const displayRecords = await apiService.getDisplayRecords(10)
+            const pendingCount = await apiService.getPendingCount()
+            const stats = calculateStatsFromRecords(allRecords)
+            
+            setAppState(prev => ({
+              ...prev,
+              animals: allRecords,
+              displayAnimals: displayRecords,
+              stats,
+              pendingCount
+            }))
+            
+            console.log('[App] Loaded from cache:', allRecords.length, 'records,', pendingCount, 'pending')
+          } catch (error) {
+            console.error('[App] Failed to load from cache:', error)
+          }
         }
 
-    window.addEventListener('online', updateOnlineStatus)
-    window.addEventListener('offline', updateOnlineStatus)
-    updateOnlineStatus()
+        // Check online status and auto-sync when coming back online
+        const handleOnlineStatusChange = async () => {
+          const isNowOnline = navigator.onLine
+          setAppState(prev => ({ ...prev, isOnline: isNowOnline }))
+          
+          // Auto-sync when coming back online
+          if (isNowOnline) {
+            console.log('[App] Connection restored - auto-syncing...')
+            try {
+              // Sync pending records
+              const pendingCount = await apiService.getPendingCount()
+              if (pendingCount > 0) {
+                console.log('[App] Auto-syncing', pendingCount, 'pending records...')
+                await apiService.syncLocalRecords()
+              }
+              
+              // Refresh data from server
+              const allRecords = await apiService.getRegistrations(1000)
+              const statsData = await apiService.getStats()
+              
+              // Update cache with server data
+              await localStorageService.setServerCache({ items: allRecords.registrations })
+              
+              // Get display records
+              const displayRecords = await apiService.getDisplayRecords(10)
+              const updatedPendingCount = await apiService.getPendingCount()
+              
+              setAppState(prev => ({
+                ...prev,
+                animals: allRecords.registrations,
+                displayAnimals: displayRecords,
+                stats: statsData,
+                pendingCount: updatedPendingCount
+              }))
+              
+              console.log('[App] Auto-sync completed:', allRecords.registrations.length, 'records')
+            } catch (error) {
+              console.warn('[App] Auto-sync failed:', error)
+            }
+          }
+        }
+
+        window.addEventListener('online', handleOnlineStatusChange)
+        window.addEventListener('offline', () => {
+          setAppState(prev => ({ ...prev, isOnline: false }))
+        })
+        setAppState(prev => ({ ...prev, isOnline: navigator.onLine }))
 
         return () => {
           unsubscribe()
-          window.removeEventListener('online', updateOnlineStatus)
-          window.removeEventListener('offline', updateOnlineStatus)
+          window.removeEventListener('online', handleOnlineStatusChange)
+          window.removeEventListener('offline', () => {
+            setAppState(prev => ({ ...prev, isOnline: false }))
+          })
         }
       } catch (error) {
         console.error('Error initializing app:', error)
@@ -270,7 +297,7 @@ function AppContent() {
     }
   }
 
-  // Refresh data from server (clears duplicates and gets fresh data)
+  // Refresh data from server (clears cache and gets fresh data)
   const handleRefresh = async () => {
     if (!navigator.onLine) {
       console.warn('[Refresh] Cannot refresh while offline')
@@ -279,26 +306,35 @@ function AppContent() {
 
     setIsRefreshing(true)
     try {
-      console.log('[Refresh] Starting data refresh...')
+      console.log('[Refresh] Syncing and refreshing data...')
       
-      // Refresh data from server (replaces local cache)
-      await apiService.refreshData()
-      
-      // Reload all data
-      const allRecords = await apiService.getRegistrations(1000)
-      const displayRecords = await apiService.getDisplayRecords(10)
+      // First sync any pending records
       const pendingCount = await apiService.getPendingCount()
+      if (pendingCount > 0) {
+        console.log('[Refresh] Syncing', pendingCount, 'pending records first...')
+        await apiService.syncLocalRecords()
+      }
+      
+      // Fetch fresh data from server and update cache
+      const allRecords = await apiService.getRegistrations(1000)
       const statsData = await apiService.getStats()
+      
+      // Replace cache with fresh server data
+      await localStorageService.setServerCache({ items: allRecords.registrations })
+      
+      // Get display records
+      const displayRecords = await apiService.getDisplayRecords(10)
+      const updatedPendingCount = await apiService.getPendingCount()
       
       setAppState(prev => ({
         ...prev,
         animals: allRecords.registrations,
         displayAnimals: displayRecords,
         stats: statsData,
-        pendingCount
+        pendingCount: updatedPendingCount
       }))
       
-      console.log('[Refresh] Data refresh completed')
+      console.log('[Refresh] Data refresh completed:', allRecords.registrations.length, 'records')
     } catch (error) {
       console.error('[Refresh] Failed to refresh data:', error)
     } finally {

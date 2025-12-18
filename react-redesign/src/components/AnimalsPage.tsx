@@ -78,8 +78,9 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
   }, [])
 
   const totalAnimals = animals.length
-  const pendingAnimals = animals.filter(a => a.synced === false).length
-  const syncedAnimals = animals.filter(a => a.synced !== false).length
+  // Check for localId to identify pending records (new architecture)
+  const pendingAnimals = animals.filter(a => 'localId' in a && (a as any).localId !== undefined).length
+  const syncedAnimals = totalAnimals - pendingAnimals
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -138,7 +139,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         mother_weight: registerData.motherWeight,
         weaning_weight: registerData.weaningWeight
       }
-      await apiService.addLocalRecord(animalData)
+      await apiService.addPendingRecord(animalData)
       
       // Refresh local data
       const updatedAnimals = await apiService.getDisplayRecords(10)
@@ -609,8 +610,8 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                               {animal.rp_animal}
                             </Badge>
                           )}
-                          <Badge variant={animal.synced !== false ? "default" : "destructive"} className="text-xs">
-                            {animal.synced !== false ? 'Sincronizado' : 'Pendiente'}
+                          <Badge variant={'localId' in animal && (animal as any).localId !== undefined ? "destructive" : "default"} className="text-xs">
+                            {'localId' in animal && (animal as any).localId !== undefined ? 'Pendiente' : 'Sincronizado'}
                           </Badge>
                         </div>
                         <div className="text-sm text-muted-foreground space-y-1">

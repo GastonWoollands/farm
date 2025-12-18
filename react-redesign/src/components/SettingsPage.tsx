@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,9 +13,12 @@ import {
   Download,
   Upload,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Database,
+  HardDrive
 } from 'lucide-react'
-import { Animal, RegistrationStats } from '@/services/api'
+import { Animal, RegistrationStats, apiService } from '@/services/api'
+import { localStorageService } from '@/services/localStorage'
 import { usePrefixes } from '@/contexts/PrefixesContext'
 
 interface SettingsPageProps {
@@ -36,6 +39,58 @@ export function SettingsPage({ animals, stats }: SettingsPageProps) {
 
   const { prefixes, updatePrefix } = usePrefixes()
   const [isLoading, setIsLoading] = useState(false)
+  const [isClearingCache, setIsClearingCache] = useState(false)
+  const [storageStatus, setStorageStatus] = useState({
+    pendingCount: 0,
+    cacheCount: 0,
+    cacheTimestamp: null as string | null
+  })
+
+  // Load storage status on mount
+  useEffect(() => {
+    const status = localStorageService.getStorageStatus()
+    setStorageStatus(status)
+  }, [])
+
+  // Handle clear cache and refresh
+  const handleClearCache = async () => {
+    if (!navigator.onLine) {
+      alert('Debes estar conectado a internet para limpiar el caché y actualizar los datos.')
+      return
+    }
+
+    if (storageStatus.pendingCount > 0) {
+      const confirm = window.confirm(
+        `Tienes ${storageStatus.pendingCount} registros pendientes de sincronizar. ` +
+        'Se sincronizarán primero antes de limpiar el caché. ¿Continuar?'
+      )
+      if (!confirm) return
+    }
+
+    setIsClearingCache(true)
+    try {
+      // First sync pending records
+      if (storageStatus.pendingCount > 0) {
+        console.log('[Settings] Syncing pending records before clearing cache...')
+        await apiService.syncLocalRecords()
+      }
+
+      // Clear cache and refresh from server
+      console.log('[Settings] Clearing cache and refreshing...')
+      await apiService.clearCacheAndRefresh()
+
+      // Update storage status
+      const newStatus = localStorageService.getStorageStatus()
+      setStorageStatus(newStatus)
+
+      alert('Caché limpiado y datos actualizados correctamente.')
+    } catch (error) {
+      console.error('[Settings] Failed to clear cache:', error)
+      alert('Error al limpiar el caché. Por favor, intenta de nuevo.')
+    } finally {
+      setIsClearingCache(false)
+    }
+  }
 
   const handleObjectiveChange = (key: string, value: string) => {
     setObjectives(prev => ({
@@ -303,6 +358,91 @@ export function SettingsPage({ animals, stats }: SettingsPageProps) {
         </CardContent>
       </Card>
 
+      {/* Cache Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Gestión de Caché
+          </CardTitle>
+          <CardDescription>
+            Administra los datos almacenados localmente en tu dispositivo
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                <HardDrive className="h-4 w-4" />
+                Registros en Caché
+              </div>
+              <p className="text-2xl font-bold">{storageStatus.cacheCount}</p>
+            </div>
+            
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                <RefreshCw className="h-4 w-4" />
+                Pendientes de Sync
+              </div>
+              <p className="text-2xl font-bold">
+                {storageStatus.pendingCount}
+                {storageStatus.pendingCount > 0 && (
+                  <Badge variant="secondary" className="ml-2 text-xs">
+                    Por sincronizar
+                  </Badge>
+                )}
+              </p>
+            </div>
+            
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                <Database className="h-4 w-4" />
+                Última Actualización
+              </div>
+              <p className="text-sm font-medium">
+                {storageStatus.cacheTimestamp 
+                  ? new Date(storageStatus.cacheTimestamp).toLocaleString('es-ES')
+                  : 'Nunca'
+                }
+              </p>
+            </div>
+          </div>
+          
+          <Separator />
+          
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+              <div className="flex-1">
+                <h4 className="font-medium">Limpiar Caché y Actualizar</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Elimina todos los datos almacenados localmente y descarga una copia fresca del servidor.
+                  Esto soluciona problemas de datos duplicados o desincronizados.
+                </p>
+              </div>
+              <Button 
+                onClick={handleClearCache}
+                disabled={isClearingCache || !navigator.onLine}
+                variant="outline"
+                className="gap-2 w-full sm:w-auto flex-shrink-0"
+              >
+                {isClearingCache ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                {isClearingCache ? 'Limpiando...' : 'Limpiar Caché'}
+              </Button>
+            </div>
+            
+            {!navigator.onLine && (
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                Debes estar conectado a internet para limpiar el caché.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* System Information */}
       <Card>
         <CardHeader>
@@ -315,21 +455,24 @@ export function SettingsPage({ animals, stats }: SettingsPageProps) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div className="space-y-2">
               <Label>Versión de la Aplicación</Label>
-              <p className="text-sm text-muted-foreground">v1.0.0</p>
+              <p className="text-sm text-muted-foreground">v1.1.0</p>
             </div>
             
             <div className="space-y-2">
               <Label>Última Sincronización</Label>
               <p className="text-sm text-muted-foreground">
-                {new Date().toLocaleString('es-ES')}
+                {storageStatus.cacheTimestamp 
+                  ? new Date(storageStatus.cacheTimestamp).toLocaleString('es-ES')
+                  : 'Nunca'
+                }
               </p>
             </div>
             
             <div className="space-y-2">
               <Label>Estado de Conexión</Label>
-              <Badge variant="default" className="gap-1 w-fit">
-                <div className="w-2 h-2 bg-green-500 dark:bg-green-400 rounded-full" />
-                Conectado
+              <Badge variant={navigator.onLine ? "default" : "secondary"} className="gap-1 w-fit">
+                <div className={`w-2 h-2 rounded-full ${navigator.onLine ? 'bg-green-500 dark:bg-green-400' : 'bg-gray-400'}`} />
+                {navigator.onLine ? 'Conectado' : 'Sin conexión'}
               </Badge>
             </div>
             

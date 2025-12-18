@@ -19,7 +19,6 @@ import {
 } from 'lucide-react'
 import { formatDate, getGenderName, getStatusName } from '@/lib/utils'
 import { Animal, apiService, UpdateBody, InseminationRound } from '@/services/api'
-import { localStorageService } from '@/services/localStorage'
 
 interface SearchPageProps {
   animals: Animal[]
@@ -195,28 +194,15 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
     setError(null)
 
     try {
-      // Check if this is a local record by checking if it has a local ID
-      const localRecords = await localStorageService.getRecords()
-      const localRecord = localRecords.find(r => 
-        r.animal_number === editingAnimal.animal_number && 
-        r.created_at === editingAnimal.created_at
-      )
+      // Check if online - editing requires server connection
+      if (!navigator.onLine) {
+        setError('Debes estar conectado a internet para editar registros.')
+        setIsLoading(false)
+        return
+      }
 
-      if (localRecord) {
-        // Update in local storage
-        await localStorageService.updateRecord(localRecord.id, editFormData)
-        
-        // Try to sync if online
-        if (navigator.onLine) {
-          try {
-            await apiService.syncLocalRecords()
-          } catch (syncErr) {
-            console.warn('Sync failed after edit:', syncErr)
-          }
-        }
-      } else {
-        // Update directly on backend
-        const updateData: UpdateBody = {
+      // Update directly on backend
+      const updateData: UpdateBody = {
           animalNumber: editingAnimal.animal_number,
           createdAt: editingAnimal.created_at || '',
           rpAnimal: editFormData.rp_animal || undefined,
@@ -236,25 +222,15 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           inseminationRoundId: editFormData.insemination_round_id || undefined
         }
 
-        await apiService.updateAnimal(updateData)
-        
-        // Refresh animals from backend after successful update
-        try {
-          const refreshedData = await apiService.getRegistrations(1000)
-          onAnimalsChange(refreshedData.registrations)
-        } catch (refreshError) {
-          console.warn('Failed to refresh animals after update:', refreshError)
-          // Fallback to local update if refresh fails
-          onAnimalsChange(animals.map(a => 
-            a.animal_number === editingAnimal.animal_number 
-              ? { ...a, ...editFormData }
-              : a
-          ))
-        }
-      }
-
-      // For local records, update the parent component with edited data
-      if (localRecord) {
+      await apiService.updateAnimal(updateData)
+      
+      // Refresh animals from backend after successful update
+      try {
+        const refreshedData = await apiService.getRegistrations(1000)
+        onAnimalsChange(refreshedData.registrations)
+      } catch (refreshError) {
+        console.warn('Failed to refresh animals after update:', refreshError)
+        // Fallback to local update if refresh fails
         onAnimalsChange(animals.map(a => 
           a.animal_number === editingAnimal.animal_number 
             ? { ...a, ...editFormData }

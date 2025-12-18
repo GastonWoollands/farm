@@ -1,5 +1,5 @@
 import { API_BASE_URL, API_ENDPOINTS } from '@/config/api'
-import { localStorageService, LocalRecord } from './localStorage'
+import { localStorageService, PendingRecord } from './localStorage'
 
 // Types
 export interface Animal {
@@ -389,108 +389,79 @@ class ApiService {
     })
   }
 
-  // Sync functionality - replicates original frontend behavior
-  async syncLocalRecords(): Promise<{ synced: number, imported: number }> {
+  // ========================================
+  // SYNC FUNCTIONALITY - Clean Architecture
+  // 1. Push pending records to server
+  // 2. DELETE pending records (they're now on server)
+  // 3. Fetch ALL data from server
+  // 4. REPLACE server cache completely (never merge!)
+  // ========================================
+
+  async syncLocalRecords(): Promise<{ synced: number, cached: number }> {
     if (!this.authToken) {
       throw new Error('No authentication token available')
     }
 
-    const unsyncedRecords = await localStorageService.getRecords({ unsyncedOnly: true })
-    console.log('Found unsynced records:', unsyncedRecords.length)
+    // Step 1: Get pending records
+    const pendingRecords = await localStorageService.getPendingRecords()
+    console.log('[Sync] Found pending records:', pendingRecords.length)
 
     let syncedCount = 0
+    const syncedLocalIds: number[] = []
 
-    // Sync each unsynced record
-    for (const record of unsyncedRecords) {
+    // Step 2: Push each pending record to server
+    for (const record of pendingRecords) {
       try {
-        let response: Response
-
-        if (record.backendId) {
-          // This is an edited record - use PUT
-          console.log('Using PUT for edited record:', record.backendId)
-          response = await fetch(`${this.baseURL}/register/${record.backendId}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.authToken}`
-            },
-            body: JSON.stringify({
-              animalNumber: record.animal_number,
-              motherId: record.mother_id ?? null,
-              fatherId: record.father_id ?? null,
-              bornDate: record.born_date ?? null,
-              weight: record.weight ?? null,
-              gender: record.gender ?? null,
-              animalType: record.animal_type ?? null,
-              scrotalCircumference: record.scrotal_circumference ?? null,
-              inseminationRoundId: record.insemination_round_id ?? null,
-              status: record.status ?? null,
-              color: record.color ?? null,
-              notes: record.notes ?? null,
-              notesMother: record.notes_mother ?? null,
-              rpAnimal: record.rp_animal ?? null,
-              rpMother: record.rp_mother ?? null,
-              motherWeight: record.mother_weight ?? null,
-              weaningWeight: record.weaning_weight ?? null
-            })
+        console.log('[Sync] Pushing record:', record.animal_number)
+        
+        const response = await fetch(`${this.baseURL}${API_ENDPOINTS.REGISTER}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.authToken}`
+          },
+          body: JSON.stringify({
+            animalNumber: record.animal_number,
+            createdAt: record.createdAt,
+            motherId: record.mother_id ?? null,
+            fatherId: record.father_id ?? null,
+            bornDate: record.born_date ?? null,
+            weight: record.weight ?? null,
+            gender: record.gender ?? null,
+            animalType: record.animal_type ?? null,
+            scrotalCircumference: record.scrotal_circumference ?? null,
+            inseminationRoundId: record.insemination_round_id ?? null,
+            status: record.status ?? null,
+            color: record.color ?? null,
+            notes: record.notes ?? null,
+            notesMother: record.notes_mother ?? null,
+            rpAnimal: record.rp_animal ?? null,
+            rpMother: record.rp_mother ?? null,
+            motherWeight: record.mother_weight ?? null,
+            weaningWeight: record.weaning_weight ?? null
           })
-        } else {
-          // This is a new record - use POST
-          console.log('Using POST for new record')
-          response = await fetch(`${this.baseURL}${API_ENDPOINTS.REGISTER}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.authToken}`
-            },
-            body: JSON.stringify({
-              animalNumber: record.animal_number,
-              createdAt: record.created_at,
-              motherId: record.mother_id ?? null,
-              fatherId: record.father_id ?? null,
-              bornDate: record.born_date ?? null,
-              weight: record.weight ?? null,
-              gender: record.gender ?? null,
-              animalType: record.animal_type ?? null,
-              scrotalCircumference: record.scrotal_circumference ?? null,
-              inseminationRoundId: record.insemination_round_id ?? null,
-              status: record.status ?? null,
-              color: record.color ?? null,
-              notes: record.notes ?? null,
-              notesMother: record.notes_mother ?? null,
-              rpAnimal: record.rp_animal ?? null,
-              rpMother: record.rp_mother ?? null,
-              motherWeight: record.mother_weight ?? null,
-              weaningWeight: record.weaning_weight ?? null
-            })
-          })
-        }
+        })
 
         if (response.ok) {
-          if (record.backendId) {
-            // For updates, just mark as synced
-            await localStorageService.markAsSynced(record.id)
-          } else {
-            // For new records, get the backend ID from the response
-            const responseData = await response.json()
-            const backendId = responseData?.id
-            if (backendId) {
-              await localStorageService.markAsSynced(record.id, backendId)
-            } else {
-              await localStorageService.markAsSynced(record.id)
-            }
-          }
           syncedCount++
+          syncedLocalIds.push(record.localId)
+          console.log('[Sync] Successfully synced:', record.animal_number)
         } else {
-          console.warn('Sync failed for record', record.id, response.status, response.statusText)
+          console.warn('[Sync] Failed to sync record:', record.animal_number, response.status)
         }
       } catch (error) {
-        console.warn('Network error during sync for record', record.id, error)
+        console.warn('[Sync] Network error for record:', record.animal_number, error)
       }
     }
 
-    // After pushing, pull latest records from server and REPLACE local cache
-    let importedCount = 0
+    // Step 3: DELETE synced records from pending storage
+    for (const localId of syncedLocalIds) {
+      await localStorageService.removePendingRecord(localId)
+    }
+    console.log('[Sync] Removed synced records from pending:', syncedLocalIds.length)
+
+    // Step 4: Fetch ALL data from server and REPLACE cache
+    let cachedCount = 0
     try {
       const response = await fetch(`${this.baseURL}${API_ENDPOINTS.EXPORT}?format=json`, {
         headers: { 'Authorization': `Bearer ${this.authToken}` }
@@ -498,19 +469,19 @@ class ApiService {
 
       if (response.ok) {
         const serverData = await response.json()
-        // Use replaceWithServerData to avoid duplicates
-        await localStorageService.replaceWithServerData(serverData)
-        importedCount = serverData.items ? serverData.items.length : serverData.length
-        console.log('[Sync] Replaced local cache with server data:', importedCount)
+        // REPLACE entire cache (never merge!)
+        await localStorageService.setServerCache(serverData)
+        cachedCount = serverData.items ? serverData.items.length : serverData.length
+        console.log('[Sync] Replaced server cache:', cachedCount, 'records')
       }
     } catch (error) {
-      console.warn('[Sync] Error importing from server:', error)
+      console.warn('[Sync] Error fetching server data:', error)
     }
 
-    return { synced: syncedCount, imported: importedCount }
+    return { synced: syncedCount, cached: cachedCount }
   }
 
-  // Full refresh - fetch fresh data from server and replace local cache
+  // Full refresh - fetch fresh data from server and replace cache
   async refreshData(): Promise<{ success: boolean, count: number }> {
     if (!this.authToken) {
       throw new Error('No authentication token available')
@@ -528,10 +499,11 @@ class ApiService {
       }
 
       const serverData = await response.json()
-      await localStorageService.replaceWithServerData(serverData)
+      // REPLACE entire cache
+      await localStorageService.setServerCache(serverData)
       
       const count = serverData.items ? serverData.items.length : serverData.length
-      console.log('[Refresh] Successfully refreshed data:', count)
+      console.log('[Refresh] Replaced server cache:', count, 'records')
       
       return { success: true, count }
     } catch (error) {
@@ -540,25 +512,57 @@ class ApiService {
     }
   }
 
-  // Get pending count from local storage
+  // Clear all cache and refresh from server
+  async clearCacheAndRefresh(): Promise<{ success: boolean, count: number }> {
+    console.log('[ClearCache] Clearing all local storage...')
+    await localStorageService.clearAll()
+    return await this.refreshData()
+  }
+
+  // ========================================
+  // LOCAL STORAGE ACCESSORS
+  // ========================================
+
+  // Get pending count
   async getPendingCount(): Promise<number> {
     return await localStorageService.getPendingCount()
   }
 
-  // Get display records (unsynced first, then last 10 synced)
-  async getDisplayRecords(limit: number = 10): Promise<LocalRecord[]> {
+  // Get all records for display (pending + cached)
+  async getDisplayRecords(limit: number = 10): Promise<Animal[]> {
     return await localStorageService.getDisplayRecords(limit)
   }
 
-  // Add local record (replicates original frontend behavior)
-  async addLocalRecord(record: Omit<Animal, 'id'>): Promise<LocalRecord> {
-    return await localStorageService.addRecord(record)
+  // Get all records (pending + cached)
+  async getAllLocalRecords(): Promise<Animal[]> {
+    return await localStorageService.getAllRecords()
   }
 
-  // Delete local record
-  async deleteLocalRecord(id: number): Promise<void> {
-    return await localStorageService.deleteRecord(id)
+  // Get only cached server data
+  async getCachedRecords(): Promise<Animal[]> {
+    return await localStorageService.getServerCache()
+  }
+
+  // Add a pending record (offline registration)
+  async addPendingRecord(record: Omit<Animal, 'id'>): Promise<PendingRecord> {
+    return await localStorageService.addPendingRecord(record)
+  }
+
+  // Delete a pending record
+  async deletePendingRecord(localId: number): Promise<void> {
+    return await localStorageService.deletePendingRecord(localId)
+  }
+
+  // Get storage status
+  getStorageStatus() {
+    return localStorageService.getStorageStatus()
+  }
+
+  // Migrate legacy data (call once on app startup)
+  async migrateLegacyData(): Promise<void> {
+    return await localStorageService.migrateFromLegacy()
   }
 }
 
 export const apiService = new ApiService()
+
