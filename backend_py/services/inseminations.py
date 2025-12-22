@@ -1,9 +1,16 @@
 import sqlite3
 import datetime as _dt
+import logging
 from fastapi import HTTPException
 from ..db import conn
 from ..models import InseminationBody, UpdateInseminationBody
 from .auth_service import get_data_filter_clause
+from .event_emitter import (
+    emit_insemination_recorded,
+    emit_insemination_cancelled,
+    emit_field_change,
+)
+from ..events.event_types import EventType
 
 def _normalize_text(value: str | None) -> str | None:
     """Normalize text input - strip whitespace and convert to uppercase"""
@@ -113,6 +120,26 @@ def insert_insemination(created_by: str, body: InseminationBody, company_id: int
             )
             insemination_db_id = cursor.lastrowid
             
+            # Emit domain event (Event Sourcing)
+            if company_id:
+                try:
+                    emit_insemination_recorded(
+                        animal_number=mother_id,  # mother_id serves as animal identifier
+                        company_id=company_id,
+                        user_id=created_by,
+                        insemination_id=insemination_db_id,
+                        insemination_identifier=insemination_id,
+                        insemination_round_id=insemination_round_id,
+                        mother_id=mother_id,
+                        insemination_date=insemination_date,
+                        mother_visual_id=mother_visual_id,
+                        bull_id=bull_id,
+                        animal_type=animal_type,
+                        notes=notes,
+                    )
+                except Exception as e:
+                    logging.warning(f"Failed to emit insemination event for {mother_id}: {e}")
+            
             # Trigger background father assignment for this mother
             # This runs in a separate thread and doesn't block the response
             try:
@@ -120,7 +147,6 @@ def insert_insemination(created_by: str, body: InseminationBody, company_id: int
                 trigger_father_assignment_for_mother(mother_id)
             except Exception as e:
                 # Log but don't fail the request if background task fails
-                import logging
                 logging.warning(f"Failed to trigger background father assignment for {mother_id}: {e}")
             
             return insemination_db_id
@@ -131,7 +157,7 @@ def insert_insemination(created_by: str, body: InseminationBody, company_id: int
     except sqlite3.Error as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
-def update_insemination(created_by: str, insemination_id: int, body: UpdateInseminationBody) -> None:
+def update_insemination(created_by: str, insemination_id: int, body: UpdateInseminationBody, company_id: int = None) -> None:
     """Update an existing insemination record"""
     if not body.inseminationIdentifier:
         raise HTTPException(status_code=400, detail="inseminationIdentifier is required")
@@ -157,16 +183,24 @@ def update_insemination(created_by: str, insemination_id: int, body: UpdateInsem
     
     try:
         with conn:
-            # Check if insemination exists and belongs to user
+            # Check if insemination exists and belongs to user, get current values
             cursor = conn.execute(
                 """
-                SELECT id FROM inseminations 
+                SELECT id, insemination_date, bull_id, notes, company_id
+                FROM inseminations 
                 WHERE id = ? AND created_by = ?
                 """,
                 (insemination_id, created_by)
             )
-            if not cursor.fetchone():
+            record = cursor.fetchone()
+            if not record:
                 raise HTTPException(status_code=404, detail="Insemination record not found or access denied")
+            
+            # Store old values for event emission
+            old_insemination_date = record[1]
+            old_bull_id = record[2]
+            old_notes = record[3]
+            record_company_id = record[4] or company_id
             
             # Update the record
             conn.execute(
@@ -181,6 +215,54 @@ def update_insemination(created_by: str, insemination_id: int, body: UpdateInsem
                     bull_id, insemination_date, animal_type, notes, insemination_id
                 )
             )
+            
+            # Emit domain events for changes (Event Sourcing)
+            if record_company_id:
+                try:
+                    # Track insemination date changes
+                    if old_insemination_date != insemination_date:
+                        emit_field_change(
+                            event_type=EventType.INSEMINATION_DATE_CORRECTED,
+                            animal_id=None,
+                            animal_number=mother_id,
+                            company_id=record_company_id,
+                            user_id=created_by,
+                            field_name='insemination_date',
+                            old_value=old_insemination_date,
+                            new_value=insemination_date,
+                            notes=notes,
+                        )
+                    
+                    # Track bull_id changes
+                    if old_bull_id != bull_id:
+                        emit_field_change(
+                            event_type=EventType.BULL_ASSIGNED,
+                            animal_id=None,
+                            animal_number=mother_id,
+                            company_id=record_company_id,
+                            user_id=created_by,
+                            field_name='bull_id',
+                            old_value=old_bull_id,
+                            new_value=bull_id,
+                            notes=notes,
+                        )
+                    
+                    # Track notes changes
+                    if old_notes != notes:
+                        emit_field_change(
+                            event_type=EventType.INSEMINATION_NOTES_UPDATED,
+                            animal_id=None,
+                            animal_number=mother_id,
+                            company_id=record_company_id,
+                            user_id=created_by,
+                            field_name='notes',
+                            old_value=old_notes,
+                            new_value=notes,
+                            notes=notes,
+                        )
+                except Exception as e:
+                    logging.warning(f"Failed to emit insemination update events: {e}")
+                    
     except sqlite3.IntegrityError as e:
         if "UNIQUE constraint failed" in str(e):
             raise HTTPException(status_code=409, detail="Duplicate insemination for this mother on the same date")
@@ -188,10 +270,49 @@ def update_insemination(created_by: str, insemination_id: int, body: UpdateInsem
     except sqlite3.Error as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
-def delete_insemination(created_by: str, insemination_id: int) -> None:
-    """Delete an insemination record"""
+def delete_insemination(created_by: str, insemination_id: int, company_id: int = None) -> None:
+    """Delete an insemination record.
+    
+    Note: This still performs a DELETE for backward compatibility with triggers,
+    but also emits an insemination_cancelled event for the new event sourcing system.
+    In the future, consider soft-delete with a 'cancelled' status instead.
+    """
     try:
         with conn:
+            # First, get the insemination details for the event
+            cursor = conn.execute(
+                """
+                SELECT mother_id, insemination_date, bull_id, company_id
+                FROM inseminations
+                WHERE id = ? AND created_by = ?
+                """,
+                (insemination_id, created_by)
+            )
+            record = cursor.fetchone()
+            if not record:
+                raise HTTPException(status_code=404, detail="Insemination record not found or access denied")
+            
+            mother_id = record[0]
+            insemination_date = record[1]
+            bull_id = record[2]
+            record_company_id = record[3] or company_id
+            
+            # Emit cancellation event before delete (Event Sourcing)
+            if record_company_id:
+                try:
+                    emit_insemination_cancelled(
+                        animal_number=mother_id,
+                        company_id=record_company_id,
+                        user_id=created_by,
+                        insemination_id=insemination_id,
+                        insemination_date=insemination_date,
+                        reason="User requested deletion",
+                        previous_bull_id=bull_id,
+                    )
+                except Exception as e:
+                    logging.warning(f"Failed to emit insemination_cancelled event: {e}")
+            
+            # Perform the delete (triggers still emit eliminacion_inseminacion for legacy)
             cursor = conn.execute(
                 """
                 DELETE FROM inseminations
