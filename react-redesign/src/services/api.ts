@@ -149,6 +149,71 @@ export interface Company {
   has_company?: boolean
 }
 
+// =============================================================================
+// EVENT SOURCING TYPES (New Architecture)
+// =============================================================================
+
+export interface AnimalSnapshot {
+  animal_id: number
+  animal_number: string
+  company_id: number
+  birth_date?: string
+  mother_id?: string
+  father_id?: string
+  current_status?: string
+  current_weight?: number
+  weaning_weight?: number
+  gender?: string
+  color?: string
+  death_date?: string
+  last_insemination_date?: string
+  insemination_count?: number
+  notes?: string
+  notes_mother?: string
+  rp_animal?: string
+  rp_mother?: string
+  mother_weight?: number
+  scrotal_circumference?: number
+  insemination_round_id?: string
+  insemination_identifier?: string
+  last_event_id?: number
+  last_event_time?: string
+  snapshot_version?: number
+  updated_at?: string
+}
+
+export interface DomainEvent {
+  id: number
+  event_id: string
+  animal_id?: number
+  animal_number: string
+  event_type: string
+  event_version: number
+  payload: Record<string, unknown>
+  metadata: Record<string, unknown>
+  company_id: number
+  user_id: string
+  event_time: string
+  created_at: string
+}
+
+export interface SnapshotStats {
+  total_animals: number
+  by_status: Record<string, number>
+  by_gender: Record<string, number>
+  weight: {
+    average?: number
+    minimum?: number
+    maximum?: number
+    count_with_weight: number
+  }
+  inseminations: {
+    total: number
+    animals_with_inseminations: number
+  }
+  company_id: number
+}
+
 // API Service Class
 class ApiService {
   private baseURL: string
@@ -387,6 +452,55 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ question, history: history || [] })
     })
+  }
+
+  // ========================================
+  // SNAPSHOTS & EVENTS (Event Sourcing)
+  // Snapshots: Derived state for fast reads
+  // Events: Immutable audit history
+  // ========================================
+  // TODO: Uncomment when ready for full event sourcing integration
+  
+  /*
+  // Get all animal snapshots for the company
+  async getAnimalSnapshots(
+    limit: number = 100, 
+    offset: number = 0, 
+    status?: string
+  ): Promise<{ snapshots: AnimalSnapshot[], count: number }> {
+    const params = new URLSearchParams()
+    params.set('limit', limit.toString())
+    params.set('offset', offset.toString())
+    if (status) params.set('status', status)
+    
+    return this.request<{ snapshots: AnimalSnapshot[], count: number }>(
+      `/snapshots?${params.toString()}`
+    )
+  }
+
+  // Get a single animal's snapshot
+  async getAnimalSnapshot(animalId: number): Promise<AnimalSnapshot> {
+    return this.request<AnimalSnapshot>(`/snapshots/${animalId}`)
+  }
+
+  // Get snapshot statistics
+  async getSnapshotStats(): Promise<SnapshotStats> {
+    return this.request<SnapshotStats>('/snapshots/stats')
+  }
+  */
+
+  // Get event history for an animal (audit trail)
+  async getAnimalHistory(animalId: number): Promise<{ events: DomainEvent[], count: number }> {
+    return this.request<{ events: DomainEvent[], count: number }>(
+      `/events/animal/${animalId}/history`
+    )
+  }
+
+  // Get event history by animal number
+  async getAnimalHistoryByNumber(animalNumber: string): Promise<{ events: DomainEvent[], count: number }> {
+    return this.request<{ events: DomainEvent[], count: number }>(
+      `/events/history/by-number/${encodeURIComponent(animalNumber)}`
+    )
   }
 
   // ========================================

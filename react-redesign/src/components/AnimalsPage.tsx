@@ -18,13 +18,15 @@ import {
   CheckCircle,
   Edit,
   Trash2,
-  Upload
+  Upload,
+  History
 } from 'lucide-react'
 import { formatDate, getGenderName } from '@/lib/utils'
 import { apiService, Animal, RegisterBody, InseminationRound } from '@/services/api'
 import { usePrefixes } from '@/contexts/PrefixesContext'
 import { useEffect } from 'react'
 import { InseminationsUploadDialog } from './InseminationsUploadDialog'
+import { AnimalHistoryDialog } from './AnimalHistoryDialog'
 
 
 interface AnimalsPageProps {
@@ -39,6 +41,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
   const [isRegistering, setIsRegistering] = useState(false)
   const [isUploadingInseminations, setIsUploadingInseminations] = useState(false)
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [selectedAnimalForHistory, setSelectedAnimalForHistory] = useState<Animal | null>(null)
   const { prefixes } = usePrefixes()
   const [isRecordsExpanded, setIsRecordsExpanded] = useState(false)
   const [inseminationRounds, setInseminationRounds] = useState<InseminationRound[]>([])
@@ -141,7 +144,19 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
       }
       await apiService.addPendingRecord(animalData)
       
-      // Refresh local data
+      // Trigger sync immediately if online (fixes "pendiente" staying unsynced issue)
+      if (navigator.onLine) {
+        try {
+          console.log('[Registration] Online - syncing immediately...')
+          await apiService.syncLocalRecords()
+          console.log('[Registration] Sync completed successfully')
+        } catch (syncError) {
+          console.warn('[Registration] Sync failed, will retry later:', syncError)
+          // Don't throw - record is safely in pending storage, will sync later
+        }
+      }
+      
+      // Refresh local data (will show synced status if sync succeeded)
       const updatedAnimals = await apiService.getDisplayRecords(10)
       onAnimalsChange(updatedAnimals)
       
@@ -626,6 +641,16 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         </div>
                       </div>
                       <div className="flex items-center gap-2 justify-end sm:justify-start">
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => setSelectedAnimalForHistory(animal)}
+                          className="flex-1 sm:flex-none"
+                          title="Ver historial de eventos"
+                        >
+                          <History className="h-4 w-4" />
+                          <span className="ml-1 sm:hidden">Historial</span>
+                        </Button>
                         <Button size="sm" variant="ghost" className="flex-1 sm:flex-none">
                           <Edit className="h-4 w-4" />
                           <span className="ml-1 sm:hidden">Editar</span>
@@ -742,6 +767,19 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
           </div>
         </CardContent>
       </Card>
+
+      {/* Animal History Dialog - Event Sourcing Integration */}
+      {/* Note: This uses the new domain_events table for audit trail.
+          Main animal data still comes from registrations table until full migration. */}
+      {selectedAnimalForHistory && (
+        <AnimalHistoryDialog
+          animal={selectedAnimalForHistory}
+          open={!!selectedAnimalForHistory}
+          onOpenChange={(open) => {
+            if (!open) setSelectedAnimalForHistory(null)
+          }}
+        />
+      )}
     </div>
   )
 }

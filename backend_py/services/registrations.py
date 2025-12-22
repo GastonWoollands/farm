@@ -5,6 +5,13 @@ from typing import Optional
 from fastapi import HTTPException
 from ..db import conn
 from .auth_service import get_data_filter_clause
+from .event_emitter import (
+    emit_birth_registered,
+    emit_death_recorded,
+    emit_field_change,
+)
+from .snapshot_projector import project_animal_snapshot
+from ..events.event_types import EventType
 
 VALID_GENDERS = {"MALE", "FEMALE", "UNKNOWN"}
 VALID_STATUSES = {"ALIVE", "DEAD", "UNKNOWN"}
@@ -208,8 +215,41 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                     weaning_weight,
                 ),
             )
-            # Return the ID of the inserted record
-            return cursor.lastrowid
+            animal_id = cursor.lastrowid
+            
+            # Emit domain event (Event Sourcing)
+            if company_id:  # Only emit for multi-tenant records
+                try:
+                    emit_birth_registered(
+                        animal_id=animal_id,
+                        animal_number=animal,
+                        company_id=company_id,
+                        user_id=created_by_or_key,
+                        born_date=body.bornDate,
+                        weight=weight,
+                        gender=gender,
+                        status=status,
+                        color=color,
+                        mother_id=mother,
+                        father_id=father,
+                        notes=notes,
+                        notes_mother=notes_mother,
+                        rp_animal=rp_animal,
+                        rp_mother=rp_mother,
+                        mother_weight=mother_weight,
+                        weaning_weight=weaning_weight,
+                        scrotal_circumference=scrotal_circumference,
+                        insemination_round_id=insemination_round_id,
+                        insemination_identifier=insemination_identifier,
+                    )
+                    # Project snapshot
+                    project_animal_snapshot(animal_id, company_id)
+                except Exception as e:
+                    # Log but don't fail - triggers still work as backup
+                    import logging
+                    logging.warning(f"Failed to emit birth event for animal {animal_id}: {e}")
+            
+            return animal_id
     except sqlite3.IntegrityError:
         raise HTTPException(status_code=409, detail="Duplicate registration for this animal and mother")
     except sqlite3.Error as e:
@@ -327,10 +367,13 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
 
     try:
         with conn:
-            # Check if record exists and belongs to the same company
+            # Check if record exists and belongs to the same company, and get current values
             cursor = conn.execute(
                 """
-                SELECT company_id FROM registrations 
+                SELECT company_id, animal_number, mother_id, father_id, born_date, weight,
+                       gender, status, color, notes, notes_mother, rp_animal, rp_mother,
+                       mother_weight, weaning_weight, scrotal_circumference
+                FROM registrations 
                 WHERE id = ? AND company_id = ?
                 """,
                 (animal_id, company_id)
@@ -339,7 +382,24 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
             if not record:
                 raise HTTPException(status_code=404, detail="Record not found or access denied")
             
-            # company_id is already available from parameter
+            # Store old values for event emission
+            old_values = {
+                'animal_number': record[1],
+                'mother_id': record[2],
+                'father_id': record[3],
+                'born_date': record[4],
+                'weight': record[5],
+                'gender': record[6],
+                'status': record[7],
+                'color': record[8],
+                'notes': record[9],
+                'notes_mother': record[10],
+                'rp_animal': record[11],
+                'rp_mother': record[12],
+                'mother_weight': record[13],
+                'weaning_weight': record[14],
+                'scrotal_circumference': record[15],
+            }
             
             # Auto-assign insemination_round_id if missing and born_date is provided
             if not insemination_round_id and body.bornDate:
@@ -366,6 +426,76 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                     animal_id
                 )
             )
+            
+            # Emit domain events for changes (Event Sourcing)
+            if company_id:
+                try:
+                    # Map of field -> (old_value, new_value, event_type)
+                    field_changes = [
+                        ('weight', old_values['weight'], weight, EventType.WEIGHT_RECORDED),
+                        ('weaning_weight', old_values['weaning_weight'], weaning_weight, EventType.WEANING_WEIGHT_RECORDED),
+                        ('mother_id', old_values['mother_id'], mother, EventType.MOTHER_ASSIGNED),
+                        ('father_id', old_values['father_id'], father, EventType.FATHER_ASSIGNED),
+                        ('gender', old_values['gender'], gender, EventType.GENDER_CORRECTED),
+                        ('color', old_values['color'], color, EventType.COLOR_RECORDED),
+                        ('animal_number', old_values['animal_number'], animal, EventType.ANIMAL_NUMBER_CORRECTED),
+                        ('born_date', old_values['born_date'], body.bornDate, EventType.BIRTH_DATE_CORRECTED),
+                        ('notes', old_values['notes'], notes, EventType.NOTES_UPDATED),
+                        ('notes_mother', old_values['notes_mother'], notes_mother, EventType.MOTHER_NOTES_UPDATED),
+                        ('rp_animal', old_values['rp_animal'], rp_animal, EventType.RP_ANIMAL_UPDATED),
+                        ('rp_mother', old_values['rp_mother'], rp_mother, EventType.RP_MOTHER_UPDATED),
+                        ('mother_weight', old_values['mother_weight'], mother_weight, EventType.MOTHER_WEIGHT_RECORDED),
+                        ('scrotal_circumference', old_values['scrotal_circumference'], scrotal_circumference, EventType.SCROTAL_CIRCUMFERENCE_RECORDED),
+                    ]
+                    
+                    # Special handling for status -> death
+                    if old_values['status'] != status:
+                        if status == 'DEAD':
+                            emit_death_recorded(
+                                animal_id=animal_id,
+                                animal_number=animal,
+                                company_id=company_id,
+                                user_id=created_by_or_key,
+                                death_date=_dt.datetime.utcnow().isoformat(),
+                                previous_status=old_values['status'],
+                                notes=notes,
+                            )
+                        else:
+                            emit_field_change(
+                                event_type=EventType.STATUS_CHANGED,
+                                animal_id=animal_id,
+                                animal_number=animal,
+                                company_id=company_id,
+                                user_id=created_by_or_key,
+                                field_name='status',
+                                old_value=old_values['status'],
+                                new_value=status,
+                                notes=notes,
+                            )
+                    
+                    # Emit events for other field changes
+                    for field_name, old_val, new_val, event_type in field_changes:
+                        if old_val != new_val:
+                            emit_field_change(
+                                event_type=event_type,
+                                animal_id=animal_id,
+                                animal_number=animal,
+                                company_id=company_id,
+                                user_id=created_by_or_key,
+                                field_name=field_name,
+                                old_value=old_val,
+                                new_value=new_val,
+                                notes=notes,
+                            )
+                    
+                    # Project snapshot
+                    project_animal_snapshot(animal_id, company_id)
+                    
+                except Exception as e:
+                    # Log but don't fail - triggers still work as backup
+                    import logging
+                    logging.warning(f"Failed to emit update events for animal {animal_id}: {e}")
+                    
     except sqlite3.Error as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
