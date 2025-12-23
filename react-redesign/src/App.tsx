@@ -72,6 +72,7 @@ interface AppState {
   displayAnimals: Animal[] // Recent animals for UI display
   stats: RegistrationStats | null
   updateAvailable: boolean
+  searchTerm?: string // For pre-filling search when navigating from duplicate dialog
 }
 
 function AppContent() {
@@ -84,7 +85,8 @@ function AppContent() {
     animals: [],
     displayAnimals: [],
     stats: null,
-    updateAvailable: false
+    updateAvailable: false,
+    searchTerm: undefined
   })
 
   const [activeTab, setActiveTab] = useState('metrics')
@@ -567,6 +569,7 @@ function AppContent() {
           <TabsContent value="animals" className="mt-0">
             <AnimalsPage 
               animals={appState.displayAnimals}
+              allAnimals={appState.animals}
               onAnimalsChange={(animals) => setAppState(prev => ({ ...prev, displayAnimals: animals }))}
               onStatsChange={async () => {
                 try {
@@ -580,11 +583,20 @@ function AppContent() {
                   console.error('Error refreshing stats:', error)
                 }
               }}
+              onNavigateToSearch={(searchTerm) => {
+                // Switch to search tab and pass search term to pre-fill search input
+                setActiveTab('search')
+                setAppState(prev => ({ ...prev, searchTerm }))
+              }}
             />
           </TabsContent>
 
           <TabsContent value="search" className="mt-0">
-            <SearchPage animals={appState.animals} onAnimalsChange={(animals) => setAppState(prev => ({ ...prev, animals }))} />
+            <SearchPage 
+              animals={appState.animals} 
+              onAnimalsChange={(animals) => setAppState(prev => ({ ...prev, animals }))}
+              initialSearchTerm={appState.searchTerm}
+            />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-0">

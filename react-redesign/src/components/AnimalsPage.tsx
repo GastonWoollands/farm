@@ -23,29 +23,38 @@ import {
 } from 'lucide-react'
 import { formatDate, getGenderName } from '@/lib/utils'
 import { apiService, Animal, RegisterBody, InseminationRound } from '@/services/api'
+import { localStorageService } from '@/services/localStorage'
 import { usePrefixes } from '@/contexts/PrefixesContext'
 import { useEffect } from 'react'
 import { InseminationsUploadDialog } from './InseminationsUploadDialog'
 import { AnimalHistoryDialog } from './AnimalHistoryDialog'
+import { DuplicateAnimalDialog } from './DuplicateAnimalDialog'
 
 
 interface AnimalsPageProps {
   animals: Animal[]
+  allAnimals: Animal[] // All animals for duplicate checking
   onAnimalsChange: (animals: Animal[]) => void
   onStatsChange: () => void
+  onNavigateToSearch?: (searchTerm: string) => void
 }
 
-export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: AnimalsPageProps) {
+export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChange, onNavigateToSearch }: AnimalsPageProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isRegistering, setIsRegistering] = useState(false)
   const [isUploadingInseminations, setIsUploadingInseminations] = useState(false)
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const [selectedAnimalForHistory, setSelectedAnimalForHistory] = useState<Animal | null>(null)
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
+  const [duplicateAnimal, setDuplicateAnimal] = useState<Animal | null>(null)
   const { prefixes } = usePrefixes()
   const [isRecordsExpanded, setIsRecordsExpanded] = useState(false)
   const [inseminationRounds, setInseminationRounds] = useState<InseminationRound[]>([])
   const [selectedRoundId, setSelectedRoundId] = useState<string>('all')
+  
+  // Special prefixes that bypass duplicate checking
+  const SPECIAL_PREFIXES = ['TEMP-', 'UNKNOWN-', 'SIN-ID-', 'SINID-']
   const [formData, setFormData] = useState({
     animalNumber: prefixes.animalPrefix,
     rpAnimal: '',
@@ -85,6 +94,22 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
   const pendingAnimals = animals.filter(a => 'localId' in a && (a as any).localId !== undefined).length
   const syncedAnimals = totalAnimals - pendingAnimals
 
+  // Check for duplicate animal numbers against ALL animals (not just displayed ones)
+  const checkForDuplicate = (animalNumber: string): Animal | null => {
+    if (!animalNumber) return null
+    
+    // Skip check if animal_number has special prefix
+    const hasSpecialPrefix = SPECIAL_PREFIXES.some(prefix => 
+      animalNumber.toUpperCase().startsWith(prefix)
+    )
+    if (hasSpecialPrefix) return null
+    
+    // Check if animal_number already exists in ALL animals list (case-insensitive)
+    // Use allAnimals (complete list) instead of animals (display subset)
+    return allAnimals.find(a => 
+      a.animal_number?.toUpperCase() === animalNumber.toUpperCase()
+    ) || null
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -97,6 +122,22 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+
+    // Check for duplicate before proceeding
+    const existing = checkForDuplicate(formData.animalNumber)
+    if (existing) {
+      setDuplicateAnimal(existing)
+      setDuplicateDialogOpen(true)
+      return  // Stop here, show dialog instead
+    }
+
+    // Continue with registration
+    await performRegistration()
+  }
+
+  // Extracted registration logic to be reusable
+  const performRegistration = async () => {
     setIsLoading(true)
     setError(null)
 
@@ -199,11 +240,23 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
     setError(null)
 
     try {
-      // Delete from backend
-      await apiService.deleteAnimal(animal.animal_number, animal.created_at || '')
+      // Check if this is a pending (unsynced) record
+      const isPending = 'localId' in animal && (animal as any).localId !== undefined
       
-      // Update parent component
-      onAnimalsChange(animals.filter(a => a.animal_number !== animal.animal_number))
+      if (isPending) {
+        // Delete from localStorage pending records
+        const localId = (animal as any).localId
+        await localStorageService.deletePendingRecord(localId)
+        console.log('[Delete] Removed pending record:', animal.animal_number, 'localId:', localId)
+      } else {
+        // Delete from backend (synced record)
+        await apiService.deleteAnimal(animal.animal_number, animal.created_at || '')
+        console.log('[Delete] Deleted synced record from backend:', animal.animal_number)
+      }
+      
+      // Refresh the display
+      const updatedAnimals = await apiService.getDisplayRecords(10)
+      onAnimalsChange(updatedAnimals)
       
       // Update stats
       onStatsChange()
@@ -212,6 +265,26 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Handle "Register Anyway" action from duplicate dialog
+  const handleRegisterAnyway = async () => {
+    setDuplicateDialogOpen(false)
+    await performRegistration()
+  }
+
+  // Handle "Edit Existing" action from duplicate dialog
+  const handleEditExisting = () => {
+    setDuplicateDialogOpen(false)
+    if (duplicateAnimal && onNavigateToSearch) {
+      onNavigateToSearch(duplicateAnimal.animal_number)
+    }
+  }
+
+  // Handle dialog close
+  const handleDuplicateDialogClose = () => {
+    setDuplicateDialogOpen(false)
+    setDuplicateAnimal(null)
   }
 
   const handleExport = async () => {
@@ -780,6 +853,15 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
           }}
         />
       )}
+
+      {/* Duplicate Animal Warning Dialog */}
+      <DuplicateAnimalDialog
+        existingAnimal={duplicateAnimal}
+        isOpen={duplicateDialogOpen}
+        onClose={handleDuplicateDialogClose}
+        onEditExisting={handleEditExisting}
+        onRegisterAnyway={handleRegisterAnyway}
+      />
     </div>
   )
 }

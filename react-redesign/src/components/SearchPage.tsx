@@ -23,9 +23,10 @@ import { Animal, apiService, UpdateBody, InseminationRound } from '@/services/ap
 interface SearchPageProps {
   animals: Animal[]
   onAnimalsChange: (animals: Animal[]) => void
+  initialSearchTerm?: string
 }
 
-export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
+export function SearchPage({ animals, onAnimalsChange, initialSearchTerm }: SearchPageProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filters, setFilters] = useState({
     gender: '',
@@ -60,6 +61,13 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
   useEffect(() => {
     fetchInseminationRounds()
   }, [])
+
+  // Pre-fill search term when navigating from duplicate dialog
+  useEffect(() => {
+    if (initialSearchTerm) {
+      setSearchTerm(initialSearchTerm)
+    }
+  }, [initialSearchTerm])
 
   // Debug logging
   console.log('SearchPage - animals received:', animals)
