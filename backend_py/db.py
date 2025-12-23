@@ -856,11 +856,6 @@ def migrate_add_email_unique_constraint():
         print(f"Email unique constraint migration error: {e}")
 
 
-# Multi-tenant migration for existing production databases
-migrate_to_multi_tenant()
-migrate_add_email_unique_constraint()
-
-# Add new registration fields migration
 def migrate_add_registration_fields():
     """Add new fields to registrations table"""
     try:
@@ -868,6 +863,8 @@ def migrate_add_registration_fields():
         _add_column_safely("registrations", "rp_animal", "TEXT")
         _add_column_safely("registrations", "rp_mother", "TEXT")
         _add_column_safely("registrations", "mother_weight", "REAL")
+        # Death date for animals (used when status = DEAD)
+        _add_column_safely("registrations", "death_date", "TEXT")
         
         # Add triggers for tracking changes to new fields
         conn.execute("""
@@ -919,6 +916,12 @@ def migrate_add_registration_fields():
         print("Registration fields migration completed successfully")
     except sqlite3.Error as e:
         print(f"Registration fields migration error: {e}")
+
+
+# Multi-tenant migration for existing production databases
+migrate_to_multi_tenant()
+migrate_add_email_unique_constraint()
+migrate_add_registration_fields()
 
 # Add company_id to inseminations_ids migration
 def migrate_add_company_id_to_inseminations_ids():

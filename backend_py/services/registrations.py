@@ -179,6 +179,19 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
     if color and color not in VALID_COLORS:
         raise HTTPException(status_code=400, detail=f"Invalid color. Must be one of: {', '.join(VALID_COLORS)}")
 
+    # Handle optional death_date (YYYY-MM-DD)
+    death_date = None
+    if hasattr(body, "deathDate") and body.deathDate:
+        try:
+            _dt.datetime.strptime(body.deathDate, "%Y-%m-%d")
+            death_date = body.deathDate
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid deathDate format. Use YYYY-MM-DD")
+
+    # Auto-set death_date if status is DEAD and not provided
+    if status == "DEAD" and not death_date:
+        death_date = _dt.datetime.utcnow().strftime("%Y-%m-%d")
+
     try:
         with conn:
             cursor = conn.execute(
@@ -186,9 +199,10 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                 INSERT INTO registrations (
                     animal_number, created_at, user_key, created_by, company_id,
                     mother_id, father_id, born_date, weight, gender, animal_type, status, color, notes, notes_mother, short_id,
-                    insemination_round_id, insemination_identifier, scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight
+                    insemination_round_id, insemination_identifier, scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight,
+                    death_date
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     animal,
@@ -213,6 +227,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                     rp_mother,
                     mother_weight,
                     weaning_weight,
+                    death_date,
                 ),
             )
             animal_id = cursor.lastrowid
@@ -451,12 +466,23 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                     # Special handling for status -> death
                     if old_values['status'] != status:
                         if status == 'DEAD':
+                            # Prefer user-provided deathDate (YYYY-MM-DD) if available
+                            death_event_time = None
+                            if hasattr(body, "deathDate") and body.deathDate:
+                                try:
+                                    parsed = _dt.datetime.strptime(body.deathDate, "%Y-%m-%d")
+                                    death_event_time = parsed.isoformat()
+                                except ValueError:
+                                    death_event_time = _dt.datetime.utcnow().isoformat()
+                            else:
+                                death_event_time = _dt.datetime.utcnow().isoformat()
+
                             emit_death_recorded(
                                 animal_id=animal_id,
                                 animal_number=animal,
                                 company_id=company_id,
                                 user_id=created_by_or_key,
-                                death_date=_dt.datetime.utcnow().isoformat(),
+                                death_date=death_event_time,
                                 previous_status=old_values['status'],
                                 notes=notes,
                             )

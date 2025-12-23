@@ -23,6 +23,7 @@ export interface Animal {
   rp_mother?: string
   mother_weight?: number
   weaning_weight?: number
+  death_date?: string
   synced?: boolean
 }
 
@@ -45,6 +46,7 @@ export interface RegisterBody {
   scrotalCircumference?: number
   inseminationRoundId?: string
   inseminationIdentifier?: string
+  deathDate?: string
 }
 
 export interface UpdateBody {
@@ -65,6 +67,7 @@ export interface UpdateBody {
   notesMother?: string
   scrotalCircumference?: number
   inseminationRoundId?: string
+  deathDate?: string
 }
 
 export interface RegistrationStats {

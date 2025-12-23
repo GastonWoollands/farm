@@ -227,7 +227,8 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm }: Sear
           notes: editFormData.notes || undefined,
           notesMother: editFormData.notes_mother || undefined,
           scrotalCircumference: editFormData.scrotal_circumference || undefined,
-          inseminationRoundId: editFormData.insemination_round_id || undefined
+          inseminationRoundId: editFormData.insemination_round_id || undefined,
+          deathDate: editFormData.death_date || undefined
         }
 
       await apiService.updateAnimal(updateData)
@@ -781,6 +782,16 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm }: Sear
                 type="date"
                 value={editFormData.born_date || ''}
                 onChange={(e) => setEditFormData({ ...editFormData, born_date: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-death-date">Fecha de Muerte</Label>
+              <Input
+                id="edit-death-date"
+                type="date"
+                value={editFormData.death_date || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, death_date: e.target.value })}
               />
             </div>
 

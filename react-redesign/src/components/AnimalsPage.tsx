@@ -71,7 +71,8 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
     notes: '',
     notesMother: '',
     scrotalCircumference: '',
-    inseminationRoundId: ''
+    inseminationRoundId: '',
+    deathDate: ''
   })
 
   // Fetch insemination rounds
@@ -158,7 +159,8 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
         notes: formData.notes || undefined,
         notesMother: formData.notesMother || undefined,
         scrotalCircumference: formData.scrotalCircumference ? parseFloat(formData.scrotalCircumference) : undefined,
-        inseminationRoundId: formData.inseminationRoundId || undefined
+        inseminationRoundId: formData.inseminationRoundId || undefined,
+        deathDate: formData.deathDate || undefined
       }
 
       // Add to local storage (replicates original frontend behavior)
@@ -221,7 +223,8 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
         notes: '',
         notesMother: '',
         scrotalCircumference: '',
-        inseminationRoundId: ''
+        inseminationRoundId: '',
+        deathDate: ''
       })
       setIsRegistering(false)
     } catch (err: any) {
@@ -533,7 +536,20 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="status">Estado</Label>
-                      <Select name="status" value={formData.status} onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}>
+                      <Select
+                        name="status"
+                        value={formData.status}
+                        onValueChange={(value) =>
+                          setFormData(prev => ({
+                            ...prev,
+                            status: value,
+                            deathDate:
+                              value === 'DEAD' && !prev.deathDate
+                                ? new Date().toISOString().split('T')[0]
+                                : prev.deathDate
+                          }))
+                        }
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -544,6 +560,20 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {formData.status === 'DEAD' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="deathDate">Fecha de Muerte</Label>
+                        <Input
+                          id="deathDate"
+                          name="deathDate"
+                          type="date"
+                          value={formData.deathDate}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       <Label htmlFor="color">Color</Label>
                       <Select name="color" value={formData.color} onValueChange={(value) => setFormData(prev => ({ ...prev, color: value }))}>
@@ -633,7 +663,8 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
                         notes: '',
                         notesMother: '',
                         scrotalCircumference: '',
-                        inseminationRoundId: ''
+                        inseminationRoundId: '',
+                        deathDate: ''
                       })
                     }}>
                       Cancelar

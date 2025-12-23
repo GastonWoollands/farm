@@ -24,6 +24,7 @@ class RegisterBody(BaseModel):
     rpMother: str | None = None
     motherWeight: float | None = None
     weaningWeight: float | None = None
+    deathDate: str | None = None
 
 class UpdateBody(BaseModel):
     animalNumber: str
@@ -45,6 +46,7 @@ class UpdateBody(BaseModel):
     rpMother: str | None = None
     motherWeight: float | None = None
     weaningWeight: float | None = None
+    deathDate: str | None = None
     
     class Config:
         # Allow extra fields and be more lenient with validation
