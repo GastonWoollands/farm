@@ -196,8 +196,11 @@ conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_status ON animal_snapshot
 conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_animal_number ON animal_snapshots(animal_number)")
 conn.commit()
 
-def _add_column_safely(table_name: str, column_name: str, column_type: str) -> None:
-    """Safely add a column to a table if it doesn't exist"""
+def _add_column_safely(table_name: str, column_name: str, column_type: str) -> bool:
+    """
+    Safely add a column to a table if it doesn't exist.
+    Returns True if the column was added, False if it already existed.
+    """
     try:
         # Check if column already exists
         cursor = conn.execute(f"PRAGMA table_info({table_name})")
@@ -207,10 +210,11 @@ def _add_column_safely(table_name: str, column_name: str, column_type: str) -> N
             conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
             conn.commit()
             print(f"Added {column_name} to {table_name} table")
-        else:
-            print(f"Column {column_name} already exists in {table_name} table")
+            return True
+        return False
     except sqlite3.Error as e:
         print(f"Error adding {column_name} to {table_name}: {e}")
+        return False
 
 # Add animal_number column to existing events_state table if it doesn't exist
 try:
@@ -921,7 +925,6 @@ def migrate_add_registration_fields():
 # Multi-tenant migration for existing production databases
 migrate_to_multi_tenant()
 migrate_add_email_unique_constraint()
-migrate_add_registration_fields()
 
 # Add company_id to inseminations_ids migration
 def migrate_add_company_id_to_inseminations_ids():
@@ -945,7 +948,6 @@ def migrate_add_company_id_to_inseminations_ids():
             pass
         
         conn.commit()
-        print("Company ID added to inseminations_ids table successfully")
     except sqlite3.Error as e:
         print(f"Inseminations IDs migration error: {e}")
 
