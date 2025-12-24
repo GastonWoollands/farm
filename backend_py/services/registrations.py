@@ -1,4 +1,5 @@
 import sqlite3
+import json
 import datetime as _dt
 from datetime import timedelta
 from typing import Optional
@@ -9,8 +10,10 @@ from .event_emitter import (
     emit_birth_registered,
     emit_death_recorded,
     emit_field_change,
+    ensure_animal_has_events,
+    get_events_for_animal_by_number,
 )
-from .snapshot_projector import project_animal_snapshot
+from .snapshot_projector import project_animal_snapshot, project_animal_snapshot_by_number, get_snapshot_by_number
 from ..events.event_types import EventType
 
 VALID_GENDERS = {"MALE", "FEMALE", "UNKNOWN"}
@@ -166,6 +169,16 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="Invalid weaning weight value")
 
+    # Handle current_weight validation
+    current_weight = None
+    if body.currentWeight is not None:
+        try:
+            current_weight = float(body.currentWeight)
+            if not (0 <= current_weight <= 10000):
+                raise HTTPException(status_code=400, detail="Current weight must be between 0 and 10000 kg")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid current weight value")
+
     # Auto-assign insemination_round_id if missing and born_date is provided
     if not insemination_round_id and body.bornDate:
         auto_assigned_round_id = _auto_assign_insemination_round_id(body.bornDate, company_id)
@@ -194,15 +207,29 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
 
     try:
         with conn:
+            # Check if animal has domain events indicating it's a mother/father
+            # Mothers/fathers should NOT be in registrations table
+            if company_id:
+                existing_events = get_events_for_animal_by_number(animal, company_id)
+                if len(existing_events) > 0:
+                    # Check if this is a mother_registered or father_registered event
+                    for event in existing_events:
+                        event_type = event.get('event_type', '')
+                        if event_type in ['mother_registered', 'father_registered']:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Animal {animal} is a mother/father and should not be in registrations table. Use update-by-number endpoint instead."
+                            )
+            
             cursor = conn.execute(
                 """
                 INSERT INTO registrations (
                     animal_number, created_at, user_key, created_by, company_id,
-                    mother_id, father_id, born_date, weight, gender, animal_type, status, color, notes, notes_mother, short_id,
+                    mother_id, father_id, born_date, weight, current_weight, gender, animal_type, status, color, notes, notes_mother, short_id,
                     insemination_round_id, insemination_identifier, scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight,
                     death_date
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     animal,
@@ -214,6 +241,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                     father,
                     body.bornDate,
                     weight,
+                    current_weight,
                     gender,
                     animal_type,
                     status,
@@ -235,30 +263,309 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
             # Emit domain event (Event Sourcing)
             if company_id:  # Only emit for multi-tenant records
                 try:
-                    emit_birth_registered(
-                        animal_id=animal_id,
-                        animal_number=animal,
-                        company_id=company_id,
-                        user_id=created_by_or_key,
-                        born_date=body.bornDate,
-                        weight=weight,
-                        gender=gender,
-                        status=status,
-                        color=color,
-                        mother_id=mother,
-                        father_id=father,
-                        notes=notes,
-                        notes_mother=notes_mother,
-                        rp_animal=rp_animal,
-                        rp_mother=rp_mother,
-                        mother_weight=mother_weight,
-                        weaning_weight=weaning_weight,
-                        scrotal_circumference=scrotal_circumference,
-                        insemination_round_id=insemination_round_id,
-                        insemination_identifier=insemination_identifier,
-                    )
+                    # Check if animal already has domain events (e.g., mother_registered, father_registered)
+                    # If yes, don't emit birth_registered - just emit update events for changed fields
+                    existing_events = get_events_for_animal_by_number(animal, company_id)
+                    
+                    if len(existing_events) > 0:
+                        # Animal already has events - emit update events instead of birth_registered
+                        # Get old values from the first event or use None
+                        old_values = {
+                            'weight': None,
+                            'current_weight': None,
+                            'gender': None,
+                            'status': None,
+                            'color': None,
+                            'notes': None,
+                            'rp_animal': None,
+                        }
+                        
+                        # Try to extract old values from existing events
+                        for event in existing_events:
+                            if event.get('payload'):
+                                payload = event['payload'] if isinstance(event['payload'], dict) else json.loads(event['payload'])
+                                if not old_values['weight'] and payload.get('weight'):
+                                    old_values['weight'] = payload.get('weight')
+                                if not old_values['current_weight'] and payload.get('current_weight'):
+                                    old_values['current_weight'] = payload.get('current_weight')
+                                if not old_values['gender'] and payload.get('gender'):
+                                    old_values['gender'] = payload.get('gender')
+                                if not old_values['status'] and payload.get('status'):
+                                    old_values['status'] = payload.get('status')
+                                if not old_values['color'] and payload.get('color'):
+                                    old_values['color'] = payload.get('color')
+                                if not old_values['notes'] and payload.get('notes'):
+                                    old_values['notes'] = payload.get('notes')
+                                if not old_values['rp_animal'] and payload.get('rp_animal'):
+                                    old_values['rp_animal'] = payload.get('rp_animal')
+                        
+                        # Emit update events for changed fields
+                        field_changes = [
+                            ('weight', old_values['weight'], weight, EventType.WEIGHT_RECORDED),
+                            ('current_weight', old_values['current_weight'], current_weight, EventType.CURRENT_WEIGHT_RECORDED),
+                            ('gender', old_values['gender'], gender, EventType.GENDER_CORRECTED),
+                            ('status', old_values['status'], status, EventType.STATUS_CHANGED),
+                            ('color', old_values['color'], color, EventType.COLOR_RECORDED),
+                            ('notes', old_values['notes'], notes, EventType.NOTES_UPDATED),
+                            ('rp_animal', old_values['rp_animal'], rp_animal, EventType.RP_ANIMAL_UPDATED),
+                        ]
+                        
+                        for field_name, old_val, new_val, event_type in field_changes:
+                            if old_val != new_val and new_val is not None:
+                                emit_field_change(
+                                    event_type=event_type,
+                                    animal_id=animal_id,
+                                    animal_number=animal,
+                                    company_id=company_id,
+                                    user_id=created_by_or_key,
+                                    field_name=field_name,
+                                    old_value=old_val,
+                                    new_value=new_val,
+                                    notes=f"Actualizado desde registro",
+                                )
+                    else:
+                        # Animal has no events - emit birth_registered
+                        emit_birth_registered(
+                            animal_id=animal_id,
+                            animal_number=animal,
+                            company_id=company_id,
+                            user_id=created_by_or_key,
+                            born_date=body.bornDate,
+                            weight=weight,
+                            current_weight=current_weight,
+                            gender=gender,
+                            status=status,
+                            color=color,
+                            mother_id=mother,
+                            father_id=father,
+                            notes=notes,
+                            notes_mother=notes_mother,
+                            rp_animal=rp_animal,
+                            rp_mother=rp_mother,
+                            mother_weight=mother_weight,
+                            weaning_weight=weaning_weight,
+                            scrotal_circumference=scrotal_circumference,
+                            insemination_round_id=insemination_round_id,
+                            insemination_identifier=insemination_identifier,
+                        )
+                    
                     # Project snapshot
                     project_animal_snapshot(animal_id, company_id)
+                    
+                    # Handle mother events (if mother_id provided)
+                    if mother and company_id:
+                        try:
+                            # Check if mother already has events
+                            mother_events = get_events_for_animal_by_number(mother, company_id)
+                            
+                            if len(mother_events) > 0:
+                                # Mother already has events - emit updates for notes_mother, current_weight, and rp_animal
+                                # Get mother's current values from snapshot (source of truth)
+                                mother_snapshot = get_snapshot_by_number(mother, company_id)
+                                
+                                if mother_snapshot:
+                                    # Use snapshot values
+                                    old_rp_animal = mother_snapshot.get('rp_animal')
+                                    old_current_weight = mother_snapshot.get('current_weight')
+                                    old_notes_mother = mother_snapshot.get('notes_mother')
+                                    mother_animal_id = mother_snapshot.get('animal_id')  # May be None for mothers
+                                else:
+                                    # Fallback to registration table if snapshot doesn't exist
+                                    mother_cursor = conn.execute(
+                                        """
+                                        SELECT id, notes_mother, current_weight, rp_animal FROM registrations 
+                                        WHERE animal_number = ? AND company_id = ?
+                                        LIMIT 1
+                                        """,
+                                        (mother, company_id)
+                                    )
+                                    mother_reg = mother_cursor.fetchone()
+                                    
+                                    if mother_reg:
+                                        mother_animal_id = mother_reg[0]
+                                        old_notes_mother = mother_reg[1]
+                                        old_current_weight = mother_reg[2]
+                                        old_rp_animal = mother_reg[3] if len(mother_reg) > 3 else None
+                                    else:
+                                        # No snapshot and no registration - use defaults
+                                        mother_animal_id = None
+                                        old_rp_animal = None
+                                        old_current_weight = None
+                                        old_notes_mother = None
+                                
+                                # Also check if mother has registration record (for updating registration table later)
+                                mother_reg_cursor = conn.execute(
+                                    """
+                                    SELECT id FROM registrations 
+                                    WHERE animal_number = ? AND company_id = ?
+                                    LIMIT 1
+                                    """,
+                                    (mother, company_id)
+                                )
+                                mother_reg = mother_reg_cursor.fetchone()
+                                
+                                # Track if any events were emitted
+                                events_emitted = False
+                                
+                                # Emit MOTHER_NOTES_UPDATED event if notes_mother is provided and different
+                                if notes_mother and notes_mother != old_notes_mother:
+                                    emit_field_change(
+                                        event_type=EventType.MOTHER_NOTES_UPDATED,
+                                        animal_id=mother_animal_id,  # Can be None
+                                        animal_number=mother,
+                                        company_id=company_id,
+                                        user_id=created_by_or_key,
+                                        field_name='notes_mother',
+                                        old_value=old_notes_mother or None,
+                                        new_value=notes_mother,
+                                        notes=f"Actualizado desde registro de cría {animal}",
+                                    )
+                                    events_emitted = True
+                                
+                                # Emit CURRENT_WEIGHT_RECORDED event if mother_weight is provided and different
+                                if mother_weight is not None and mother_weight != old_current_weight:
+                                    emit_field_change(
+                                        event_type=EventType.CURRENT_WEIGHT_RECORDED,
+                                        animal_id=mother_animal_id,  # Can be None
+                                        animal_number=mother,
+                                        company_id=company_id,
+                                        user_id=created_by_or_key,
+                                        field_name='current_weight',
+                                        old_value=str(old_current_weight) if old_current_weight is not None else None,
+                                        new_value=str(mother_weight),
+                                        notes=f"Actualizado desde registro de cría {animal}",
+                                    )
+                                    events_emitted = True
+                                
+                                # Emit RP_ANIMAL_UPDATED event if rp_mother is provided and different
+                                if rp_mother and rp_mother != old_rp_animal:
+                                    emit_field_change(
+                                        event_type=EventType.RP_ANIMAL_UPDATED,
+                                        animal_id=mother_animal_id,  # Can be None
+                                        animal_number=mother,
+                                        company_id=company_id,
+                                        user_id=created_by_or_key,
+                                        field_name='rp_animal',
+                                        old_value=old_rp_animal or None,
+                                        new_value=rp_mother,
+                                        notes=f"Actualizado desde registro de cría {animal}",
+                                    )
+                                    events_emitted = True
+                                
+                                # Project snapshot ONCE after all events
+                                if events_emitted:
+                                    if mother_animal_id:
+                                        project_animal_snapshot(mother_animal_id, company_id)
+                                    else:
+                                        project_animal_snapshot_by_number(mother, company_id)
+                                
+                                # Update mother's registration ONLY if registration exists
+                                if mother_reg and (notes_mother or mother_weight is not None or rp_mother):
+                                    mother_reg_id = mother_reg[0]
+                                    update_fields = []
+                                    update_values = []
+                                    if notes_mother:
+                                        update_fields.append("notes_mother = ?")
+                                        update_values.append(notes_mother)
+                                    if mother_weight is not None:
+                                        update_fields.append("current_weight = ?")
+                                        update_values.append(mother_weight)
+                                    if rp_mother:
+                                        update_fields.append("rp_animal = ?")  # rp_mother → rp_animal in registration
+                                        update_values.append(rp_mother)
+                                    
+                                    if update_fields:
+                                        update_values.append(mother_reg_id)
+                                        conn.execute(
+                                            f"""
+                                            UPDATE registrations SET {', '.join(update_fields)}, updated_at = datetime('now')
+                                            WHERE id = ?
+                                            """,
+                                            tuple(update_values)
+                                        )
+                            else:
+                                # Mother has no events - create them
+                                # First check if mother has a registration record
+                                mother_cursor = conn.execute(
+                                    """
+                                    SELECT id, notes_mother, current_weight FROM registrations 
+                                    WHERE animal_number = ? AND company_id = ?
+                                    LIMIT 1
+                                    """,
+                                    (mother, company_id)
+                                )
+                                mother_reg = mother_cursor.fetchone()
+                                
+                                if mother_reg:
+                                    # Mother has registration but no events - update registration and create events
+                                    mother_animal_id = mother_reg[0]
+                                    
+                                    # Update mother's registration with new values if provided
+                                    update_fields = []
+                                    update_values = []
+                                    if notes_mother:
+                                        update_fields.append("notes_mother = ?")
+                                        update_values.append(notes_mother)
+                                    if mother_weight is not None:
+                                        update_fields.append("current_weight = ?")
+                                        update_values.append(mother_weight)
+                                    
+                                    if update_fields:
+                                        update_values.append(mother_animal_id)
+                                        conn.execute(
+                                            f"""
+                                            UPDATE registrations SET {', '.join(update_fields)}, updated_at = datetime('now')
+                                            WHERE id = ?
+                                            """,
+                                            tuple(update_values)
+                                        )
+                                    
+                                    # Create events for mother
+                                    ensure_animal_has_events(
+                                        animal_number=mother,
+                                        company_id=company_id,
+                                        user_id=created_by_or_key,
+                                        gender='FEMALE',
+                                        current_weight=mother_weight,
+                                        status='ALIVE',
+                                        rp_animal=rp_mother,
+                                        notes=notes_mother,
+                                    )
+                                    
+                                    # Project snapshot for mother after event creation
+                                    project_animal_snapshot(mother_animal_id, company_id)
+                                else:
+                                    # Mother has no registration and no events - just create events
+                                    ensure_animal_has_events(
+                                        animal_number=mother,
+                                        company_id=company_id,
+                                        user_id=created_by_or_key,
+                                        gender='FEMALE',
+                                        current_weight=mother_weight,
+                                        status='ALIVE',
+                                        rp_animal=rp_mother,
+                                        notes=notes_mother,
+                                    )
+                                    
+                                    # Project snapshot for mother after event creation (by number since no animal_id)
+                                    project_animal_snapshot_by_number(mother, company_id)
+                        except Exception as e:
+                            import logging
+                            logging.warning(f"Failed to handle events for mother {mother}: {e}")
+                    
+                    # Ensure father has events (if father_id provided)
+                    if father and company_id:
+                        try:
+                            ensure_animal_has_events(
+                                animal_number=father,
+                                company_id=company_id,
+                                user_id=created_by_or_key,
+                                gender='MALE',
+                                status='ALIVE',
+                            )
+                        except Exception as e:
+                            import logging
+                            logging.warning(f"Failed to ensure events for father {father}: {e}")
                 except Exception as e:
                     # Log but don't fail - triggers still work as backup
                     import logging
@@ -373,6 +680,16 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="Invalid weaning weight value")
 
+    # Handle current_weight validation
+    current_weight = None
+    if body.currentWeight is not None:
+        try:
+            current_weight = float(body.currentWeight)
+            if not (0 <= current_weight <= 10000):
+                raise HTTPException(status_code=400, detail="Current weight must be between 0 and 10000 kg")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid current weight value")
+
     if gender and gender not in VALID_GENDERS:
         raise HTTPException(status_code=400, detail=f"Invalid gender. Must be one of: {', '.join(VALID_GENDERS)}")
     if status and status not in VALID_STATUSES:
@@ -385,7 +702,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
             # Check if record exists and belongs to the same company, and get current values
             cursor = conn.execute(
                 """
-                SELECT company_id, animal_number, mother_id, father_id, born_date, weight,
+                SELECT company_id, animal_number, mother_id, father_id, born_date, weight, current_weight,
                        gender, status, color, notes, notes_mother, rp_animal, rp_mother,
                        mother_weight, weaning_weight, scrotal_circumference
                 FROM registrations 
@@ -404,16 +721,17 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                 'father_id': record[3],
                 'born_date': record[4],
                 'weight': record[5],
-                'gender': record[6],
-                'status': record[7],
-                'color': record[8],
-                'notes': record[9],
-                'notes_mother': record[10],
-                'rp_animal': record[11],
-                'rp_mother': record[12],
-                'mother_weight': record[13],
-                'weaning_weight': record[14],
-                'scrotal_circumference': record[15],
+                'current_weight': record[6],
+                'gender': record[7],
+                'status': record[8],
+                'color': record[9],
+                'notes': record[10],
+                'notes_mother': record[11],
+                'rp_animal': record[12],
+                'rp_mother': record[13],
+                'mother_weight': record[14],
+                'weaning_weight': record[15],
+                'scrotal_circumference': record[16],
             }
             
             # Auto-assign insemination_round_id if missing and born_date is provided
@@ -426,7 +744,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
             conn.execute(
                 """
                 UPDATE registrations SET
-                    animal_number = ?, mother_id = ?, father_id = ?, born_date = ?, weight = ?,
+                    animal_number = ?, mother_id = ?, father_id = ?, born_date = ?, weight = ?, current_weight = ?,
                     gender = ?, animal_type = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
                     insemination_round_id = ?, insemination_identifier = ?, scrotal_circumference = ?,
                     rp_animal = ?, rp_mother = ?, mother_weight = ?, weaning_weight = ?,
@@ -434,7 +752,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                 WHERE id = ?
                 """,
                 (
-                    animal, mother, father, body.bornDate, weight,
+                    animal, mother, father, body.bornDate, weight, current_weight,
                     gender, animal_type, status, color, notes, notes_mother,
                     insemination_round_id, insemination_identifier, scrotal_circumference,
                     rp_animal, rp_mother, mother_weight, weaning_weight,
@@ -449,6 +767,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                     field_changes = [
                         ('weight', old_values['weight'], weight, EventType.WEIGHT_RECORDED),
                         ('weaning_weight', old_values['weaning_weight'], weaning_weight, EventType.WEANING_WEIGHT_RECORDED),
+                        ('current_weight', old_values['current_weight'], current_weight, EventType.CURRENT_WEIGHT_RECORDED),
                         ('mother_id', old_values['mother_id'], mother, EventType.MOTHER_ASSIGNED),
                         ('father_id', old_values['father_id'], father, EventType.FATHER_ASSIGNED),
                         ('gender', old_values['gender'], gender, EventType.GENDER_CORRECTED),
@@ -513,6 +832,75 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                                 new_value=new_val,
                                 notes=notes,
                             )
+                    
+                    # Ensure new mother has events if mother_id changed
+                    if mother and mother != old_values['mother_id'] and company_id:
+                        try:
+                            ensure_animal_has_events(
+                                animal_number=mother,
+                                company_id=company_id,
+                                user_id=created_by_or_key,
+                                gender='FEMALE',
+                                current_weight=mother_weight,
+                                status='ALIVE',
+                                rp_animal=rp_mother,
+                            )
+                            # Project snapshot for mother after event creation
+                            project_animal_snapshot_by_number(mother, company_id)
+                        except Exception as e:
+                            import logging
+                            logging.warning(f"Failed to ensure events for new mother {mother}: {e}")
+                    
+                    # Ensure new father has events if father_id changed
+                    if father and father != old_values['father_id'] and company_id:
+                        try:
+                            ensure_animal_has_events(
+                                animal_number=father,
+                                company_id=company_id,
+                                user_id=created_by_or_key,
+                                gender='MALE',
+                                status='ALIVE',
+                            )
+                            # Project snapshot for father after event creation
+                            project_animal_snapshot_by_number(father, company_id)
+                        except Exception as e:
+                            import logging
+                            logging.warning(f"Failed to ensure events for new father {father}: {e}")
+                    
+                    # Emit events for mother's own animal_id when mother_weight changes
+                    if mother and (mother_weight != old_values['mother_weight'] or mother != old_values['mother_id']) and company_id:
+                        try:
+                            # Find mother's registration
+                            cursor = conn.execute(
+                                """
+                                SELECT id FROM registrations 
+                                WHERE animal_number = ? AND company_id = ?
+                                LIMIT 1
+                                """,
+                                (mother, company_id)
+                            )
+                            mother_reg = cursor.fetchone()
+                            
+                            if mother_reg:
+                                mother_animal_id = mother_reg[0]
+                                # Emit current_weight event for mother
+                                if mother_weight and mother_weight != old_values['mother_weight']:
+                                        emit_field_change(
+                                            event_type=EventType.CURRENT_WEIGHT_RECORDED,
+                                            animal_id=mother_animal_id,
+                                            animal_number=mother,
+                                            company_id=company_id,
+                                            user_id=created_by_or_key,
+                                            field_name='current_weight',
+                                            old_value=old_values['mother_weight'],
+                                            new_value=mother_weight,
+                                            notes=f"Updated via calf {animal}",
+                                        )
+                                        # Project snapshot for mother after event emission
+                                        project_animal_snapshot(mother_animal_id, company_id)
+                        except Exception as e:
+                            import logging
+                            logging.warning(f"Failed to emit event for mother {mother}: {e}")
                     
                     # Project snapshot
                     project_animal_snapshot(animal_id, company_id)
@@ -609,6 +997,170 @@ def find_and_update_registration(created_by_or_key: str, body, company_id: int |
     except Exception as e:
         print(f"Error in find_and_update_registration: {e}")
         return False
+
+def update_animal_by_number(
+    created_by_or_key: str,
+    body,
+    company_id: int
+) -> None:
+    """Update an animal that only exists in domain_events (e.g., mothers/fathers).
+    This function emits update events and projects snapshots, but does NOT create registration records.
+    """
+    if not company_id:
+        raise HTTPException(status_code=403, detail="Company assignment required")
+    
+    if not body.animalNumber:
+        raise HTTPException(status_code=400, detail="animalNumber required")
+    
+    animal_number = _normalize_text(body.animalNumber)
+    
+    # Check if animal has domain events
+    existing_events = get_events_for_animal_by_number(animal_number, company_id)
+    if len(existing_events) == 0:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Animal {animal_number} not found in domain events. Cannot update animals that don't exist."
+        )
+    
+    # Get old values from most recent event or snapshot
+    # Try to get from snapshot first
+    from .snapshot_projector import get_snapshot_by_number
+    snapshot = get_snapshot_by_number(animal_number, company_id)
+    
+    old_values = {
+        'current_weight': snapshot.get('current_weight') if snapshot else None,
+        'notes': snapshot.get('notes') if snapshot else None,
+        'status': snapshot.get('current_status') if snapshot else None,
+        'color': snapshot.get('color') if snapshot else None,
+        'rp_animal': snapshot.get('rp_animal') if snapshot else None,
+        'notes_mother': snapshot.get('notes_mother') if snapshot else None,
+    }
+    
+    # If snapshot doesn't have values, try to get from most recent event
+    if not snapshot:
+        for event in reversed(existing_events):
+            if event.get('payload'):
+                payload = event['payload'] if isinstance(event['payload'], dict) else json.loads(event['payload'])
+                if old_values['current_weight'] is None and payload.get('current_weight') is not None:
+                    old_values['current_weight'] = payload.get('current_weight')
+                if old_values['notes'] is None and payload.get('notes') is not None:
+                    old_values['notes'] = payload.get('notes')
+                if old_values['status'] is None and payload.get('status') is not None:
+                    old_values['status'] = payload.get('status')
+                if old_values['color'] is None and payload.get('color') is not None:
+                    old_values['color'] = payload.get('color')
+                if old_values['rp_animal'] is None and payload.get('rp_animal') is not None:
+                    old_values['rp_animal'] = payload.get('rp_animal')
+                if old_values['notes_mother'] is None and payload.get('notes_mother') is not None:
+                    old_values['notes_mother'] = payload.get('notes_mother')
+    
+    # Normalize new values
+    new_current_weight = None
+    if body.currentWeight is not None:
+        try:
+            new_current_weight = float(body.currentWeight)
+            if not (0 <= new_current_weight <= 10000):
+                raise HTTPException(status_code=400, detail="Current weight must be between 0 and 10000 kg")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid current weight value")
+    
+    new_notes = _normalize_text(body.notes)
+    new_status = _normalize_text(body.status)
+    new_color = _normalize_text(body.color)
+    new_rp_animal = _normalize_text(body.rpAnimal)
+    new_notes_mother = _normalize_text(body.notesMother)
+    
+    # Validate status if provided
+    if new_status and new_status not in VALID_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}")
+    
+    # Emit update events for changed fields (with animal_id=None for mothers/fathers)
+    animal_id = None  # Mothers/fathers don't have registration records, so animal_id is None
+    
+    # Track if any events were emitted
+    events_emitted = False
+    
+    if new_current_weight is not None and new_current_weight != old_values['current_weight']:
+        emit_field_change(
+            event_type=EventType.CURRENT_WEIGHT_RECORDED,
+            animal_id=animal_id,
+            animal_number=animal_number,
+            company_id=company_id,
+            user_id=created_by_or_key,
+            field_name='current_weight',
+            old_value=str(old_values['current_weight']) if old_values['current_weight'] is not None else None,
+            new_value=str(new_current_weight),
+        )
+        events_emitted = True
+    
+    if new_notes and new_notes != old_values['notes']:
+        emit_field_change(
+            event_type=EventType.NOTES_UPDATED,
+            animal_id=animal_id,
+            animal_number=animal_number,
+            company_id=company_id,
+            user_id=created_by_or_key,
+            field_name='notes',
+            old_value=old_values['notes'],
+            new_value=new_notes,
+        )
+        events_emitted = True
+    
+    if new_status and new_status != old_values['status']:
+        emit_field_change(
+            event_type=EventType.STATUS_CHANGED,
+            animal_id=animal_id,
+            animal_number=animal_number,
+            company_id=company_id,
+            user_id=created_by_or_key,
+            field_name='status',
+            old_value=old_values['status'],
+            new_value=new_status,
+        )
+        events_emitted = True
+    
+    if new_color and new_color != old_values['color']:
+        emit_field_change(
+            event_type=EventType.COLOR_RECORDED,
+            animal_id=animal_id,
+            animal_number=animal_number,
+            company_id=company_id,
+            user_id=created_by_or_key,
+            field_name='color',
+            old_value=old_values['color'],
+            new_value=new_color,
+        )
+        events_emitted = True
+    
+    if new_rp_animal and new_rp_animal != old_values['rp_animal']:
+        emit_field_change(
+            event_type=EventType.RP_ANIMAL_UPDATED,
+            animal_id=animal_id,
+            animal_number=animal_number,
+            company_id=company_id,
+            user_id=created_by_or_key,
+            field_name='rp_animal',
+            old_value=old_values['rp_animal'],
+            new_value=new_rp_animal,
+        )
+        events_emitted = True
+    
+    if new_notes_mother and new_notes_mother != old_values['notes_mother']:
+        emit_field_change(
+            event_type=EventType.MOTHER_NOTES_UPDATED,
+            animal_id=animal_id,
+            animal_number=animal_number,
+            company_id=company_id,
+            user_id=created_by_or_key,
+            field_name='notes_mother',
+            old_value=old_values['notes_mother'],
+            new_value=new_notes_mother,
+        )
+        events_emitted = True
+    
+    # Project snapshot by animal_number after all events (incremental projection will process all new events)
+    if events_emitted:
+        project_animal_snapshot_by_number(animal_number, company_id)
 
 def export_rows(created_by_or_key: str, date: str | None, start: str | None, end: str | None) -> list[dict]:
     where = ["((created_by = ?) OR (user_key = ?))"]

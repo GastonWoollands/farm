@@ -15,7 +15,8 @@ import {
   Clock,
   Users,
   Weight,
-  Calendar
+  Calendar,
+  History
 } from 'lucide-react'
 import { formatDate, getGenderName, getStatusName } from '@/lib/utils'
 import { Animal, apiService, UpdateBody, InseminationRound } from '@/services/api'
@@ -24,9 +25,10 @@ interface SearchPageProps {
   animals: Animal[]
   onAnimalsChange: (animals: Animal[]) => void
   initialSearchTerm?: string
+  onNavigateToHistory?: (animalNumber: string) => void
 }
 
-export function SearchPage({ animals, onAnimalsChange, initialSearchTerm }: SearchPageProps) {
+export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavigateToHistory }: SearchPageProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filters, setFilters] = useState({
     gender: '',
@@ -707,6 +709,16 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm }: Sear
                     </div>
 
                     <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t">
+                      {onNavigateToHistory && (
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => onNavigateToHistory(animal.animal_number)}
+                          title="Ver historia clínica"
+                        >
+                          <History className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => handleEdit(animal)} disabled={isLoading}>
                         <Edit className="h-4 w-4" />
                       </Button>

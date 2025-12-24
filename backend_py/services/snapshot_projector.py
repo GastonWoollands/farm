@@ -13,6 +13,7 @@ Key principles:
 
 import json
 import logging
+import sqlite3
 from datetime import datetime
 from typing import Dict, Optional, Any, List, Callable
 from ..db import conn
@@ -64,6 +65,14 @@ def _handle_weight_recorded(snapshot: Dict[str, Any], payload: Dict[str, Any]) -
     return {
         **snapshot,
         'current_weight': payload.get('new_value') or payload.get('weight'),
+    }
+
+
+def _handle_current_weight_recorded(snapshot: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply current_weight_recorded event to snapshot."""
+    return {
+        **snapshot,
+        'current_weight': float(payload.get('new_value')) if payload.get('new_value') else payload.get('current_weight'),
     }
 
 
@@ -220,11 +229,40 @@ def _handle_animal_deleted(snapshot: Dict[str, Any], payload: Dict[str, Any]) ->
     }
 
 
+def _handle_mother_registered(snapshot: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply mother_registered event to snapshot."""
+    return {
+        **snapshot,
+        'current_status': payload.get('status') or 'ALIVE',
+        'gender': payload.get('gender') or 'FEMALE',
+        'current_weight': payload.get('current_weight'),
+        'color': payload.get('color'),
+        'notes': payload.get('notes'),
+        'rp_animal': payload.get('rp_animal'),
+    }
+
+
+def _handle_father_registered(snapshot: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply father_registered event to snapshot."""
+    return {
+        **snapshot,
+        'current_status': payload.get('status') or 'ALIVE',
+        'gender': payload.get('gender') or 'MALE',
+        'current_weight': payload.get('current_weight'),
+        'color': payload.get('color'),
+        'notes': payload.get('notes'),
+        'rp_animal': payload.get('rp_animal'),
+    }
+
+
 # Event handler registry
 EVENT_HANDLERS: Dict[str, Callable[[Dict[str, Any], Dict[str, Any]], Dict[str, Any]]] = {
     EventType.BIRTH_REGISTERED.value: _handle_birth_registered,
+    EventType.MOTHER_REGISTERED.value: _handle_mother_registered,
+    EventType.FATHER_REGISTERED.value: _handle_father_registered,
     EventType.DEATH_RECORDED.value: _handle_death_recorded,
     EventType.WEIGHT_RECORDED.value: _handle_weight_recorded,
+    EventType.CURRENT_WEIGHT_RECORDED.value: _handle_current_weight_recorded,
     EventType.WEANING_WEIGHT_RECORDED.value: _handle_weaning_weight_recorded,
     EventType.MOTHER_ASSIGNED.value: _handle_mother_assigned,
     EventType.FATHER_ASSIGNED.value: _handle_father_assigned,
@@ -390,9 +428,62 @@ def upsert_snapshot(animal_id: int, snapshot: Dict[str, Any]) -> None:
     conn.commit()
 
 
-def project_animal_snapshot(animal_id: int, company_id: int) -> Dict[str, Any]:
+def _upsert_snapshot_direct(animal_id: int, snapshot: Dict[str, Any]) -> None:
     """
-    Rebuild snapshot for a single animal from its events.
+    Insert or update snapshot directly, bypassing foreign key constraints.
+    Used for animals without registration records (e.g., mothers/fathers).
+    """
+    now = datetime.utcnow().isoformat()
+    
+    # Use INSERT OR REPLACE to handle conflicts
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO animal_snapshots (
+            animal_id, animal_number, company_id, birth_date, mother_id, father_id,
+            current_status, current_weight, weaning_weight, gender, color, death_date,
+            last_insemination_date, insemination_count, notes, notes_mother,
+            rp_animal, rp_mother, mother_weight, scrotal_circumference,
+            insemination_round_id, insemination_identifier,
+            last_event_id, last_event_time, snapshot_version, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            animal_id,
+            snapshot.get('animal_number'),
+            snapshot.get('company_id'),
+            snapshot.get('birth_date'),
+            snapshot.get('mother_id'),
+            snapshot.get('father_id'),
+            snapshot.get('current_status'),
+            snapshot.get('current_weight'),
+            snapshot.get('weaning_weight'),
+            snapshot.get('gender'),
+            snapshot.get('color'),
+            snapshot.get('death_date'),
+            snapshot.get('last_insemination_date'),
+            snapshot.get('insemination_count') or 0,
+            snapshot.get('notes'),
+            snapshot.get('notes_mother'),
+            snapshot.get('rp_animal'),
+            snapshot.get('rp_mother'),
+            snapshot.get('mother_weight'),
+            snapshot.get('scrotal_circumference'),
+            snapshot.get('insemination_round_id'),
+            snapshot.get('insemination_identifier'),
+            snapshot.get('last_event_id'),
+            snapshot.get('last_event_time'),
+            snapshot.get('snapshot_version') or 1,
+            now,
+        )
+    )
+    conn.commit()
+
+
+def project_animal_snapshot_incremental(animal_id: int, company_id: int) -> Dict[str, Any]:
+    """
+    Incrementally update snapshot by only processing events after last_event_time.
+    More efficient than full rebuild for regular updates.
     
     Args:
         animal_id: The animal ID to project
@@ -401,17 +492,36 @@ def project_animal_snapshot(animal_id: int, company_id: int) -> Dict[str, Any]:
     Returns:
         The computed and saved snapshot
     """
-    # Get all events for this animal
-    cursor = conn.execute(
-        """
-        SELECT id, event_id, animal_id, animal_number, event_type, event_version,
-               payload, metadata, company_id, user_id, event_time, created_at
-        FROM domain_events
-        WHERE animal_id = ? AND company_id = ?
-        ORDER BY event_time ASC, id ASC
-        """,
-        (animal_id, company_id)
-    )
+    # Get current snapshot to find last_event_time
+    current_snapshot = get_snapshot(animal_id, company_id)
+    last_event_time = current_snapshot.get('last_event_time') if current_snapshot else None
+    last_event_id = current_snapshot.get('last_event_id', 0) if current_snapshot else 0
+    
+    if last_event_time:
+        # Incremental: Only fetch events after last snapshot update
+        cursor = conn.execute(
+            """
+            SELECT id, event_id, animal_id, animal_number, event_type, event_version,
+                   payload, metadata, company_id, user_id, event_time, created_at
+            FROM domain_events
+            WHERE animal_id = ? AND company_id = ? 
+            AND (event_time > ? OR (event_time = ? AND id > ?))
+            ORDER BY event_time ASC, id ASC
+            """,
+            (animal_id, company_id, last_event_time, last_event_time, last_event_id)
+        )
+    else:
+        # Full rebuild: Fetch all events (no snapshot exists yet)
+        cursor = conn.execute(
+            """
+            SELECT id, event_id, animal_id, animal_number, event_type, event_version,
+                   payload, metadata, company_id, user_id, event_time, created_at
+            FROM domain_events
+            WHERE animal_id = ? AND company_id = ?
+            ORDER BY event_time ASC, id ASC
+            """,
+            (animal_id, company_id)
+        )
     
     events = [
         {
@@ -432,15 +542,49 @@ def project_animal_snapshot(animal_id: int, company_id: int) -> Dict[str, Any]:
     ]
     
     if not events:
-        logger.warning(f"No events found for animal_id={animal_id}, company_id={company_id}")
-        return {}
+        if current_snapshot:
+            # No new events, return existing snapshot
+            return current_snapshot
+        else:
+            logger.warning(f"No events found for animal_id={animal_id}, company_id={company_id}")
+            return {}
     
-    # Build and save snapshot
-    snapshot = build_snapshot_from_events(events)
+    # Build snapshot: start from current snapshot state or empty
+    if current_snapshot:
+        # Start from current snapshot and apply new events
+        snapshot = current_snapshot.copy()
+        # Apply new events to snapshot
+        for event in events:
+            handler = EVENT_HANDLERS.get(event['event_type'])
+            if handler:
+                snapshot = handler(snapshot, event['payload'])
+            snapshot['last_event_id'] = event['id']
+            snapshot['last_event_time'] = event['event_time']
+    else:
+        # No snapshot exists, build from all events
+        snapshot = build_snapshot_from_events(events)
+    
+    # Upsert updated snapshot
     upsert_snapshot(animal_id, snapshot)
     
-    logger.info(f"Projected snapshot for animal_id={animal_id}")
+    logger.info(f"Projected snapshot incrementally for animal_id={animal_id} ({len(events)} new events)")
     return snapshot
+
+
+def project_animal_snapshot(animal_id: int, company_id: int) -> Dict[str, Any]:
+    """
+    Rebuild snapshot for a single animal from its events.
+    Uses incremental projection if snapshot exists, otherwise full rebuild.
+    
+    Args:
+        animal_id: The animal ID to project
+        company_id: The company ID for data isolation
+    
+    Returns:
+        The computed and saved snapshot
+    """
+    # Use incremental projection for efficiency
+    return project_animal_snapshot_incremental(animal_id, company_id)
 
 
 def project_company_snapshots(company_id: int) -> int:
@@ -550,6 +694,185 @@ def process_pending_events(batch_size: int = 100) -> int:
         logger.info(f"Processed pending events for {count} animals")
     
     return count
+
+
+def get_snapshot_by_number(animal_number: str, company_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Get the current snapshot for an animal by animal_number.
+    Used for animals that don't have registration records (e.g., mothers/fathers).
+    
+    Args:
+        animal_number: The animal number
+        company_id: The company ID for data isolation
+    
+    Returns:
+        The snapshot dictionary or None if not found
+    """
+    cursor = conn.execute(
+        """
+        SELECT animal_id, animal_number, company_id, birth_date, mother_id, father_id,
+               current_status, current_weight, weaning_weight, gender, color, death_date,
+               last_insemination_date, insemination_count, notes, notes_mother,
+               rp_animal, rp_mother, mother_weight, scrotal_circumference,
+               insemination_round_id, insemination_identifier,
+               last_event_id, last_event_time, snapshot_version, updated_at
+        FROM animal_snapshots
+        WHERE animal_number = ? AND company_id = ?
+        """,
+        (animal_number, company_id)
+    )
+    
+    row = cursor.fetchone()
+    if not row:
+        return None
+    
+    return {
+        "animal_id": row[0],
+        "animal_number": row[1],
+        "company_id": row[2],
+        "birth_date": row[3],
+        "mother_id": row[4],
+        "father_id": row[5],
+        "current_status": row[6],
+        "current_weight": row[7],
+        "weaning_weight": row[8],
+        "gender": row[9],
+        "color": row[10],
+        "death_date": row[11],
+        "last_insemination_date": row[12],
+        "insemination_count": row[13],
+        "notes": row[14],
+        "notes_mother": row[15],
+        "rp_animal": row[16],
+        "rp_mother": row[17],
+        "mother_weight": row[18],
+        "scrotal_circumference": row[19],
+        "insemination_round_id": row[20],
+        "insemination_identifier": row[21],
+        "last_event_id": row[22],
+        "last_event_time": row[23],
+        "snapshot_version": row[24],
+        "updated_at": row[25],
+    }
+
+
+def project_animal_snapshot_by_number_incremental(animal_number: str, company_id: int) -> Dict[str, Any]:
+    """
+    Incrementally update snapshot by animal_number (for mothers/fathers without animal_id).
+    Filters events by last_event_time for efficiency.
+    
+    Args:
+        animal_number: The animal number to project
+        company_id: The company ID for data isolation
+    
+    Returns:
+        The computed and saved snapshot
+    """
+    # Get current snapshot to find last_event_time
+    current_snapshot = get_snapshot_by_number(animal_number, company_id)
+    last_event_time = current_snapshot.get('last_event_time') if current_snapshot else None
+    last_event_id = current_snapshot.get('last_event_id', 0) if current_snapshot else 0
+    
+    if last_event_time:
+        # Incremental: Only fetch events after last snapshot update
+        cursor = conn.execute(
+            """
+            SELECT id, event_id, animal_id, animal_number, event_type, event_version,
+                   payload, metadata, company_id, user_id, event_time, created_at
+            FROM domain_events
+            WHERE animal_number = ? AND company_id = ? 
+            AND (event_time > ? OR (event_time = ? AND id > ?))
+            ORDER BY event_time ASC, id ASC
+            """,
+            (animal_number, company_id, last_event_time, last_event_time, last_event_id)
+        )
+    else:
+        # Full rebuild: Fetch all events (no snapshot exists yet)
+        cursor = conn.execute(
+            """
+            SELECT id, event_id, animal_id, animal_number, event_type, event_version,
+                   payload, metadata, company_id, user_id, event_time, created_at
+            FROM domain_events
+            WHERE animal_number = ? AND company_id = ?
+            ORDER BY event_time ASC, id ASC
+            """,
+            (animal_number, company_id)
+        )
+    
+    events = [
+        {
+            "id": row[0],
+            "event_id": row[1],
+            "animal_id": row[2],
+            "animal_number": row[3],
+            "event_type": row[4],
+            "event_version": row[5],
+            "payload": json.loads(row[6]) if row[6] else {},
+            "metadata": json.loads(row[7]) if row[7] else {},
+            "company_id": row[8],
+            "user_id": row[9],
+            "event_time": row[10],
+            "created_at": row[11],
+        }
+        for row in cursor.fetchall()
+    ]
+    
+    if not events:
+        if current_snapshot:
+            # No new events, return existing snapshot
+            return current_snapshot
+        else:
+            logger.warning(f"No events found for animal_number={animal_number}, company_id={company_id}")
+            return {}
+    
+    # Build snapshot from events
+    if current_snapshot:
+        # Start from current snapshot and apply new events
+        snapshot = current_snapshot.copy()
+        for event in events:
+            handler = EVENT_HANDLERS.get(event['event_type'])
+            if handler:
+                snapshot = handler(snapshot, event['payload'])
+            snapshot['last_event_id'] = event['id']
+            snapshot['last_event_time'] = event['event_time']
+    else:
+        # No snapshot exists, build from all events
+        snapshot = build_snapshot_from_events(events)
+    
+    # Get animal_id from snapshot (may be NULL for mothers)
+    animal_id = snapshot.get('animal_id')
+    
+    if animal_id is None:
+        # For mothers/fathers without registration, use a hash-based negative ID
+        import hashlib
+        hash_str = f"{animal_number}_{company_id}".encode()
+        hash_int = int(hashlib.md5(hash_str).hexdigest()[:8], 16)
+        # Use negative ID to avoid conflicts (real IDs start from 1)
+        # Keep within int range and ensure it's negative
+        animal_id = -abs(hash_int % (2**30))  # Use 2^30 to ensure negative fits in int
+        snapshot['animal_id'] = animal_id
+    
+    # Upsert snapshot
+    _upsert_snapshot_direct(animal_id, snapshot)
+    
+    logger.info(f"Projected snapshot incrementally for animal_number={animal_number} ({len(events)} new events, animal_id={animal_id})")
+    return snapshot
+
+
+def project_animal_snapshot_by_number(animal_number: str, company_id: int) -> Dict[str, Any]:
+    """
+    Rebuild snapshot for an animal identified by animal_number (e.g., mothers without registration).
+    Uses incremental projection if snapshot exists, otherwise full rebuild.
+    
+    Args:
+        animal_number: The animal number to project
+        company_id: The company ID for data isolation
+    
+    Returns:
+        The computed and saved snapshot
+    """
+    # Use incremental projection for efficiency
+    return project_animal_snapshot_by_number_incremental(animal_number, company_id)
 
 
 def get_snapshot(animal_id: int, company_id: int) -> Optional[Dict[str, Any]]:

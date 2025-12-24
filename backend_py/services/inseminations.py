@@ -10,6 +10,7 @@ from .event_emitter import (
     emit_insemination_cancelled,
     emit_field_change,
 )
+from .snapshot_projector import project_animal_snapshot_by_number, project_animal_snapshot
 from ..events.event_types import EventType
 
 def _normalize_text(value: str | None) -> str | None:
@@ -123,6 +124,54 @@ def insert_insemination(created_by: str, body: InseminationBody, company_id: int
             # Emit domain event (Event Sourcing)
             if company_id:
                 try:
+                    # Check if mother already has events
+                    from .event_emitter import ensure_animal_has_events, get_events_for_animal_by_number
+                    from .snapshot_projector import get_snapshot_by_number
+                    
+                    mother_events = get_events_for_animal_by_number(mother_id, company_id)
+                    snapshot_projected = False
+                    
+                    if len(mother_events) > 0:
+                        # Mother has events - update values from snapshot
+                        mother_snapshot = get_snapshot_by_number(mother_id, company_id)
+                        
+                        if mother_snapshot:
+                            old_rp_animal = mother_snapshot.get('rp_animal')
+                            mother_animal_id = mother_snapshot.get('animal_id')
+                            
+                            # Emit RP_ANIMAL_UPDATED if mother_visual_id is different
+                            if mother_visual_id and mother_visual_id != old_rp_animal:
+                                emit_field_change(
+                                    event_type=EventType.RP_ANIMAL_UPDATED,
+                                    animal_id=mother_animal_id,  # Can be None
+                                    animal_number=mother_id,
+                                    company_id=company_id,
+                                    user_id=created_by,
+                                    field_name='rp_animal',
+                                    old_value=old_rp_animal or None,
+                                    new_value=mother_visual_id,
+                                    notes=f"Actualizado desde inseminación",
+                                )
+                                # Project snapshot after update event
+                                if mother_animal_id:
+                                    project_animal_snapshot(mother_animal_id, company_id)
+                                else:
+                                    project_animal_snapshot_by_number(mother_id, company_id)
+                                snapshot_projected = True
+                    else:
+                        # Mother has no events - create them
+                        ensure_animal_has_events(
+                            animal_number=mother_id,
+                            company_id=company_id,
+                            user_id=created_by,
+                            gender='FEMALE',
+                            status='ALIVE',
+                            rp_animal=mother_visual_id,
+                        )
+                        project_animal_snapshot_by_number(mother_id, company_id)
+                        snapshot_projected = True
+                    
+                    # Emit insemination event
                     emit_insemination_recorded(
                         animal_number=mother_id,  # mother_id serves as animal identifier
                         company_id=company_id,
@@ -137,6 +186,10 @@ def insert_insemination(created_by: str, body: InseminationBody, company_id: int
                         animal_type=animal_type,
                         notes=notes,
                     )
+                    
+                    # Project snapshot after insemination event (if not already projected)
+                    if not snapshot_projected:
+                        project_animal_snapshot_by_number(mother_id, company_id)
                 except Exception as e:
                     logging.warning(f"Failed to emit insemination event for {mother_id}: {e}")
             
@@ -260,6 +313,10 @@ def update_insemination(created_by: str, insemination_id: int, body: UpdateInsem
                             new_value=notes,
                             notes=notes,
                         )
+                    
+                    # Project snapshot for mother after all update events
+                    if old_insemination_date != insemination_date or old_bull_id != bull_id or old_notes != notes:
+                        project_animal_snapshot_by_number(mother_id, record_company_id)
                 except Exception as e:
                     logging.warning(f"Failed to emit insemination update events: {e}")
                     
@@ -309,6 +366,8 @@ def delete_insemination(created_by: str, insemination_id: int, company_id: int =
                         reason="User requested deletion",
                         previous_bull_id=bull_id,
                     )
+                    # Project snapshot for mother after cancellation event
+                    project_animal_snapshot_by_number(mother_id, record_company_id)
                 except Exception as e:
                     logging.warning(f"Failed to emit insemination_cancelled event: {e}")
             

@@ -114,6 +114,70 @@ def emit_event(
         raise
 
 
+def emit_mother_registered(
+    animal_id: int | None,
+    animal_number: str,
+    company_id: int,
+    user_id: str,
+    current_weight: Optional[float] = None,
+    status: str = 'ALIVE',
+    color: Optional[str] = None,
+    notes: Optional[str] = None,
+    rp_animal: Optional[str] = None,
+) -> int:
+    """Emit a mother_registered event when a mother is first registered."""
+    payload = {
+        "animal_number": animal_number,
+        "current_weight": current_weight,
+        "gender": "FEMALE",
+        "status": status or "ALIVE",
+        "color": color,
+        "notes": notes,
+        "rp_animal": rp_animal,
+    }
+    
+    return emit_event(
+        event_type=EventType.MOTHER_REGISTERED,
+        animal_id=animal_id,
+        animal_number=animal_number,
+        company_id=company_id,
+        user_id=user_id,
+        payload=payload,
+    )
+
+
+def emit_father_registered(
+    animal_id: int | None,
+    animal_number: str,
+    company_id: int,
+    user_id: str,
+    current_weight: Optional[float] = None,
+    status: str = 'ALIVE',
+    color: Optional[str] = None,
+    notes: Optional[str] = None,
+    rp_animal: Optional[str] = None,
+) -> int:
+    """Emit a father_registered event when a father is first registered."""
+    payload = {
+        "animal_number": animal_number,
+        "current_weight": current_weight,
+        "gender": "MALE",
+        "status": status or "ALIVE",
+        "color": color,
+        "notes": notes,
+        "rp_animal": rp_animal,
+    }
+    
+    return emit_event(
+        event_type=EventType.FATHER_REGISTERED,
+        animal_id=animal_id,
+        animal_number=animal_number,
+        company_id=company_id,
+        user_id=user_id,
+        payload=payload,
+    )
+
+
 def emit_birth_registered(
     animal_id: int,
     animal_number: str,
@@ -121,6 +185,7 @@ def emit_birth_registered(
     user_id: str,
     born_date: Optional[str] = None,
     weight: Optional[float] = None,
+    current_weight: Optional[float] = None,
     gender: Optional[str] = None,
     status: Optional[str] = None,
     color: Optional[str] = None,
@@ -141,6 +206,7 @@ def emit_birth_registered(
         "animal_number": animal_number,
         "born_date": born_date,
         "weight": weight,
+        "current_weight": current_weight,
         "gender": gender,
         "status": status or "ALIVE",
         "color": color,
@@ -197,7 +263,7 @@ def emit_death_recorded(
 
 def emit_field_change(
     event_type: EventType,
-    animal_id: int,
+    animal_id: int | None,
     animal_number: str,
     company_id: int,
     user_id: str,
@@ -222,6 +288,137 @@ def emit_field_change(
         user_id=user_id,
         payload=payload,
     )
+
+
+def ensure_animal_has_events(
+    animal_number: str,
+    company_id: int,
+    user_id: str,
+    gender: Optional[str] = None,
+    weight: Optional[float] = None,
+    current_weight: Optional[float] = None,
+    status: str = 'ALIVE',
+    color: Optional[str] = None,
+    notes: Optional[str] = None,
+    rp_animal: Optional[str] = None,
+) -> bool:
+    """
+    Check if an animal has domain events. If not, create a birth_registered event.
+    This makes mothers/fathers first-class animals in the event sourcing system.
+    
+    Args:
+        animal_number: The animal number to check/create
+        company_id: Company ID for multi-tenancy
+        user_id: User ID who triggered this
+        gender: Gender (FEMALE for mothers, MALE for fathers)
+        weight: Birth weight (if available)
+        current_weight: Current weight (if available)
+        status: Status (defaults to ALIVE)
+        color: Color (if available)
+        notes: Notes (if available)
+        rp_animal: RP animal (if available)
+    
+    Returns:
+        True if events were created, False if animal already had events
+    """
+    if not animal_number or not animal_number.strip():
+        return False
+    
+    try:
+        # Check if animal has any domain events
+        cursor = conn.execute(
+            """
+            SELECT COUNT(*) FROM domain_events 
+            WHERE animal_number = ? AND company_id = ?
+            """,
+            (animal_number.strip().upper(), company_id)
+        )
+        count = cursor.fetchone()[0]
+        
+        if count > 0:
+            # Animal already has events
+            return False
+        
+        # Animal has no events, create a birth_registered event
+        # Try to find existing registration to get animal_id
+        cursor = conn.execute(
+            """
+            SELECT id FROM registrations 
+            WHERE animal_number = ? AND company_id = ?
+            LIMIT 1
+            """,
+            (animal_number.strip().upper(), company_id)
+        )
+        registration = cursor.fetchone()
+        
+        animal_id = registration[0] if registration else None
+        
+        # Determine gender - default to FEMALE if not specified
+        actual_gender = gender or 'FEMALE'
+        
+        # Emit appropriate event based on gender
+        if actual_gender == 'FEMALE':
+            emit_mother_registered(
+                animal_id=animal_id,
+                animal_number=animal_number.strip().upper(),
+                company_id=company_id,
+                user_id=user_id,
+                current_weight=current_weight,
+                status=status,
+                color=color,
+                notes=notes,
+                rp_animal=rp_animal,
+            )
+        elif actual_gender == 'MALE':
+            emit_father_registered(
+                animal_id=animal_id,
+                animal_number=animal_number.strip().upper(),
+                company_id=company_id,
+                user_id=user_id,
+                current_weight=current_weight,
+                status=status,
+                color=color,
+                notes=notes,
+                rp_animal=rp_animal,
+            )
+        else:
+            # Fallback to birth_registered for unknown gender
+            emit_birth_registered(
+                animal_id=animal_id,
+                animal_number=animal_number.strip().upper(),
+                company_id=company_id,
+                user_id=user_id,
+                born_date=None,
+                weight=weight,
+                current_weight=current_weight,
+                gender=actual_gender,
+                status=status,
+                color=color,
+                mother_id=None,
+                father_id=None,
+                notes=notes,
+                notes_mother=None,
+                rp_animal=rp_animal,
+                rp_mother=None,
+                mother_weight=None,
+                weaning_weight=None,
+                scrotal_circumference=None,
+                insemination_round_id=None,
+                insemination_identifier=None,
+            )
+        
+        # Project snapshot if we have an animal_id
+        if animal_id:
+            try:
+                from .snapshot_projector import project_animal_snapshot
+                project_animal_snapshot(animal_id, company_id)
+            except Exception as e:
+                logger.warning(f"Failed to project snapshot for animal {animal_id}: {e}")
+        
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to ensure events for animal {animal_number}: {e}")
+        return False
 
 
 def emit_insemination_recorded(

@@ -10,6 +10,7 @@ from typing import Optional
 from ..services.snapshot_projector import (
     get_snapshot,
     get_snapshots_for_company,
+    get_snapshot_by_number,
 )
 from ..services.auth_service import authenticate_user
 
@@ -75,6 +76,32 @@ def get_animal_snapshot(
         raise HTTPException(status_code=400, detail="Company assignment required")
     
     snapshot = get_snapshot(animal_id=animal_id, company_id=company_id)
+    
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Animal snapshot not found")
+    
+    return snapshot
+
+
+@router.get("/snapshots/by-number/{animal_number}")
+def get_animal_snapshot_by_number(
+    animal_number: str,
+    request: Request,
+):
+    """
+    Get snapshot for an animal by animal_number (works for mothers/fathers without registration).
+    
+    Returns the derived state of the animal based on all events.
+    Useful for looking up snapshots when you have the animal_number but not the ID.
+    """
+    user, company_id = authenticate_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    if not company_id:
+        raise HTTPException(status_code=400, detail="Company assignment required")
+    
+    snapshot = get_snapshot_by_number(animal_number=animal_number.upper(), company_id=company_id)
     
     if not snapshot:
         raise HTTPException(status_code=404, detail="Animal snapshot not found")

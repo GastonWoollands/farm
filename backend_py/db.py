@@ -867,6 +867,7 @@ def migrate_add_registration_fields():
         _add_column_safely("registrations", "rp_animal", "TEXT")
         _add_column_safely("registrations", "rp_mother", "TEXT")
         _add_column_safely("registrations", "mother_weight", "REAL")
+        _add_column_safely("registrations", "current_weight", "REAL")
         # Death date for animals (used when status = DEAD)
         _add_column_safely("registrations", "death_date", "TEXT")
         

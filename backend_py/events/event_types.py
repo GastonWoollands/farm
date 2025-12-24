@@ -28,6 +28,8 @@ class EventType(str, Enum):
     
     # Birth/Creation
     BIRTH_REGISTERED = "birth_registered"
+    MOTHER_REGISTERED = "mother_registered"
+    FATHER_REGISTERED = "father_registered"
     
     # Death
     DEATH_RECORDED = "death_recorded"
@@ -35,6 +37,7 @@ class EventType(str, Enum):
     # Weight changes
     WEIGHT_RECORDED = "weight_recorded"
     WEANING_WEIGHT_RECORDED = "weaning_weight_recorded"
+    CURRENT_WEIGHT_RECORDED = "current_weight_recorded"
     
     # Parentage
     MOTHER_ASSIGNED = "mother_assigned"
@@ -83,9 +86,12 @@ class EventType(str, Enum):
 # Event type groupings for validation and filtering
 REGISTRATION_EVENTS: List[EventType] = [
     EventType.BIRTH_REGISTERED,
+    EventType.MOTHER_REGISTERED,
+    EventType.FATHER_REGISTERED,
     EventType.DEATH_RECORDED,
     EventType.WEIGHT_RECORDED,
     EventType.WEANING_WEIGHT_RECORDED,
+    EventType.CURRENT_WEIGHT_RECORDED,
     EventType.MOTHER_ASSIGNED,
     EventType.FATHER_ASSIGNED,
     EventType.STATUS_CHANGED,
@@ -128,6 +134,7 @@ OLD_TO_NEW_EVENT_MAP: Dict[str, EventType] = {
 CORRECTION_FIELD_MAP: Dict[str, EventType] = {
     'weight': EventType.WEIGHT_RECORDED,
     'weaning_weight': EventType.WEANING_WEIGHT_RECORDED,
+    'current_weight': EventType.CURRENT_WEIGHT_RECORDED,
     'mother_id': EventType.MOTHER_ASSIGNED,
     'father_id': EventType.FATHER_ASSIGNED,
     'status': EventType.STATUS_CHANGED,
@@ -168,6 +175,7 @@ class BirthRegisteredPayload(EventPayload):
     animal_number: str
     born_date: Optional[str] = None
     weight: Optional[float] = None
+    current_weight: Optional[float] = None
     gender: Optional[str] = None
     status: Optional[str] = None
     color: Optional[str] = None

@@ -2,10 +2,11 @@ from fastapi import APIRouter, Header, HTTPException, Response, Request, UploadF
 import csv
 import io
 from ..config import VALID_KEYS, ADMIN_SECRET
-from ..models import RegisterBody, DeleteBody, UpdateBody
+from ..models import RegisterBody, DeleteBody, UpdateBody, UpdateAnimalByNumberBody
 from ..services.registrations import (
     insert_registration, delete_registration as svc_delete, update_registration, export_rows,
-    get_registrations_multi_tenant, export_rows_multi_tenant, get_registration_stats_multi_tenant
+    get_registrations_multi_tenant, export_rows_multi_tenant, get_registration_stats_multi_tenant,
+    update_animal_by_number
 )
 from ..services.firebase_auth import verify_bearer_id_token
 from ..services.auth_service import authenticate_user
@@ -29,6 +30,38 @@ def register(body: RegisterBody, request: Request, x_user_key: str | None = Head
         # Legacy users have no company (company_id = None)
         record_id = insert_registration(x_user_key, body, None)
         return {"ok": True, "id": record_id}
+
+@router.put("/register/update-by-number")
+def update_animal_by_number_endpoint(body: UpdateAnimalByNumberBody, request: Request, x_user_key: str | None = Header(default=None)):
+    """Update an animal by animal_number only. Used for mothers/fathers that don't have registration records."""
+    # Try new authentication first (creates user automatically)
+    user, company_id = authenticate_user(request)
+    if user:
+        user_id = user.get('firebase_uid')
+    else:
+        # Fallback to legacy key if token missing
+        if not x_user_key or x_user_key not in VALID_KEYS:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        # Block legacy users without company_id from updating records
+        raise HTTPException(
+            status_code=403, 
+            detail="Legacy users without company assignment cannot update records. Please use authenticated access with company assignment."
+        )
+    
+    # Require company_id for all updates
+    if not company_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Company assignment required to update records. Please ensure your user account is assigned to a company."
+        )
+    
+    try:
+        update_animal_by_number(user_id, body, company_id)
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating animal: {str(e)}")
 
 @router.put("/register/update")
 def update_registration_by_identifier(body: UpdateBody, request: Request, x_user_key: str | None = Header(default=None)):

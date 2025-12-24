@@ -9,6 +9,7 @@ export interface Animal {
   mother_id?: string
   father_id?: string
   weight?: number
+  current_weight?: number
   gender?: string
   animal_type?: number
   status?: string
@@ -35,6 +36,7 @@ export interface RegisterBody {
   fatherId?: string
   bornDate?: string
   weight?: number
+  currentWeight?: number
   motherWeight?: number
   weaningWeight?: number
   gender?: string
@@ -58,6 +60,7 @@ export interface UpdateBody {
   fatherId?: string
   bornDate?: string
   weight?: number
+  currentWeight?: number
   motherWeight?: number
   weaningWeight?: number
   gender?: string
@@ -68,6 +71,16 @@ export interface UpdateBody {
   scrotalCircumference?: number
   inseminationRoundId?: string
   deathDate?: string
+}
+
+export interface UpdateAnimalByNumberBody {
+  animalNumber: string
+  currentWeight?: number
+  notes?: string
+  status?: string
+  color?: string
+  rpAnimal?: string
+  notesMother?: string
 }
 
 export interface RegistrationStats {
@@ -305,6 +318,13 @@ class ApiService {
     })
   }
 
+  async updateAnimalByNumber(animal: UpdateAnimalByNumberBody): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>(`${API_ENDPOINTS.REGISTER}/update-by-number`, {
+      method: 'PUT',
+      body: JSON.stringify(animal)
+    })
+  }
+
   async deleteAnimal(animalNumber: string, createdAt: string): Promise<{ ok: boolean }> {
     return this.request<{ ok: boolean }>(API_ENDPOINTS.REGISTER, {
       method: 'DELETE',
@@ -503,6 +523,13 @@ class ApiService {
   async getAnimalHistoryByNumber(animalNumber: string): Promise<{ events: DomainEvent[], count: number }> {
     return this.request<{ events: DomainEvent[], count: number }>(
       `/events/history/by-number/${encodeURIComponent(animalNumber)}`
+    )
+  }
+
+  // Get animal snapshot by animal number
+  async getAnimalSnapshotByNumber(animalNumber: string): Promise<AnimalSnapshot> {
+    return this.request<AnimalSnapshot>(
+      `/snapshots/by-number/${encodeURIComponent(animalNumber)}`
     )
   }
 

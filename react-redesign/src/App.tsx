@@ -2,19 +2,20 @@ import { useState, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  BarChart3, 
-  Users, 
-  Search, 
-  Settings, 
-  Wifi, 
+import {
+  BarChart3,
+  Users,
+  Search,
+  Settings,
+  Wifi,
   WifiOff,
   LogOut,
   Building2,
   Sun,
   Moon,
   Download,
-  RefreshCw
+  RefreshCw,
+  History,
 } from 'lucide-react'
 
 // Import page components
@@ -24,6 +25,7 @@ import { AnimalsPage } from './components/AnimalsPage'
 import { SearchPage } from './components/SearchPage'
 import { SettingsPage } from './components/SettingsPage'
 import { Chatbot } from './components/Chatbot'
+import { ClinicalHistoryPage } from './components/ClinicalHistoryPage'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { PrefixesProvider } from './contexts/PrefixesContext'
 import { authService, AuthUser } from './services/auth'
@@ -73,6 +75,7 @@ interface AppState {
   stats: RegistrationStats | null
   updateAvailable: boolean
   searchTerm?: string // For pre-filling search when navigating from duplicate dialog
+  selectedAnimalNumber?: string // For navigating to history tab with a selected animal
 }
 
 function AppContent() {
@@ -533,7 +536,7 @@ function AppContent() {
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Navigation - Clean tab design */}
-          <TabsList className="grid w-full grid-cols-4 mb-8">
+          <TabsList className="grid w-full grid-cols-5 mb-8">
             <TabsTrigger value="metrics" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
               <span className="hidden sm:inline">Métricas</span>
@@ -545,6 +548,10 @@ function AppContent() {
             <TabsTrigger value="search" className="flex items-center gap-2">
               <Search className="h-4 w-4" />
               <span className="hidden sm:inline">Buscar</span>
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              <span className="hidden sm:inline">Historia</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
@@ -588,6 +595,11 @@ function AppContent() {
                 setActiveTab('search')
                 setAppState(prev => ({ ...prev, searchTerm }))
               }}
+              onNavigateToHistory={(animalNumber) => {
+                // Switch to history tab with selected animal
+                setActiveTab('history')
+                setAppState(prev => ({ ...prev, selectedAnimalNumber: animalNumber }))
+              }}
             />
           </TabsContent>
 
@@ -596,6 +608,35 @@ function AppContent() {
               animals={appState.animals} 
               onAnimalsChange={(animals) => setAppState(prev => ({ ...prev, animals }))}
               initialSearchTerm={appState.searchTerm}
+              onNavigateToHistory={(animalNumber) => {
+                // Switch to history tab with selected animal
+                setActiveTab('history')
+                setAppState(prev => ({ ...prev, selectedAnimalNumber: animalNumber }))
+              }}
+            />
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-0">
+            <ClinicalHistoryPage
+              allAnimals={appState.animals}
+              selectedAnimalNumber={appState.selectedAnimalNumber}
+              onAnimalUpdated={(updated) => {
+                setAppState(prev => ({
+                  ...prev,
+                  animals: prev.animals.map(a =>
+                    a.animal_number === updated.animal_number ? { ...a, ...updated } : a
+                  ),
+                }))
+              }}
+              onSelectAnimal={(animalNumber) => {
+                setAppState(prev => ({ ...prev, selectedAnimalNumber: animalNumber }))
+              }}
+              onBackToSearch={(animalNumber) => {
+                setActiveTab('search')
+                if (animalNumber) {
+                  setAppState(prev => ({ ...prev, searchTerm: animalNumber }))
+                }
+              }}
             />
           </TabsContent>
 

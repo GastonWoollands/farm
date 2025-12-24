@@ -37,9 +37,10 @@ interface AnimalsPageProps {
   onAnimalsChange: (animals: Animal[]) => void
   onStatsChange: () => void
   onNavigateToSearch?: (searchTerm: string) => void
+  onNavigateToHistory?: (animalNumber: string) => void
 }
 
-export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChange, onNavigateToSearch }: AnimalsPageProps) {
+export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChange, onNavigateToSearch, onNavigateToHistory }: AnimalsPageProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isRegistering, setIsRegistering] = useState(false)
@@ -745,16 +746,30 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
                         </div>
                       </div>
                       <div className="flex items-center gap-2 justify-end sm:justify-start">
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          onClick={() => setSelectedAnimalForHistory(animal)}
-                          className="flex-1 sm:flex-none"
-                          title="Ver historial de eventos"
-                        >
-                          <History className="h-4 w-4" />
-                          <span className="ml-1 sm:hidden">Historial</span>
-                        </Button>
+                        {onNavigateToHistory && (
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            onClick={() => onNavigateToHistory(animal.animal_number)}
+                            className="flex-1 sm:flex-none"
+                            title="Ver historia clínica"
+                          >
+                            <History className="h-4 w-4" />
+                            <span className="ml-1 sm:hidden">Historia</span>
+                          </Button>
+                        )}
+                        {!onNavigateToHistory && (
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            onClick={() => setSelectedAnimalForHistory(animal)}
+                            className="flex-1 sm:flex-none"
+                            title="Ver historial de eventos"
+                          >
+                            <History className="h-4 w-4" />
+                            <span className="ml-1 sm:hidden">Historial</span>
+                          </Button>
+                        )}
                         <Button size="sm" variant="ghost" className="flex-1 sm:flex-none">
                           <Edit className="h-4 w-4" />
                           <span className="ml-1 sm:hidden">Editar</span>
