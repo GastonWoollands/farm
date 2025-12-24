@@ -282,9 +282,19 @@ export function ClinicalHistoryPage({
 
   const calves = useMemo(() => {
     if (!animal || !animal.animal_number) return []
-    const motherId = animal.animal_number.toUpperCase()
+    const animalId = animal.animal_number.toUpperCase()
+    const isFather = animal.gender === 'MALE'
+    
     return allAnimals
-      .filter(a => a.mother_id && a.mother_id.toUpperCase() === motherId)
+      .filter(a => {
+        if (isFather) {
+          // For fathers, filter by father_id
+          return a.father_id && a.father_id.toUpperCase() === animalId
+        } else {
+          // For mothers or unknown, filter by mother_id
+          return a.mother_id && a.mother_id.toUpperCase() === animalId
+        }
+      })
       .sort((a, b) => {
         // Sort by birth date (most recent first) or by animal_number if no date
         if (a.born_date && b.born_date) {
@@ -737,7 +747,7 @@ export function ClinicalHistoryPage({
                 </div>
               </div>
 
-              {/* Calves section for mothers */}
+              {/* Calves section for mothers and fathers */}
               {calves.length > 0 && (
                 <div className="mt-6 border-t pt-4">
                   <div className="flex items-center gap-2 mb-4">

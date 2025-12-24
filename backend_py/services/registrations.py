@@ -563,6 +563,9 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                                 gender='MALE',
                                 status='ALIVE',
                             )
+                            
+                            # Project snapshot for father after event creation (by number since no animal_id)
+                            project_animal_snapshot_by_number(father, company_id)
                         except Exception as e:
                             import logging
                             logging.warning(f"Failed to ensure events for father {father}: {e}")

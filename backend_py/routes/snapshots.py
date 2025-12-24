@@ -11,6 +11,7 @@ from ..services.snapshot_projector import (
     get_snapshot,
     get_snapshots_for_company,
     get_snapshot_by_number,
+    project_animal_snapshot_by_number,
 )
 from ..services.auth_service import authenticate_user
 
@@ -93,6 +94,8 @@ def get_animal_snapshot_by_number(
     
     Returns the derived state of the animal based on all events.
     Useful for looking up snapshots when you have the animal_number but not the ID.
+    
+    If snapshot doesn't exist but events do, automatically projects the snapshot.
     """
     user, company_id = authenticate_user(request)
     if not user:
@@ -101,10 +104,33 @@ def get_animal_snapshot_by_number(
     if not company_id:
         raise HTTPException(status_code=400, detail="Company assignment required")
     
-    snapshot = get_snapshot_by_number(animal_number=animal_number.upper(), company_id=company_id)
+    animal_number_upper = animal_number.upper()
+    snapshot = get_snapshot_by_number(animal_number=animal_number_upper, company_id=company_id)
     
+    # If snapshot doesn't exist, check if events exist and auto-project
     if not snapshot:
-        raise HTTPException(status_code=404, detail="Animal snapshot not found")
+        from ..db import conn
+        # Check if events exist for this animal_number
+        cursor = conn.execute(
+            """
+            SELECT COUNT(*) FROM domain_events
+            WHERE animal_number = ? AND company_id = ?
+            """,
+            (animal_number_upper, company_id)
+        )
+        event_count = cursor.fetchone()[0]
+        
+        if event_count > 0:
+            # Events exist but no snapshot - auto-project it
+            try:
+                snapshot = project_animal_snapshot_by_number(animal_number_upper, company_id)
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to auto-project snapshot for {animal_number_upper}: {e}")
+                raise HTTPException(status_code=404, detail="Animal snapshot not found")
+        else:
+            # No events and no snapshot
+            raise HTTPException(status_code=404, detail="Animal snapshot not found")
     
     return snapshot
 
