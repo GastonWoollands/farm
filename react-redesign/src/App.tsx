@@ -620,7 +620,7 @@ function AppContent() {
             <ClinicalHistoryPage
               allAnimals={appState.animals}
               selectedAnimalNumber={appState.selectedAnimalNumber}
-              onAnimalUpdated={(updated) => {
+              onAnimalUpdated={(updated: Animal) => {
                 setAppState(prev => ({
                   ...prev,
                   animals: prev.animals.map(a =>
@@ -628,10 +628,10 @@ function AppContent() {
                   ),
                 }))
               }}
-              onSelectAnimal={(animalNumber) => {
+              onSelectAnimal={(animalNumber: string) => {
                 setAppState(prev => ({ ...prev, selectedAnimalNumber: animalNumber }))
               }}
-              onBackToSearch={(animalNumber) => {
+              onBackToSearch={(animalNumber?: string) => {
                 setActiveTab('search')
                 if (animalNumber) {
                   setAppState(prev => ({ ...prev, searchTerm: animalNumber }))
