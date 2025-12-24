@@ -630,6 +630,17 @@ function AppContent() {
                   ),
                 }))
               }}
+              onStatsChange={async () => {
+                try {
+                  const stats = await apiService.getStats()
+                  setAppState(prev => ({ 
+                    ...prev, 
+                    stats
+                  }))
+                } catch (error) {
+                  console.error('Error refreshing stats:', error)
+                }
+              }}
               onSelectAnimal={(animalNumber: string) => {
                 setAppState(prev => ({ ...prev, selectedAnimalNumber: animalNumber }))
               }}

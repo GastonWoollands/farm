@@ -49,6 +49,7 @@ class UpdateBody(BaseModel):
     weaningWeight: float | None = None
     currentWeight: float | None = None
     deathDate: str | None = None
+    soldDate: str | None = None
     
     class Config:
         # Allow extra fields and be more lenient with validation
@@ -63,6 +64,8 @@ class UpdateAnimalByNumberBody(BaseModel):
     color: str | None = None
     rpAnimal: str | None = None
     notesMother: str | None = None
+    deathDate: str | None = None
+    soldDate: str | None = None
     
     class Config:
         extra = "ignore"

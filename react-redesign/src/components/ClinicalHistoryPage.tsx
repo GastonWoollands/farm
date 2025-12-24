@@ -102,6 +102,7 @@ function mapSnapshotToAnimal(snapshot: AnimalSnapshot): Animal {
 interface ClinicalHistoryPageProps {
   allAnimals: Animal[]
   onAnimalUpdated: (updated: Animal) => void
+  onStatsChange?: () => void | Promise<void>
   selectedAnimalNumber?: string
   onSelectAnimal?: (animalNumber: string) => void
   onBackToSearch?: (animalNumber?: string) => void
@@ -110,6 +111,7 @@ interface ClinicalHistoryPageProps {
 export function ClinicalHistoryPage({
   allAnimals,
   onAnimalUpdated,
+  onStatsChange,
   selectedAnimalNumber,
   onSelectAnimal,
   onBackToSearch,
@@ -421,6 +423,9 @@ export function ClinicalHistoryPage({
           }
           setAnimal(updated)
           onAnimalUpdated(updated)
+          if (onStatsChange) {
+            await onStatsChange()
+          }
           setIsEditOpen(false)
           fetchHistory()
         } else {
@@ -447,6 +452,9 @@ export function ClinicalHistoryPage({
           }
           setAnimal(updated)
           onAnimalUpdated(updated)
+          if (onStatsChange) {
+            await onStatsChange()
+          }
           setIsEditOpen(false)
           fetchHistory()
         }
@@ -484,6 +492,9 @@ export function ClinicalHistoryPage({
         }
         setAnimal(updated)
         onAnimalUpdated(updated)
+        if (onStatsChange) {
+          await onStatsChange()
+        }
         setIsEditOpen(false)
         fetchHistory()
       } else {
@@ -522,6 +533,9 @@ export function ClinicalHistoryPage({
         }
         setAnimal(updated)
         onAnimalUpdated(updated)
+        if (onStatsChange) {
+          await onStatsChange()
+        }
         setIsEditOpen(false)
 
         // Refresh events so corrections appear in the timeline

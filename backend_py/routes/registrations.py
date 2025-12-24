@@ -87,15 +87,40 @@ def update_registration_by_identifier(body: UpdateBody, request: Request, x_user
         )
     
     # Find the record by animalNumber and createdAt
-    from ..services.registrations import find_and_update_registration
+    from ..services.registrations import find_and_update_registration, update_animal_by_number
+    from ..services.snapshot_projector import get_snapshot_by_number
+    from ..models import UpdateAnimalByNumberBody
+    
     try:
         result = find_and_update_registration(user_id, body, company_id)
-        if not result:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Record not found for animal_number={body.animalNumber}, created_at={body.createdAt}. Please verify the animal exists and you have permission to update it."
-            )
-        return {"ok": True}
+        if result:
+            return {"ok": True}
+        
+        # Fallback: Check if animal exists in snapshots (mother/father)
+        animal_number = body.animalNumber.upper().strip() if body.animalNumber else None
+        if animal_number:
+            snapshot = get_snapshot_by_number(animal_number, company_id)
+            if snapshot:
+                # Convert UpdateBody to UpdateAnimalByNumberBody format
+                update_by_number_body = UpdateAnimalByNumberBody(
+                    animalNumber=body.animalNumber,
+                    currentWeight=body.currentWeight or body.weight,
+                    notes=body.notes,
+                    status=body.status,
+                    color=body.color,
+                    rpAnimal=body.rpAnimal,
+                    notesMother=body.notesMother,
+                    deathDate=body.deathDate,
+                    soldDate=body.soldDate
+                )
+                update_animal_by_number(user_id, update_by_number_body, company_id)
+                return {"ok": True}
+        
+        # Animal not found in registrations or snapshots
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Record not found for animal_number={body.animalNumber}, created_at={body.createdAt}. Please verify the animal exists and you have permission to update it."
+        )
     except HTTPException:
         raise
     except Exception as e:

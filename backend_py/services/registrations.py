@@ -1082,6 +1082,8 @@ def update_animal_by_number(
         'color': snapshot.get('color') if snapshot else None,
         'rp_animal': snapshot.get('rp_animal') if snapshot else None,
         'notes_mother': snapshot.get('notes_mother') if snapshot else None,
+        'death_date': snapshot.get('death_date') if snapshot else None,
+        'sold_date': snapshot.get('sold_date') if snapshot else None,
     }
     
     # If snapshot doesn't have values, try to get from most recent event
@@ -1294,24 +1296,30 @@ def get_registrations_multi_tenant(user: dict, limit: int = 100) -> list[dict]:
 
 
 def export_rows_multi_tenant(user: dict, date: str = None, start: str = None, end: str = None) -> list[dict]:
-    """Export registrations with multi-tenant filtering"""
+    """Export registrations with multi-tenant filtering, including mothers/fathers from snapshots"""
     try:
         company_id = user.get('company_id')
         firebase_uid = user.get('firebase_uid')
         
+        # Build WHERE clause and params for registrations
         where_clause, params = get_data_filter_clause(company_id, firebase_uid)
         
+        # Build date filtering conditions
+        date_conditions = ""
+        date_params = []
         if date:
-            where_clause += " AND date(born_date) = date(?)"
-            params.append(date)
+            date_conditions = " AND date(born_date) = date(?)"
+            date_params.append(date)
         else:
             if start:
-                where_clause += " AND date(born_date) >= date(?)"
-                params.append(start)
+                date_conditions += " AND date(born_date) >= date(?)"
+                date_params.append(start)
             if end:
-                where_clause += " AND date(born_date) <= date(?)"
-                params.append(end)
+                date_conditions += " AND date(born_date) <= date(?)"
+                date_params.append(end)
         
+        # Query registrations (existing behavior)
+        reg_params = list(params) + date_params
         cursor = conn.execute(
             f"""
             SELECT animal_number, born_date, mother_id, father_id,
@@ -1319,14 +1327,59 @@ def export_rows_multi_tenant(user: dict, date: str = None, start: str = None, en
                    created_at, insemination_round_id, insemination_identifier, 
                    scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight
             FROM registrations
-            WHERE {where_clause}
+            WHERE {where_clause}{date_conditions}
             ORDER BY id ASC
             """,
-            tuple(params)
+            tuple(reg_params)
         )
         
         cols = [d[0] for d in cursor.description]
-        return [dict(zip(cols, r)) for r in cursor.fetchall()]
+        registration_rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+        
+        # Query animal_snapshots for mothers/fathers (animals not in registrations)
+        # Mothers/fathers have animal_id < 0 (negative hash-based ID) or animal_id not in registrations
+        if company_id:
+            # Build date filtering for snapshots (using birth_date instead of born_date)
+            snapshot_date_conditions = ""
+            snapshot_date_params = []
+            if date:
+                snapshot_date_conditions = " AND date(birth_date) = date(?)"
+                snapshot_date_params.append(date)
+            else:
+                if start:
+                    snapshot_date_conditions += " AND date(birth_date) >= date(?)"
+                    snapshot_date_params.append(start)
+                if end:
+                    snapshot_date_conditions += " AND date(birth_date) <= date(?)"
+                    snapshot_date_params.append(end)
+            
+            snapshot_params = [company_id] + snapshot_date_params
+            cursor = conn.execute(
+                f"""
+                SELECT animal_number, birth_date AS born_date, mother_id, father_id,
+                       current_weight AS weight, gender, NULL AS animal_type, 
+                       current_status AS status, color, notes, notes_mother,
+                       updated_at AS created_at, insemination_round_id, insemination_identifier,
+                       scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight
+                FROM animal_snapshots
+                WHERE company_id = ? 
+                  AND (animal_id < 0 OR animal_id NOT IN (SELECT id FROM registrations))
+                  {snapshot_date_conditions}
+                ORDER BY animal_number ASC
+                """,
+                tuple(snapshot_params)
+            )
+            
+            snapshot_cols = [d[0] for d in cursor.description]
+            snapshot_rows = [dict(zip(snapshot_cols, r)) for r in cursor.fetchall()]
+            
+            # Combine both result sets
+            all_rows = registration_rows + snapshot_rows
+        else:
+            # If no company_id, only return registrations (get_data_filter_clause returns "1 = 0" for no company)
+            all_rows = registration_rows
+        
+        return all_rows
     except sqlite3.Error as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
