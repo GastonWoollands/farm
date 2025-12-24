@@ -664,6 +664,12 @@ export function ClinicalHistoryPage({
                     <span>Sexo: {getGenderName(animal.gender || '')}</span>
                     <span>Estado: {getStatusName(animal.status || '')}</span>
                     {animal.color && <span>Color: {animal.color.toLowerCase()}</span>}
+                    {animal.mother_id && (
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        Madre: {animal.mother_id}
+                      </span>
+                    )}
                     {animal.father_id && (
                       <span className="flex items-center gap-1">
                         <User className="h-3 w-3" />
@@ -799,6 +805,12 @@ export function ClinicalHistoryPage({
                                           <span>Destete: {calf.weaning_weight} kg</span>
                                         </div>
                                       )}
+                                      {calf.mother_id && (
+                                        <div className="flex items-center gap-1">
+                                          <Users className="h-3 w-3" />
+                                          <span>Madre: {calf.mother_id}</span>
+                                        </div>
+                                      )}
                                       {calf.father_id && (
                                         <div className="flex items-center gap-1">
                                           <User className="h-3 w-3" />
@@ -856,6 +868,12 @@ export function ClinicalHistoryPage({
                                   <div className="flex items-center gap-1">
                                     <Weight className="h-3 w-3" />
                                     <span>Nacimiento: {calf.weight} kg</span>
+                                  </div>
+                                )}
+                                {calf.mother_id && (
+                                  <div className="flex items-center gap-1">
+                                    <Users className="h-3 w-3" />
+                                    <span>Madre: {calf.mother_id}</span>
                                   </div>
                                 )}
                                 {calf.father_id && (
@@ -985,6 +1003,18 @@ export function ClinicalHistoryPage({
                               <div className="flex gap-2">
                                 <span className="text-muted-foreground">Toro:</span>
                                 <span className="font-medium">{bullId}</span>
+                              </div>
+                            )
+                          }
+                          return null
+                        })()}
+                        {(() => {
+                          const motherId = event.payload.mother_id
+                          if (motherId && typeof motherId === 'string') {
+                            return (
+                              <div className="flex gap-2">
+                                <span className="text-muted-foreground">Madre:</span>
+                                <span className="font-medium">{motherId}</span>
                               </div>
                             )
                           }
