@@ -92,6 +92,7 @@ function mapSnapshotToAnimal(snapshot: AnimalSnapshot): Animal {
     mother_id: snapshot.mother_id,
     father_id: snapshot.father_id,
     death_date: snapshot.death_date,
+    sold_date: snapshot.sold_date,
     insemination_round_id: snapshot.insemination_round_id,
     insemination_identifier: snapshot.insemination_identifier,
     // Note: snapshot doesn't have created_at, so it will be undefined for mothers/fathers
@@ -405,6 +406,7 @@ export function ClinicalHistoryPage({
             scrotalCircumference: editFormData.scrotal_circumference || undefined,
             inseminationRoundId: editFormData.insemination_round_id || undefined,
             deathDate: editFormData.death_date || undefined,
+            soldDate: editFormData.sold_date || undefined,
           }
 
           await apiService.updateAnimal(updateData)
@@ -467,6 +469,7 @@ export function ClinicalHistoryPage({
           scrotalCircumference: editFormData.scrotal_circumference || undefined,
           inseminationRoundId: editFormData.insemination_round_id || undefined,
           deathDate: editFormData.death_date || undefined,
+          soldDate: editFormData.sold_date || undefined,
         }
 
         await apiService.registerAnimal(registerData)
@@ -505,6 +508,7 @@ export function ClinicalHistoryPage({
           scrotalCircumference: editFormData.scrotal_circumference || undefined,
           inseminationRoundId: editFormData.insemination_round_id || undefined,
           deathDate: editFormData.death_date || undefined,
+          soldDate: editFormData.sold_date || undefined,
         }
 
         await apiService.updateAnimal(updateData)
@@ -698,6 +702,12 @@ export function ClinicalHistoryPage({
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
                         Muerte: {formatDate(animal.death_date)}
+                      </span>
+                    )}
+                    {animal.sold_date && (
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        Vendido: {formatDate(animal.sold_date)}
                       </span>
                     )}
                   </div>
@@ -1138,6 +1148,15 @@ export function ClinicalHistoryPage({
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="edit-sold-date">Fecha de venta</Label>
+              <Input
+                id="edit-sold-date"
+                type="date"
+                value={editFormData.sold_date || ''}
+                onChange={e => setEditFormData({ ...editFormData, sold_date: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="edit-weight">Peso nacimiento (kg)</Label>
               <Input
                 id="edit-weight"
@@ -1225,6 +1244,7 @@ export function ClinicalHistoryPage({
                 <SelectContent>
                   <SelectItem value="ALIVE">Vivo</SelectItem>
                   <SelectItem value="DEAD">Muerto</SelectItem>
+                  <SelectItem value="SOLD">Vendido</SelectItem>
                   <SelectItem value="UNKNOWN">Desconocido</SelectItem>
                 </SelectContent>
               </Select>

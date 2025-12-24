@@ -38,6 +38,7 @@ function calculateStatsFromRecords(records: Animal[]): RegistrationStats {
   const totalAnimals = records.length
   const aliveAnimals = records.filter(animal => animal.status === 'ALIVE').length
   const deadAnimals = records.filter(animal => animal.status === 'DEAD').length
+  const soldAnimals = records.filter(animal => animal.status === 'SOLD').length
   const maleAnimals = records.filter(animal => animal.gender === 'MALE').length
   const femaleAnimals = records.filter(animal => animal.gender === 'FEMALE').length
   
@@ -55,6 +56,7 @@ function calculateStatsFromRecords(records: Animal[]): RegistrationStats {
     totalAnimals,
     aliveAnimals,
     deadAnimals,
+    soldAnimals,
     maleAnimals,
     femaleAnimals,
     avgWeight: Math.round(avgWeight * 100) / 100,

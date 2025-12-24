@@ -424,6 +424,7 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
                 <SelectContent>
                   <SelectItem value="ALIVE">Vivo</SelectItem>
                   <SelectItem value="DEAD">Muerto</SelectItem>
+                  <SelectItem value="SOLD">Vendido</SelectItem>
                   <SelectItem value="UNKNOWN">Desconocido</SelectItem>
                 </SelectContent>
               </Select>
@@ -863,13 +864,14 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
                 <SelectContent>
                   <SelectItem value="ALIVE">Vivo</SelectItem>
                   <SelectItem value="DEAD">Muerto</SelectItem>
+                  <SelectItem value="SOLD">Vendido</SelectItem>
                   <SelectItem value="UNKNOWN">Desconocido</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="edit-color">Color</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-color">Color</Label>
               <Select value={editFormData.color || ''} onValueChange={(value) => setEditFormData({ ...editFormData, color: value })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar color" />

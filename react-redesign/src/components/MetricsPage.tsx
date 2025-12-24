@@ -1371,7 +1371,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                           return (
                             <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded">
                               <span className="text-sm">
-                                {item.status === 'ALIVE' ? 'Vivos' : item.status === 'DEAD' ? 'Muertos' : 'Desconocido'}
+                                {item.status === 'ALIVE' ? 'Vivos' : item.status === 'DEAD' ? 'Muertos' : item.status === 'SOLD' ? 'Vendidos' : 'Desconocido'}
                               </span>
                               <div className="flex items-center gap-2 justify-end" style={{ minWidth: '6rem' }}>
                                 <div className="w-[2.5rem] flex justify-end">

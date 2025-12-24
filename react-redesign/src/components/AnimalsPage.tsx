@@ -73,7 +73,8 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
     notesMother: '',
     scrotalCircumference: '',
     inseminationRoundId: '',
-    deathDate: ''
+    deathDate: '',
+    soldDate: ''
   })
 
   // Fetch insemination rounds
@@ -161,7 +162,8 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
         notesMother: formData.notesMother || undefined,
         scrotalCircumference: formData.scrotalCircumference ? parseFloat(formData.scrotalCircumference) : undefined,
         inseminationRoundId: formData.inseminationRoundId || undefined,
-        deathDate: formData.deathDate || undefined
+        deathDate: formData.deathDate || undefined,
+        soldDate: formData.soldDate || undefined
       }
 
       // Add to local storage (replicates original frontend behavior)
@@ -225,7 +227,8 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
         notesMother: '',
         scrotalCircumference: '',
         inseminationRoundId: '',
-        deathDate: ''
+        deathDate: '',
+        soldDate: ''
       })
       setIsRegistering(false)
     } catch (err: any) {
@@ -547,7 +550,11 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
                             deathDate:
                               value === 'DEAD' && !prev.deathDate
                                 ? new Date().toISOString().split('T')[0]
-                                : prev.deathDate
+                                : prev.deathDate,
+                            soldDate:
+                              value === 'SOLD' && !prev.soldDate
+                                ? new Date().toISOString().split('T')[0]
+                                : prev.soldDate
                           }))
                         }
                       >
@@ -557,6 +564,7 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
                         <SelectContent>
                           <SelectItem value="ALIVE">Vivo</SelectItem>
                           <SelectItem value="DEAD">Muerto</SelectItem>
+                          <SelectItem value="SOLD">Vendido</SelectItem>
                           <SelectItem value="UNKNOWN">Desconocido</SelectItem>
                         </SelectContent>
                       </Select>
@@ -570,6 +578,19 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
                           name="deathDate"
                           type="date"
                           value={formData.deathDate}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                    )}
+
+                    {formData.status === 'SOLD' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="soldDate">Fecha de Venta</Label>
+                        <Input
+                          id="soldDate"
+                          name="soldDate"
+                          type="date"
+                          value={formData.soldDate}
                           onChange={handleInputChange}
                         />
                       </div>
@@ -665,7 +686,8 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
                         notesMother: '',
                         scrotalCircumference: '',
                         inseminationRoundId: '',
-                        deathDate: ''
+                        deathDate: '',
+                        soldDate: ''
                       })
                     }}>
                       Cancelar

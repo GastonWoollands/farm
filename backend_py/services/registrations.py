@@ -17,7 +17,7 @@ from .snapshot_projector import project_animal_snapshot, project_animal_snapshot
 from ..events.event_types import EventType
 
 VALID_GENDERS = {"MALE", "FEMALE", "UNKNOWN"}
-VALID_STATUSES = {"ALIVE", "DEAD", "UNKNOWN"}
+VALID_STATUSES = {"ALIVE", "DEAD", "UNKNOWN", "SOLD"}
 VALID_COLORS = {"COLORADO", "MARRON", "NEGRO", "OTHERS"}
 
 def _normalize_text(value: str | None) -> str | None:
@@ -205,6 +205,19 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
     if status == "DEAD" and not death_date:
         death_date = _dt.datetime.utcnow().strftime("%Y-%m-%d")
 
+    # Handle optional sold_date (YYYY-MM-DD)
+    sold_date = None
+    if hasattr(body, "soldDate") and body.soldDate:
+        try:
+            _dt.datetime.strptime(body.soldDate, "%Y-%m-%d")
+            sold_date = body.soldDate
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid soldDate format. Use YYYY-MM-DD")
+
+    # Auto-set sold_date if status is SOLD and not provided
+    if status == "SOLD" and not sold_date:
+        sold_date = _dt.datetime.utcnow().strftime("%Y-%m-%d")
+
     try:
         with conn:
             # Check if animal has domain events indicating it's a mother/father
@@ -227,9 +240,9 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                     animal_number, created_at, user_key, created_by, company_id,
                     mother_id, father_id, born_date, weight, current_weight, gender, animal_type, status, color, notes, notes_mother, short_id,
                     insemination_round_id, insemination_identifier, scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight,
-                    death_date
+                    death_date, sold_date
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     animal,
@@ -256,6 +269,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                     mother_weight,
                     weaning_weight,
                     death_date,
+                    sold_date,
                 ),
             )
             animal_id = cursor.lastrowid
@@ -700,6 +714,32 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
     if color and color not in VALID_COLORS:
         raise HTTPException(status_code=400, detail=f"Invalid color. Must be one of: {', '.join(VALID_COLORS)}")
 
+    # Handle optional death_date (YYYY-MM-DD)
+    death_date = None
+    if hasattr(body, "deathDate") and body.deathDate:
+        try:
+            _dt.datetime.strptime(body.deathDate, "%Y-%m-%d")
+            death_date = body.deathDate
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid deathDate format. Use YYYY-MM-DD")
+
+    # Handle optional sold_date (YYYY-MM-DD)
+    sold_date = None
+    if hasattr(body, "soldDate") and body.soldDate:
+        try:
+            _dt.datetime.strptime(body.soldDate, "%Y-%m-%d")
+            sold_date = body.soldDate
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid soldDate format. Use YYYY-MM-DD")
+
+    # Auto-set death_date if status is DEAD and not provided
+    if status == "DEAD" and not death_date:
+        death_date = _dt.datetime.utcnow().strftime("%Y-%m-%d")
+
+    # Auto-set sold_date if status is SOLD and not provided
+    if status == "SOLD" and not sold_date:
+        sold_date = _dt.datetime.utcnow().strftime("%Y-%m-%d")
+
     try:
         with conn:
             # Check if record exists and belongs to the same company, and get current values
@@ -707,7 +747,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                 """
                 SELECT company_id, animal_number, mother_id, father_id, born_date, weight, current_weight,
                        gender, status, color, notes, notes_mother, rp_animal, rp_mother,
-                       mother_weight, weaning_weight, scrotal_circumference
+                       mother_weight, weaning_weight, scrotal_circumference, death_date, sold_date
                 FROM registrations 
                 WHERE id = ? AND company_id = ?
                 """,
@@ -735,6 +775,8 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                 'mother_weight': record[14],
                 'weaning_weight': record[15],
                 'scrotal_circumference': record[16],
+                'death_date': record[17] if len(record) > 17 else None,
+                'sold_date': record[18] if len(record) > 18 else None,
             }
             
             # Auto-assign insemination_round_id if missing and born_date is provided
@@ -751,6 +793,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                     gender = ?, animal_type = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
                     insemination_round_id = ?, insemination_identifier = ?, scrotal_circumference = ?,
                     rp_animal = ?, rp_mother = ?, mother_weight = ?, weaning_weight = ?,
+                    death_date = ?, sold_date = ?,
                     updated_at = datetime('now')
                 WHERE id = ?
                 """,
@@ -759,6 +802,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                     gender, animal_type, status, color, notes, notes_mother,
                     insemination_round_id, insemination_identifier, scrotal_circumference,
                     rp_animal, rp_mother, mother_weight, weaning_weight,
+                    death_date, sold_date,
                     animal_id
                 )
             )
@@ -809,6 +853,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                                 notes=notes,
                             )
                         else:
+                            # For SOLD and other status changes, use STATUS_CHANGED event
                             emit_field_change(
                                 event_type=EventType.STATUS_CHANGED,
                                 animal_id=animal_id,

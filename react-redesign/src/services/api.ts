@@ -25,6 +25,7 @@ export interface Animal {
   mother_weight?: number
   weaning_weight?: number
   death_date?: string
+  sold_date?: string
   synced?: boolean
 }
 
@@ -49,6 +50,7 @@ export interface RegisterBody {
   inseminationRoundId?: string
   inseminationIdentifier?: string
   deathDate?: string
+  soldDate?: string
 }
 
 export interface UpdateBody {
@@ -71,6 +73,7 @@ export interface UpdateBody {
   scrotalCircumference?: number
   inseminationRoundId?: string
   deathDate?: string
+  soldDate?: string
 }
 
 export interface UpdateAnimalByNumberBody {
@@ -87,6 +90,7 @@ export interface RegistrationStats {
   totalAnimals: number
   aliveAnimals: number
   deadAnimals: number
+  soldAnimals?: number
   maleAnimals: number
   femaleAnimals: number
   avgWeight: number
@@ -182,6 +186,7 @@ export interface AnimalSnapshot {
   gender?: string
   color?: string
   death_date?: string
+  sold_date?: string
   last_insemination_date?: string
   insemination_count?: number
   notes?: string
@@ -341,6 +346,7 @@ class ApiService {
     const totalAnimals = data.length
     const aliveAnimals = data.filter(animal => animal.status === 'ALIVE').length
     const deadAnimals = data.filter(animal => animal.status === 'DEAD').length
+    const soldAnimals = data.filter(animal => animal.status === 'SOLD').length
     const maleAnimals = data.filter(animal => animal.gender === 'MALE').length
     const femaleAnimals = data.filter(animal => animal.gender === 'FEMALE').length
     
@@ -354,6 +360,7 @@ class ApiService {
       totalAnimals,
       aliveAnimals,
       deadAnimals,
+      soldAnimals,
       maleAnimals,
       femaleAnimals,
       avgWeight: Math.round(avgWeight * 100) / 100,

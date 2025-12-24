@@ -51,7 +51,8 @@ export function getStatusName(status: string): string {
   const statuses = {
     'ALIVE': 'Vivo',
     'DEAD': 'Muerto',
-    'UNKNOWN': 'Desconocido'
+    'UNKNOWN': 'Desconocido',
+    'SOLD': 'Vendido'
   }
   return statuses[status as keyof typeof statuses] || status
 }

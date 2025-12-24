@@ -170,6 +170,7 @@ conn.execute(
         gender TEXT,
         color TEXT,
         death_date TEXT,
+        sold_date TEXT,
         last_insemination_date TEXT,
         insemination_count INTEGER DEFAULT 0,
         notes TEXT,
@@ -870,6 +871,10 @@ def migrate_add_registration_fields():
         _add_column_safely("registrations", "current_weight", "REAL")
         # Death date for animals (used when status = DEAD)
         _add_column_safely("registrations", "death_date", "TEXT")
+        # Sold date for animals (used when status = SOLD)
+        _add_column_safely("registrations", "sold_date", "TEXT")
+        # Sold date for animal snapshots
+        _add_column_safely("animal_snapshots", "sold_date", "TEXT")
         
         # Add triggers for tracking changes to new fields
         conn.execute("""

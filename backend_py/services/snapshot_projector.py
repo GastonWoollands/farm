@@ -110,6 +110,9 @@ def _handle_status_changed(snapshot: Dict[str, Any], payload: Dict[str, Any]) ->
     # If status is DEAD, also set death_date if not already set
     if new_status == 'DEAD' and not result.get('death_date'):
         result['death_date'] = datetime.utcnow().isoformat()
+    # If status is SOLD, also set sold_date if not already set
+    if new_status == 'SOLD' and not result.get('sold_date'):
+        result['sold_date'] = datetime.utcnow().isoformat()
     return result
 
 
@@ -310,6 +313,7 @@ def build_snapshot_from_events(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         'gender': None,
         'color': None,
         'death_date': None,
+        'sold_date': None,
         'last_insemination_date': None,
         'insemination_count': 0,
         'notes': None,
@@ -363,13 +367,13 @@ def upsert_snapshot(animal_id: int, snapshot: Dict[str, Any]) -> None:
         """
         INSERT INTO animal_snapshots (
             animal_id, animal_number, company_id, birth_date, mother_id, father_id,
-            current_status, current_weight, weaning_weight, gender, color, death_date,
+            current_status, current_weight, weaning_weight, gender, color, death_date, sold_date,
             last_insemination_date, insemination_count, notes, notes_mother,
             rp_animal, rp_mother, mother_weight, scrotal_circumference,
             insemination_round_id, insemination_identifier,
             last_event_id, last_event_time, snapshot_version, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(animal_id) DO UPDATE SET
             animal_number = excluded.animal_number,
             birth_date = excluded.birth_date,
@@ -381,6 +385,7 @@ def upsert_snapshot(animal_id: int, snapshot: Dict[str, Any]) -> None:
             gender = excluded.gender,
             color = excluded.color,
             death_date = excluded.death_date,
+            sold_date = excluded.sold_date,
             last_insemination_date = excluded.last_insemination_date,
             insemination_count = excluded.insemination_count,
             notes = excluded.notes,
@@ -409,6 +414,7 @@ def upsert_snapshot(animal_id: int, snapshot: Dict[str, Any]) -> None:
             snapshot.get('gender'),
             snapshot.get('color'),
             snapshot.get('death_date'),
+            snapshot.get('sold_date'),
             snapshot.get('last_insemination_date'),
             snapshot.get('insemination_count') or 0,
             snapshot.get('notes'),
@@ -440,13 +446,13 @@ def _upsert_snapshot_direct(animal_id: int, snapshot: Dict[str, Any]) -> None:
         """
         INSERT OR REPLACE INTO animal_snapshots (
             animal_id, animal_number, company_id, birth_date, mother_id, father_id,
-            current_status, current_weight, weaning_weight, gender, color, death_date,
+            current_status, current_weight, weaning_weight, gender, color, death_date, sold_date,
             last_insemination_date, insemination_count, notes, notes_mother,
             rp_animal, rp_mother, mother_weight, scrotal_circumference,
             insemination_round_id, insemination_identifier,
             last_event_id, last_event_time, snapshot_version, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             animal_id,
@@ -461,6 +467,7 @@ def _upsert_snapshot_direct(animal_id: int, snapshot: Dict[str, Any]) -> None:
             snapshot.get('gender'),
             snapshot.get('color'),
             snapshot.get('death_date'),
+            snapshot.get('sold_date'),
             snapshot.get('last_insemination_date'),
             snapshot.get('insemination_count') or 0,
             snapshot.get('notes'),
@@ -711,7 +718,7 @@ def get_snapshot_by_number(animal_number: str, company_id: int) -> Optional[Dict
     cursor = conn.execute(
         """
         SELECT animal_id, animal_number, company_id, birth_date, mother_id, father_id,
-               current_status, current_weight, weaning_weight, gender, color, death_date,
+               current_status, current_weight, weaning_weight, gender, color, death_date, sold_date,
                last_insemination_date, insemination_count, notes, notes_mother,
                rp_animal, rp_mother, mother_weight, scrotal_circumference,
                insemination_round_id, insemination_identifier,
@@ -739,20 +746,21 @@ def get_snapshot_by_number(animal_number: str, company_id: int) -> Optional[Dict
         "gender": row[9],
         "color": row[10],
         "death_date": row[11],
-        "last_insemination_date": row[12],
-        "insemination_count": row[13],
-        "notes": row[14],
-        "notes_mother": row[15],
-        "rp_animal": row[16],
-        "rp_mother": row[17],
-        "mother_weight": row[18],
-        "scrotal_circumference": row[19],
-        "insemination_round_id": row[20],
-        "insemination_identifier": row[21],
-        "last_event_id": row[22],
-        "last_event_time": row[23],
-        "snapshot_version": row[24],
-        "updated_at": row[25],
+        "sold_date": row[12],
+        "last_insemination_date": row[13],
+        "insemination_count": row[14],
+        "notes": row[15],
+        "notes_mother": row[16],
+        "rp_animal": row[17],
+        "rp_mother": row[18],
+        "mother_weight": row[19],
+        "scrotal_circumference": row[20],
+        "insemination_round_id": row[21],
+        "insemination_identifier": row[22],
+        "last_event_id": row[23],
+        "last_event_time": row[24],
+        "snapshot_version": row[25],
+        "updated_at": row[26],
     }
 
 
@@ -889,7 +897,7 @@ def get_snapshot(animal_id: int, company_id: int) -> Optional[Dict[str, Any]]:
     cursor = conn.execute(
         """
         SELECT animal_id, animal_number, company_id, birth_date, mother_id, father_id,
-               current_status, current_weight, weaning_weight, gender, color, death_date,
+               current_status, current_weight, weaning_weight, gender, color, death_date, sold_date,
                last_insemination_date, insemination_count, notes, notes_mother,
                rp_animal, rp_mother, mother_weight, scrotal_circumference,
                insemination_round_id, insemination_identifier,
@@ -917,20 +925,21 @@ def get_snapshot(animal_id: int, company_id: int) -> Optional[Dict[str, Any]]:
         "gender": row[9],
         "color": row[10],
         "death_date": row[11],
-        "last_insemination_date": row[12],
-        "insemination_count": row[13],
-        "notes": row[14],
-        "notes_mother": row[15],
-        "rp_animal": row[16],
-        "rp_mother": row[17],
-        "mother_weight": row[18],
-        "scrotal_circumference": row[19],
-        "insemination_round_id": row[20],
-        "insemination_identifier": row[21],
-        "last_event_id": row[22],
-        "last_event_time": row[23],
-        "snapshot_version": row[24],
-        "updated_at": row[25],
+        "sold_date": row[12],
+        "last_insemination_date": row[13],
+        "insemination_count": row[14],
+        "notes": row[15],
+        "notes_mother": row[16],
+        "rp_animal": row[17],
+        "rp_mother": row[18],
+        "mother_weight": row[19],
+        "scrotal_circumference": row[20],
+        "insemination_round_id": row[21],
+        "insemination_identifier": row[22],
+        "last_event_id": row[23],
+        "last_event_time": row[24],
+        "snapshot_version": row[25],
+        "updated_at": row[26],
     }
 
 
@@ -956,7 +965,7 @@ def get_snapshots_for_company(
         cursor = conn.execute(
             """
             SELECT animal_id, animal_number, company_id, birth_date, mother_id, father_id,
-                   current_status, current_weight, weaning_weight, gender, color, death_date,
+                   current_status, current_weight, weaning_weight, gender, color, death_date, sold_date,
                    last_insemination_date, insemination_count, notes, notes_mother,
                    rp_animal, rp_mother, mother_weight, scrotal_circumference,
                    insemination_round_id, insemination_identifier,
@@ -972,7 +981,7 @@ def get_snapshots_for_company(
         cursor = conn.execute(
             """
             SELECT animal_id, animal_number, company_id, birth_date, mother_id, father_id,
-                   current_status, current_weight, weaning_weight, gender, color, death_date,
+                   current_status, current_weight, weaning_weight, gender, color, death_date, sold_date,
                    last_insemination_date, insemination_count, notes, notes_mother,
                    rp_animal, rp_mother, mother_weight, scrotal_circumference,
                    insemination_round_id, insemination_identifier,
@@ -1000,20 +1009,21 @@ def get_snapshots_for_company(
             "gender": row[9],
             "color": row[10],
             "death_date": row[11],
-            "last_insemination_date": row[12],
-            "insemination_count": row[13],
-            "notes": row[14],
-            "notes_mother": row[15],
-            "rp_animal": row[16],
-            "rp_mother": row[17],
-            "mother_weight": row[18],
-            "scrotal_circumference": row[19],
-            "insemination_round_id": row[20],
-            "insemination_identifier": row[21],
-            "last_event_id": row[22],
-            "last_event_time": row[23],
-            "snapshot_version": row[24],
-            "updated_at": row[25],
+            "sold_date": row[12],
+            "last_insemination_date": row[13],
+            "insemination_count": row[14],
+            "notes": row[15],
+            "notes_mother": row[16],
+            "rp_animal": row[17],
+            "rp_mother": row[18],
+            "mother_weight": row[19],
+            "scrotal_circumference": row[20],
+            "insemination_round_id": row[21],
+            "insemination_identifier": row[22],
+            "last_event_id": row[23],
+            "last_event_time": row[24],
+            "snapshot_version": row[25],
+            "updated_at": row[26],
         }
         for row in rows
     ]
