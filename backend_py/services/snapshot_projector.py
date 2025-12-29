@@ -30,8 +30,9 @@ logger = logging.getLogger(__name__)
 
 def _handle_birth_registered(snapshot: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
     """Apply birth_registered event to snapshot."""
-    # Use current_weight if available, fall back to weight (birth weight)
-    weight_value = payload.get('current_weight') or payload.get('weight')
+    # Use current_weight if provided, fall back to weight (birth weight)
+    # Use explicit None check to handle 0 as a valid weight
+    weight_value = payload.get('current_weight') if payload.get('current_weight') is not None else payload.get('weight')
     return {
         **snapshot,
         'birth_date': payload.get('born_date'),

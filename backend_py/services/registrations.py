@@ -868,8 +868,9 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                             )
                     
                     # Emit events for other field changes
+                    # Only emit if new value is provided (not None) AND different from old
                     for field_name, old_val, new_val, event_type in field_changes:
-                        if old_val != new_val:
+                        if new_val is not None and old_val != new_val:
                             emit_field_change(
                                 event_type=event_type,
                                 animal_id=animal_id,
