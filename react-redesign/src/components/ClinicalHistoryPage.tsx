@@ -409,8 +409,8 @@ export function ClinicalHistoryPage({
             notesMother: editFormData.notes_mother || undefined,
             scrotalCircumference: editFormData.scrotal_circumference || undefined,
             inseminationRoundId: editFormData.insemination_round_id || undefined,
-            deathDate: editFormData.death_date || undefined,
-            soldDate: editFormData.sold_date || undefined,
+            deathDate: editFormData.status === 'DEAD' ? editFormData.death_date || undefined : undefined,
+            soldDate: editFormData.status === 'SOLD' ? editFormData.sold_date || undefined : undefined,
             animalIdv: editFormData.animal_idv || undefined,
           }
 
@@ -480,8 +480,8 @@ export function ClinicalHistoryPage({
           notesMother: editFormData.notes_mother || undefined,
           scrotalCircumference: editFormData.scrotal_circumference || undefined,
           inseminationRoundId: editFormData.insemination_round_id || undefined,
-          deathDate: editFormData.death_date || undefined,
-          soldDate: editFormData.sold_date || undefined,
+          deathDate: editFormData.status === 'DEAD' ? editFormData.death_date || undefined : undefined,
+          soldDate: editFormData.status === 'SOLD' ? editFormData.sold_date || undefined : undefined,
           animalIdv: editFormData.animal_idv || undefined,
         }
 
@@ -523,8 +523,8 @@ export function ClinicalHistoryPage({
           notesMother: editFormData.notes_mother || undefined,
           scrotalCircumference: editFormData.scrotal_circumference || undefined,
           inseminationRoundId: editFormData.insemination_round_id || undefined,
-          deathDate: editFormData.death_date || undefined,
-          soldDate: editFormData.sold_date || undefined,
+          deathDate: editFormData.status === 'DEAD' ? editFormData.death_date || undefined : undefined,
+          soldDate: editFormData.status === 'SOLD' ? editFormData.sold_date || undefined : undefined,
           animalIdv: editFormData.animal_idv || undefined,
         }
 
@@ -1115,8 +1115,13 @@ export function ClinicalHistoryPage({
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-animal-number">ID Animal</Label>
-              <Input id="edit-animal-number" value={editFormData.animal_number || ''} disabled />
+              <Label htmlFor="edit-animal-idv">ID Visual (IDV)</Label>
+              <Input
+                id="edit-animal-idv"
+                value={editFormData.animal_idv || ''}
+                onChange={e => setEditFormData({ ...editFormData, animal_idv: e.target.value })}
+                placeholder="e.g., V-001"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-rp-animal">RP Animal</Label>
@@ -1124,14 +1129,6 @@ export function ClinicalHistoryPage({
                 id="edit-rp-animal"
                 value={editFormData.rp_animal || ''}
                 onChange={e => setEditFormData({ ...editFormData, rp_animal: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-animal-idv">IDV (ID Visual)</Label>
-              <Input
-                id="edit-animal-idv"
-                value={editFormData.animal_idv || ''}
-                onChange={e => setEditFormData({ ...editFormData, animal_idv: e.target.value })}
               />
             </div>
             <div className="space-y-2">
@@ -1159,7 +1156,7 @@ export function ClinicalHistoryPage({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-born-date">Fecha de nacimiento</Label>
+              <Label htmlFor="edit-born-date">Fecha de Nacimiento</Label>
               <Input
                 id="edit-born-date"
                 type="date"
@@ -1168,25 +1165,7 @@ export function ClinicalHistoryPage({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-death-date">Fecha de muerte</Label>
-              <Input
-                id="edit-death-date"
-                type="date"
-                value={editFormData.death_date || ''}
-                onChange={e => setEditFormData({ ...editFormData, death_date: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-sold-date">Fecha de venta</Label>
-              <Input
-                id="edit-sold-date"
-                type="date"
-                value={editFormData.sold_date || ''}
-                onChange={e => setEditFormData({ ...editFormData, sold_date: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-weight">Peso nacimiento (kg)</Label>
+              <Label htmlFor="edit-weight">Peso Nacimiento (kg)</Label>
               <Input
                 id="edit-weight"
                 type="number"
@@ -1201,7 +1180,7 @@ export function ClinicalHistoryPage({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-current-weight">Peso actual (kg)</Label>
+              <Label htmlFor="edit-current-weight">Peso Actual (kg)</Label>
               <Input
                 id="edit-current-weight"
                 type="number"
@@ -1216,7 +1195,7 @@ export function ClinicalHistoryPage({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-weaning">Peso destete (kg)</Label>
+              <Label htmlFor="edit-weaning">Peso al Destete (kg)</Label>
               <Input
                 id="edit-weaning"
                 type="number"
@@ -1231,7 +1210,7 @@ export function ClinicalHistoryPage({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-mother-weight">Peso madre (kg)</Label>
+              <Label htmlFor="edit-mother-weight">Peso Madre (kg)</Label>
               <Input
                 id="edit-mother-weight"
                 type="number"
@@ -1278,12 +1257,60 @@ export function ClinicalHistoryPage({
                 </SelectContent>
               </Select>
             </div>
+            {/* Show death date only when status is DEAD */}
+            {editFormData.status === 'DEAD' && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-death-date">Fecha de Muerte</Label>
+                <Input
+                  id="edit-death-date"
+                  type="date"
+                  value={editFormData.death_date || ''}
+                  onChange={e => setEditFormData({ ...editFormData, death_date: e.target.value })}
+                />
+              </div>
+            )}
+            {/* Show sold date only when status is SOLD */}
+            {editFormData.status === 'SOLD' && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-sold-date">Fecha de Venta</Label>
+                <Input
+                  id="edit-sold-date"
+                  type="date"
+                  value={editFormData.sold_date || ''}
+                  onChange={e => setEditFormData({ ...editFormData, sold_date: e.target.value })}
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="edit-color">Color</Label>
-              <Input
-                id="edit-color"
+              <Select
                 value={editFormData.color || ''}
-                onChange={e => setEditFormData({ ...editFormData, color: e.target.value })}
+                onValueChange={value => setEditFormData({ ...editFormData, color: value })}
+              >
+                <SelectTrigger id="edit-color">
+                  <SelectValue placeholder="Seleccionar color" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="COLORADO">Colorado</SelectItem>
+                  <SelectItem value="NEGRO">Negro</SelectItem>
+                  <SelectItem value="MARRON">Marrón</SelectItem>
+                  <SelectItem value="OTHERS">Otros</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-scrotal">Circunferencia Escrotal (cm)</Label>
+              <Input
+                id="edit-scrotal"
+                type="number"
+                step="0.1"
+                value={editFormData.scrotal_circumference ?? ''}
+                onChange={e =>
+                  setEditFormData({
+                    ...editFormData,
+                    scrotal_circumference: e.target.value ? parseFloat(e.target.value) : undefined,
+                  })
+                }
               />
             </div>
             <div className="space-y-2 md:col-span-2">
@@ -1295,7 +1322,7 @@ export function ClinicalHistoryPage({
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="edit-notes-mother">Notas madre</Label>
+              <Label htmlFor="edit-notes-mother">Notas Madre</Label>
               <Input
                 id="edit-notes-mother"
                 value={editFormData.notes_mother || ''}
