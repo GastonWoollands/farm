@@ -13,7 +13,8 @@ from .event_emitter import (
     ensure_animal_has_events,
     get_events_for_animal_by_number,
 )
-from .snapshot_projector import project_animal_snapshot, project_animal_snapshot_by_number, get_snapshot_by_number
+from .snapshot_projector import project_animal_snapshot, project_animal_snapshot_by_number, get_snapshot_by_number, get_snapshot
+from .registration_projector import project_registration_from_snapshot
 from ..events.event_types import EventType
 
 VALID_GENDERS = {"MALE", "FEMALE", "UNKNOWN"}
@@ -235,57 +236,34 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                                 detail=f"Animal {animal} is a mother/father and should not be in registrations table. Use update-by-number endpoint instead."
                             )
             
+            # =========================================================================
+            # EVENT-FIRST ARCHITECTURE
+            # 1. Get animal_id (minimal INSERT to reserve ID)
+            # 2. Emit event FIRST (source of truth)
+            # 3. Project snapshot (derived from events)
+            # 4. Project registration from snapshot (derived, for backwards compatibility)
+            # =========================================================================
+            
+            # Step 1: Reserve animal_id with minimal INSERT
             cursor = conn.execute(
                 """
                 INSERT INTO registrations (
-                    animal_number, created_at, user_key, created_by, company_id,
-                    mother_id, father_id, born_date, weight, current_weight, gender, animal_type, status, color, notes, notes_mother, short_id,
-                    insemination_round_id, insemination_identifier, scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight,
-                    death_date, sold_date, animal_idv
+                    animal_number, created_at, created_by, company_id, short_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10))
                 """,
-                (
-                    animal,
-                    created_at,
-                    None,  # legacy user_key deprecated when using Firebase
-                    created_by_or_key,
-                    company_id,  # company_id for multi-tenant filtering
-                    mother,
-                    father,
-                    body.bornDate,
-                    weight,
-                    current_weight,
-                    gender,
-                    animal_type,
-                    status,
-                    color,
-                    notes,
-                    notes_mother,
-                    insemination_round_id,
-                    insemination_identifier,
-                    scrotal_circumference,
-                    rp_animal,
-                    rp_mother,
-                    mother_weight,
-                    weaning_weight,
-                    death_date,
-                    sold_date,
-                    animal_idv,
-                ),
+                (animal, created_at, created_by_or_key, company_id)
             )
             animal_id = cursor.lastrowid
             
-            # Emit domain event (Event Sourcing)
-            if company_id:  # Only emit for multi-tenant records
+            # Step 2: Emit domain event FIRST (source of truth)
+            if company_id:
                 try:
                     # Check if animal already has domain events (e.g., mother_registered, father_registered)
-                    # If yes, don't emit birth_registered - just emit update events for changed fields
                     existing_events = get_events_for_animal_by_number(animal, company_id)
                     
                     if len(existing_events) > 0:
                         # Animal already has events - emit update events instead of birth_registered
-                        # Get old values from the first event or use None
                         old_values = {
                             'weight': None,
                             'current_weight': None,
@@ -296,7 +274,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                             'rp_animal': None,
                         }
                         
-                        # Try to extract old values from existing events
+                        # Extract old values from existing events
                         for event in existing_events:
                             if event.get('payload'):
                                 payload = event['payload'] if isinstance(event['payload'], dict) else json.loads(event['payload'])
@@ -340,7 +318,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                                     notes=f"Actualizado desde registro",
                                 )
                     else:
-                        # Animal has no events - emit birth_registered
+                        # Animal has no events - emit birth_registered (SOURCE OF TRUTH)
                         emit_birth_registered(
                             animal_id=animal_id,
                             animal_number=animal,
@@ -366,8 +344,18 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                             animal_idv=animal_idv,
                         )
                     
-                    # Project snapshot
+                    # Step 3: Project snapshot (derived from events)
                     project_animal_snapshot(animal_id, company_id)
+                    
+                    # Step 4: Project registration from snapshot (derived, for backwards compatibility)
+                    snapshot = get_snapshot(animal_id, company_id)
+                    if snapshot:
+                        project_registration_from_snapshot(
+                            animal_id=animal_id,
+                            snapshot=snapshot,
+                            created_by=created_by_or_key,
+                            created_at=created_at,
+                        )
                     
                     # Handle mother events (if mother_id provided)
                     if mother and company_id:
@@ -590,6 +578,27 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                     # Log but don't fail - triggers still work as backup
                     import logging
                     logging.warning(f"Failed to emit birth event for animal {animal_id}: {e}")
+            else:
+                # Legacy path (no company_id): Update registration directly with all data
+                # No events emitted for legacy registrations
+                conn.execute(
+                    """
+                    UPDATE registrations SET
+                        mother_id = ?, father_id = ?, born_date = ?, weight = ?, current_weight = ?,
+                        gender = ?, animal_type = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
+                        insemination_round_id = ?, insemination_identifier = ?, scrotal_circumference = ?,
+                        rp_animal = ?, rp_mother = ?, mother_weight = ?, weaning_weight = ?,
+                        death_date = ?, sold_date = ?, animal_idv = ?, updated_at = datetime('now')
+                    WHERE id = ?
+                    """,
+                    (
+                        mother, father, body.bornDate, weight, current_weight,
+                        gender, animal_type, status, color, notes, notes_mother,
+                        insemination_round_id, insemination_identifier, scrotal_circumference,
+                        rp_animal, rp_mother, mother_weight, weaning_weight,
+                        death_date, sold_date, animal_idv, animal_id
+                    )
+                )
             
             return animal_id
     except sqlite3.IntegrityError:
@@ -751,7 +760,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                 """
                 SELECT company_id, animal_number, mother_id, father_id, born_date, weight, current_weight,
                        gender, status, color, notes, notes_mother, rp_animal, rp_mother,
-                       mother_weight, weaning_weight, scrotal_circumference, death_date, sold_date, animal_idv
+                       mother_weight, weaning_weight, scrotal_circumference, death_date, sold_date, animal_idv, created_at
                 FROM registrations 
                 WHERE id = ? AND company_id = ?
                 """,
@@ -782,6 +791,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                 'death_date': record[17] if len(record) > 17 else None,
                 'sold_date': record[18] if len(record) > 18 else None,
                 'animal_idv': record[19] if len(record) > 19 else None,
+                'created_at': record[20] if len(record) > 20 else None,
             }
             
             # Auto-assign insemination_round_id if missing and born_date is provided
@@ -790,29 +800,14 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                 if auto_assigned_round_id:
                     insemination_round_id = _normalize_text(auto_assigned_round_id)
             
-            # Update the record
-            conn.execute(
-                """
-                UPDATE registrations SET
-                    animal_number = ?, mother_id = ?, father_id = ?, born_date = ?, weight = ?, current_weight = ?,
-                    gender = ?, animal_type = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
-                    insemination_round_id = ?, insemination_identifier = ?, scrotal_circumference = ?,
-                    rp_animal = ?, rp_mother = ?, mother_weight = ?, weaning_weight = ?,
-                    death_date = ?, sold_date = ?, animal_idv = ?,
-                    updated_at = datetime('now')
-                WHERE id = ?
-                """,
-                (
-                    animal, mother, father, body.bornDate, weight, current_weight,
-                    gender, animal_type, status, color, notes, notes_mother,
-                    insemination_round_id, insemination_identifier, scrotal_circumference,
-                    rp_animal, rp_mother, mother_weight, weaning_weight,
-                    death_date, sold_date, animal_idv,
-                    animal_id
-                )
-            )
+            # =========================================================================
+            # EVENT-FIRST ARCHITECTURE FOR UPDATES
+            # 1. Emit events FIRST (source of truth)
+            # 2. Project snapshot (derived from events)
+            # 3. Project registration from snapshot (derived, for backwards compatibility)
+            # =========================================================================
             
-            # Emit domain events for changes (Event Sourcing)
+            # Step 1: Emit domain events FIRST (source of truth)
             if company_id:
                 try:
                     # Map of field -> (old_value, new_value, event_type)
@@ -956,8 +951,18 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                             import logging
                             logging.warning(f"Failed to emit event for mother {mother}: {e}")
                     
-                    # Project snapshot
+                    # Step 2: Project snapshot (derived from events)
                     project_animal_snapshot(animal_id, company_id)
+                    
+                    # Step 3: Project registration from snapshot (derived, for backwards compatibility)
+                    snapshot = get_snapshot(animal_id, company_id)
+                    if snapshot:
+                        project_registration_from_snapshot(
+                            animal_id=animal_id,
+                            snapshot=snapshot,
+                            created_by=created_by_or_key,
+                            created_at=old_values.get('created_at', _dt.datetime.utcnow().isoformat()),
+                        )
                     
                 except Exception as e:
                     # Log but don't fail - triggers still work as backup
