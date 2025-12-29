@@ -104,6 +104,7 @@ def update_registration_by_identifier(body: UpdateBody, request: Request, x_user
                 # Convert UpdateBody to UpdateAnimalByNumberBody format
                 update_by_number_body = UpdateAnimalByNumberBody(
                     animalNumber=body.animalNumber,
+                    animalIdv=body.animalIdv,
                     currentWeight=body.currentWeight or body.weight,
                     notes=body.notes,
                     status=body.status,

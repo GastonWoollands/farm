@@ -578,6 +578,7 @@ class ApiService {
           },
           body: JSON.stringify({
             animalNumber: record.animal_number,
+            animalIdv: record.animal_idv ?? null,
             createdAt: record.createdAt,
             motherId: record.mother_id ?? null,
             fatherId: record.father_id ?? null,
