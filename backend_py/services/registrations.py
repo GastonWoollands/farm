@@ -1255,7 +1255,7 @@ def export_rows(created_by_or_key: str, date: str | None, start: str | None, end
         SELECT animal_number, born_date, mother_id, father_id,
                weight, gender, animal_type, status, color, notes, notes_mother, created_at,
                insemination_round_id, insemination_identifier, scrotal_circumference,
-               rp_animal, rp_mother, mother_weight, weaning_weight
+               rp_animal, rp_mother, mother_weight, weaning_weight, animal_idv
         FROM registrations
         WHERE {where_sql}
         ORDER BY id ASC
@@ -1281,7 +1281,7 @@ def get_registrations_multi_tenant(user: dict, limit: int = 100) -> list[dict]:
             SELECT id, animal_number, created_at, mother_id, born_date, weight, 
                    gender, status, color, notes, notes_mother, insemination_round_id,
                    insemination_identifier, scrotal_circumference, animal_type,
-                   rp_animal, rp_mother, mother_weight, weaning_weight
+                   rp_animal, rp_mother, mother_weight, weaning_weight, animal_idv
             FROM registrations
             WHERE {where_clause}
             ORDER BY id DESC
@@ -1349,7 +1349,7 @@ def export_rows_multi_tenant(user: dict, date: str = None, start: str = None, en
             SELECT animal_number, born_date, mother_id, father_id,
                    weight, gender, animal_type, status, color, notes, notes_mother, 
                    created_at, insemination_round_id, insemination_identifier, 
-                   scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight
+                   scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight, animal_idv
             FROM registrations
             WHERE {where_clause}{date_conditions}
             ORDER BY id ASC
@@ -1384,7 +1384,7 @@ def export_rows_multi_tenant(user: dict, date: str = None, start: str = None, en
                        current_weight AS weight, gender, NULL AS animal_type, 
                        current_status AS status, color, notes, notes_mother,
                        updated_at AS created_at, insemination_round_id, insemination_identifier,
-                       scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight
+                       scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight, animal_idv
                 FROM animal_snapshots
                 WHERE company_id = ? 
                   AND (animal_id < 0 OR animal_id NOT IN (SELECT id FROM registrations))
