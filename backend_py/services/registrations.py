@@ -1039,6 +1039,7 @@ def find_and_update_registration(created_by_or_key: str, body, company_id: int |
                 fatherId=body.fatherId,
                 bornDate=body.bornDate,
                 weight=body.weight,
+                currentWeight=body.currentWeight if hasattr(body, 'currentWeight') else None,
                 motherWeight=body.motherWeight,
                 weaningWeight=body.weaningWeight,
                 gender=body.gender,
@@ -1048,7 +1049,9 @@ def find_and_update_registration(created_by_or_key: str, body, company_id: int |
                 notesMother=body.notesMother,
                 inseminationRoundId=body.inseminationRoundId,
                 inseminationIdentifier=body.inseminationIdentifier,
-                scrotalCircumference=body.scrotalCircumference
+                scrotalCircumference=body.scrotalCircumference,
+                deathDate=body.deathDate if hasattr(body, 'deathDate') else None,
+                soldDate=body.soldDate if hasattr(body, 'soldDate') else None,
             )
             
             update_registration(created_by_or_key, animal_id, update_body, company_id)

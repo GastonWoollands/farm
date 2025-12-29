@@ -27,6 +27,7 @@ class RegisterBody(BaseModel):
     weaningWeight: float | None = None
     currentWeight: float | None = None
     deathDate: str | None = None
+    soldDate: str | None = None
 
 class UpdateBody(BaseModel):
     animalNumber: str
