@@ -155,12 +155,28 @@ def update_registration_endpoint(animal_id: int, body: RegisterBody, request: Re
 
 @router.delete("/register")
 def delete_registration(body: DeleteBody, request: Request, x_user_key: str | None = Header(default=None)):
-    decoded = verify_bearer_id_token(request.headers.get('Authorization'))
-    user_id = decoded.get('uid') if decoded else None
-    if not user_id:
+    # Try new authentication first (creates user automatically)
+    user, company_id = authenticate_user(request)
+    if user:
+        user_id = user.get('firebase_uid')
+    else:
+        # Fallback to legacy key if token missing
         if not x_user_key or x_user_key not in VALID_KEYS:
             raise HTTPException(status_code=401, detail="Unauthorized")
-    svc_delete(user_id or x_user_key, body.animalNumber, body.createdAt)
+        # Block legacy users without company_id from deleting records
+        raise HTTPException(
+            status_code=403, 
+            detail="Legacy users without company assignment cannot delete records. Please use authenticated access with company assignment."
+        )
+    
+    # Require company_id for all deletes
+    if not company_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Company assignment required to delete records. Please ensure your user account is assigned to a company."
+        )
+    
+    svc_delete(user_id, body.animalNumber, body.createdAt, company_id)
     return {"ok": True}
 
 @router.get("/export")

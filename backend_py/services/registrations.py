@@ -10,6 +10,7 @@ from .event_emitter import (
     emit_birth_registered,
     emit_death_recorded,
     emit_field_change,
+    emit_animal_deleted,
     ensure_animal_has_events,
     get_events_for_animal_by_number,
 )
@@ -606,35 +607,69 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
     except sqlite3.Error as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
-def delete_registration(created_by_or_key: str, animal_number: str, created_at: str | None) -> None:
+def delete_registration(user_id: str, animal_number: str, created_at: str | None, company_id: int) -> None:
+    """Delete an animal registration using event-first pattern.
+    
+    1. Find the animal by animal_number and company_id
+    2. Emit ANIMAL_DELETED event
+    3. Update snapshot status to DELETED
+    4. Delete from registrations table
+    """
+    animal_number = _normalize_text(animal_number)
+    if not animal_number:
+        raise HTTPException(status_code=400, detail="Animal number required")
+    
     try:
         with conn:
+            # Find the animal record
             if created_at:
-                conn.execute(
+                cursor = conn.execute(
                     """
-                    DELETE FROM registrations
-                    WHERE id IN (
-                        SELECT id FROM registrations
-                        WHERE ((created_by = ?) OR (user_key = ?)) AND animal_number = ? AND created_at = ?
-                        ORDER BY id DESC LIMIT 1
-                    )
+                    SELECT id FROM registrations
+                    WHERE animal_number = ? AND company_id = ? AND created_at = ?
+                    ORDER BY id DESC LIMIT 1
                     """,
-                    (created_by_or_key, created_by_or_key, animal_number, created_at),
+                    (animal_number, company_id, created_at),
                 )
             else:
-                conn.execute(
+                cursor = conn.execute(
                     """
-                    DELETE FROM registrations
-                    WHERE id IN (
-                        SELECT id FROM registrations
-                        WHERE ((created_by = ?) OR (user_key = ?)) AND animal_number = ?
-                        ORDER BY id DESC LIMIT 1
-                    )
+                    SELECT id FROM registrations
+                    WHERE animal_number = ? AND company_id = ?
+                    ORDER BY id DESC LIMIT 1
                     """,
-                    (created_by_or_key, created_by_or_key, animal_number),
+                    (animal_number, company_id),
                 )
-    except sqlite3.Error:
-        raise HTTPException(status_code=500, detail="DB error")
+            
+            record = cursor.fetchone()
+            if not record:
+                raise HTTPException(status_code=404, detail=f"Animal {animal_number} not found")
+            
+            animal_id = record[0]
+            
+            # Step 1: Emit ANIMAL_DELETED event (source of truth)
+            emit_animal_deleted(
+                animal_id=animal_id,
+                animal_number=animal_number,
+                company_id=company_id,
+                user_id=user_id,
+                notes=f"Animal deleted by user {user_id}",
+            )
+            
+            # Step 2: Project snapshot (marks status as DELETED)
+            project_animal_snapshot(animal_id, company_id)
+            
+            # Step 3: Delete from registrations table
+            conn.execute(
+                "DELETE FROM registrations WHERE id = ?",
+                (animal_id,),
+            )
+            conn.commit()
+            
+    except HTTPException:
+        raise
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
 def update_registration(created_by_or_key: str, animal_id: int, body, company_id: int | None = None) -> None:
     """Update an existing registration record.
@@ -1246,7 +1281,7 @@ def update_animal_by_number(
         project_animal_snapshot_by_number(animal_number, company_id)
 
 def export_rows(created_by_or_key: str, date: str | None, start: str | None, end: str | None) -> list[dict]:
-    where = ["((created_by = ?) OR (user_key = ?))"]
+    where = ["((created_by = ?) OR (user_key = ?))", "(status IS NULL OR status != 'DELETED')"]
     params: list = [created_by_or_key, created_by_or_key]
     if date:
         where.append("date(born_date) = date(?)")
@@ -1292,7 +1327,7 @@ def get_registrations_multi_tenant(user: dict, limit: int = 100) -> list[dict]:
                    insemination_identifier, scrotal_circumference, animal_type,
                    rp_animal, rp_mother, mother_weight, weaning_weight, animal_idv
             FROM registrations
-            WHERE {where_clause}
+            WHERE {where_clause} AND (status IS NULL OR status != 'DELETED')
             ORDER BY id DESC
             LIMIT ?
             """,
@@ -1351,7 +1386,7 @@ def export_rows_multi_tenant(user: dict, date: str = None, start: str = None, en
                 date_conditions += " AND date(born_date) <= date(?)"
                 date_params.append(end)
         
-        # Query registrations (existing behavior)
+        # Query registrations (existing behavior), excluding DELETED animals
         reg_params = list(params) + date_params
         cursor = conn.execute(
             f"""
@@ -1360,7 +1395,7 @@ def export_rows_multi_tenant(user: dict, date: str = None, start: str = None, en
                    created_at, insemination_round_id, insemination_identifier, 
                    scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight, animal_idv
             FROM registrations
-            WHERE {where_clause}{date_conditions}
+            WHERE {where_clause}{date_conditions} AND (status IS NULL OR status != 'DELETED')
             ORDER BY id ASC
             """,
             tuple(reg_params)

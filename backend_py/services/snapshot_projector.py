@@ -999,6 +999,7 @@ def get_snapshots_for_company(
             (company_id, status, limit, offset)
         )
     else:
+        # By default, exclude DELETED animals from results
         cursor = conn.execute(
             """
             SELECT animal_id, animal_number, company_id, birth_date, mother_id, father_id,
@@ -1008,7 +1009,7 @@ def get_snapshots_for_company(
                    insemination_round_id, insemination_identifier, animal_idv,
                    last_event_id, last_event_time, snapshot_version, updated_at
             FROM animal_snapshots
-            WHERE company_id = ?
+            WHERE company_id = ? AND (current_status IS NULL OR current_status != 'DELETED')
             ORDER BY animal_number ASC
             LIMIT ? OFFSET ?
             """,
