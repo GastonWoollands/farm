@@ -156,15 +156,18 @@ export function ClinicalHistoryPage({
     
     const searchUpper = animalNumber.toUpperCase()
     
+    // Filter out DELETED animals from all searches
+    const activeAnimals = allAnimals.filter(a => a.status !== 'DELETED')
+    
     // First, try to find by animal_number
-    let found = allAnimals.find(
+    let found = activeAnimals.find(
       a => a.animal_number?.toUpperCase() === searchUpper
     ) || null
     
     // If not found, try to find by mother_id (search for animals that have this as their mother_id)
     // Then find the mother animal itself
     if (!found) {
-      const calvesWithThisMother = allAnimals.filter(
+      const calvesWithThisMother = activeAnimals.filter(
         a => a.mother_id?.toUpperCase() === searchUpper
       )
       
@@ -172,7 +175,7 @@ export function ClinicalHistoryPage({
         const firstCalf = calvesWithThisMother[0]
         
         // Found calves with this mother_id, now find the mother animal
-        found = allAnimals.find(
+        found = activeAnimals.find(
           a => a.animal_number?.toUpperCase() === firstCalf.mother_id?.toUpperCase()
         ) || null
         
@@ -292,6 +295,9 @@ export function ClinicalHistoryPage({
     
     return allAnimals
       .filter(a => {
+        // Filter out DELETED animals - they should never appear in UI
+        if (a.status === 'DELETED') return false
+        
         if (isFather) {
           // For fathers, filter by father_id
           return a.father_id && a.father_id.toUpperCase() === animalId

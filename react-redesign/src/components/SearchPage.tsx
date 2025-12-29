@@ -87,6 +87,9 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
 
       let filtered = [...animals] // Create a copy to avoid mutations
 
+      // Filter out DELETED animals - they should never appear in UI
+      filtered = filtered.filter(animal => animal.status !== 'DELETED')
+
       // Apply search filter
       if (searchTerm) {
         filtered = filtered.filter(animal => {

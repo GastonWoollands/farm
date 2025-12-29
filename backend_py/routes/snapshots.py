@@ -81,6 +81,10 @@ def get_animal_snapshot(
     if not snapshot:
         raise HTTPException(status_code=404, detail="Animal snapshot not found")
     
+    # Check if animal is DELETED - don't return DELETED animals
+    if snapshot.get('current_status') == 'DELETED':
+        raise HTTPException(status_code=404, detail="Animal not found")
+    
     return snapshot
 
 
@@ -131,6 +135,10 @@ def get_animal_snapshot_by_number(
         else:
             # No events and no snapshot
             raise HTTPException(status_code=404, detail="Animal snapshot not found")
+    
+    # Check if animal is DELETED - don't return DELETED animals
+    if snapshot and snapshot.get('current_status') == 'DELETED':
+        raise HTTPException(status_code=404, detail="Animal not found")
     
     return snapshot
 
