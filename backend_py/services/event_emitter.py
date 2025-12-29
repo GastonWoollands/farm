@@ -124,6 +124,7 @@ def emit_mother_registered(
     color: Optional[str] = None,
     notes: Optional[str] = None,
     rp_animal: Optional[str] = None,
+    animal_idv: Optional[str] = None,
 ) -> int:
     """Emit a mother_registered event when a mother is first registered."""
     payload = {
@@ -134,6 +135,7 @@ def emit_mother_registered(
         "color": color,
         "notes": notes,
         "rp_animal": rp_animal,
+        "animal_idv": animal_idv,
     }
     
     return emit_event(
@@ -156,6 +158,7 @@ def emit_father_registered(
     color: Optional[str] = None,
     notes: Optional[str] = None,
     rp_animal: Optional[str] = None,
+    animal_idv: Optional[str] = None,
 ) -> int:
     """Emit a father_registered event when a father is first registered."""
     payload = {
@@ -166,6 +169,7 @@ def emit_father_registered(
         "color": color,
         "notes": notes,
         "rp_animal": rp_animal,
+        "animal_idv": animal_idv,
     }
     
     return emit_event(
@@ -200,6 +204,7 @@ def emit_birth_registered(
     scrotal_circumference: Optional[float] = None,
     insemination_round_id: Optional[str] = None,
     insemination_identifier: Optional[str] = None,
+    animal_idv: Optional[str] = None,
 ) -> int:
     """Emit a birth_registered event with full animal data."""
     payload = {
@@ -221,6 +226,7 @@ def emit_birth_registered(
         "scrotal_circumference": scrotal_circumference,
         "insemination_round_id": insemination_round_id,
         "insemination_identifier": insemination_identifier,
+        "animal_idv": animal_idv,
     }
     
     return emit_event(

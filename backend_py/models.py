@@ -6,6 +6,7 @@ class ValidateKeyBody(BaseModel):
 
 class RegisterBody(BaseModel):
     animalNumber: str
+    animalIdv: str | None = None
     createdAt: str | None = None
     motherId: str | None = None
     fatherId: str | None = None
@@ -29,6 +30,7 @@ class RegisterBody(BaseModel):
 
 class UpdateBody(BaseModel):
     animalNumber: str
+    animalIdv: str | None = None
     createdAt: str
     motherId: str | None = None
     fatherId: str | None = None
@@ -58,6 +60,7 @@ class UpdateBody(BaseModel):
 
 class UpdateAnimalByNumberBody(BaseModel):
     animalNumber: str
+    animalIdv: str | None = None
     currentWeight: float | None = None
     notes: str | None = None
     status: str | None = None
