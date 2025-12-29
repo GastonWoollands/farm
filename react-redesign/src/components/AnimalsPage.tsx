@@ -58,6 +58,7 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
   const SPECIAL_PREFIXES = ['TEMP-', 'UNKNOWN-', 'SIN-ID-', 'SINID-']
   const [formData, setFormData] = useState({
     animalNumber: prefixes.animalPrefix,
+    animalIdv: '',
     rpAnimal: '',
     motherId: prefixes.motherPrefix,
     rpMother: '',
@@ -147,6 +148,7 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
     try {
       const registerData: RegisterBody = {
         animalNumber: formData.animalNumber,
+        animalIdv: formData.animalIdv || undefined,
         rpAnimal: formData.rpAnimal || undefined,
         motherId: formData.motherId || undefined,
         rpMother: formData.rpMother || undefined,
@@ -169,6 +171,7 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
       // Add to local storage (replicates original frontend behavior)
       const animalData: Omit<Animal, 'id'> = {
         animal_number: registerData.animalNumber,
+        animal_idv: registerData.animalIdv,
         born_date: registerData.bornDate,
         mother_id: registerData.motherId,
         father_id: registerData.fatherId,
@@ -212,6 +215,7 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
       // Reset form
       setFormData({
         animalNumber: prefixes.animalPrefix,
+        animalIdv: '',
         rpAnimal: '',
         motherId: prefixes.motherPrefix,
         rpMother: '',
@@ -429,7 +433,7 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="animalNumber">ID del Animal *</Label>
+                      <Label htmlFor="animalNumber">ID del Animal (IDE) *</Label>
                       <Input
                         id="animalNumber"
                         name="animalNumber"
@@ -437,6 +441,16 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
                         onChange={handleInputChange}
                         placeholder={`${prefixes.animalPrefix}001-24`}
                         required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="animalIdv">ID Visual (IDV)</Label>
+                      <Input
+                        id="animalIdv"
+                        name="animalIdv"
+                        value={formData.animalIdv}
+                        onChange={handleInputChange}
+                        placeholder="e.g., V-001"
                       />
                     </div>
                     <div className="space-y-2">
@@ -671,6 +685,7 @@ export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChang
                       setIsRegistering(false)
                       setFormData({
                         animalNumber: prefixes.animalPrefix,
+                        animalIdv: '',
                         rpAnimal: '',
                         motherId: prefixes.motherPrefix,
                         rpMother: '',

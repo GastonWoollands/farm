@@ -5,6 +5,7 @@ import { localStorageService, PendingRecord } from './localStorage'
 export interface Animal {
   id?: number  // Optional since export-multi-tenant doesn't return id
   animal_number: string
+  animal_idv?: string  // Visual ID (IDV)
   born_date?: string
   mother_id?: string
   father_id?: string
@@ -31,6 +32,7 @@ export interface Animal {
 
 export interface RegisterBody {
   animalNumber: string
+  animalIdv?: string  // Visual ID (IDV)
   rpAnimal?: string
   motherId?: string
   rpMother?: string
@@ -55,6 +57,7 @@ export interface RegisterBody {
 
 export interface UpdateBody {
   animalNumber: string
+  animalIdv?: string  // Visual ID (IDV)
   createdAt: string
   rpAnimal?: string
   motherId?: string
@@ -78,6 +81,7 @@ export interface UpdateBody {
 
 export interface UpdateAnimalByNumberBody {
   animalNumber: string
+  animalIdv?: string  // Visual ID (IDV)
   currentWeight?: number
   notes?: string
   status?: string
@@ -176,6 +180,7 @@ export interface Company {
 export interface AnimalSnapshot {
   animal_id: number
   animal_number: string
+  animal_idv?: string  // Visual ID (IDV)
   company_id: number
   birth_date?: string
   mother_id?: string

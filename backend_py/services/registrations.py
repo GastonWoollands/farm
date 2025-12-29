@@ -110,6 +110,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
     animal = _normalize_text(body.animalNumber)
     mother = _normalize_text(body.motherId)
     father = _normalize_text(body.fatherId)
+    animal_idv = _normalize_text(body.animalIdv) if hasattr(body, 'animalIdv') else None
 
     weight = None
     if body.weight is not None:
@@ -240,9 +241,9 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                     animal_number, created_at, user_key, created_by, company_id,
                     mother_id, father_id, born_date, weight, current_weight, gender, animal_type, status, color, notes, notes_mother, short_id,
                     insemination_round_id, insemination_identifier, scrotal_circumference, rp_animal, rp_mother, mother_weight, weaning_weight,
-                    death_date, sold_date
+                    death_date, sold_date, animal_idv
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, substr(replace(hex(randomblob(16)), 'E', ''), 1, 10), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     animal,
@@ -270,6 +271,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                     weaning_weight,
                     death_date,
                     sold_date,
+                    animal_idv,
                 ),
             )
             animal_id = cursor.lastrowid
@@ -361,6 +363,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                             scrotal_circumference=scrotal_circumference,
                             insemination_round_id=insemination_round_id,
                             insemination_identifier=insemination_identifier,
+                            animal_idv=animal_idv,
                         )
                     
                     # Project snapshot
@@ -638,6 +641,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
     animal = _normalize_text(body.animalNumber)
     mother = _normalize_text(body.motherId)
     father = _normalize_text(body.fatherId)
+    animal_idv = _normalize_text(body.animalIdv) if hasattr(body, 'animalIdv') else None
 
     weight = None
     if body.weight is not None:
@@ -747,7 +751,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                 """
                 SELECT company_id, animal_number, mother_id, father_id, born_date, weight, current_weight,
                        gender, status, color, notes, notes_mother, rp_animal, rp_mother,
-                       mother_weight, weaning_weight, scrotal_circumference, death_date, sold_date
+                       mother_weight, weaning_weight, scrotal_circumference, death_date, sold_date, animal_idv
                 FROM registrations 
                 WHERE id = ? AND company_id = ?
                 """,
@@ -777,6 +781,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                 'scrotal_circumference': record[16],
                 'death_date': record[17] if len(record) > 17 else None,
                 'sold_date': record[18] if len(record) > 18 else None,
+                'animal_idv': record[19] if len(record) > 19 else None,
             }
             
             # Auto-assign insemination_round_id if missing and born_date is provided
@@ -793,7 +798,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                     gender = ?, animal_type = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
                     insemination_round_id = ?, insemination_identifier = ?, scrotal_circumference = ?,
                     rp_animal = ?, rp_mother = ?, mother_weight = ?, weaning_weight = ?,
-                    death_date = ?, sold_date = ?,
+                    death_date = ?, sold_date = ?, animal_idv = ?,
                     updated_at = datetime('now')
                 WHERE id = ?
                 """,
@@ -802,7 +807,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                     gender, animal_type, status, color, notes, notes_mother,
                     insemination_round_id, insemination_identifier, scrotal_circumference,
                     rp_animal, rp_mother, mother_weight, weaning_weight,
-                    death_date, sold_date,
+                    death_date, sold_date, animal_idv,
                     animal_id
                 )
             )
@@ -821,6 +826,7 @@ def update_registration(created_by_or_key: str, animal_id: int, body, company_id
                         ('color', old_values['color'], color, EventType.COLOR_RECORDED),
                         ('animal_number', old_values['animal_number'], animal, EventType.ANIMAL_NUMBER_CORRECTED),
                         ('born_date', old_values['born_date'], body.bornDate, EventType.BIRTH_DATE_CORRECTED),
+                        ('animal_idv', old_values['animal_idv'], animal_idv, EventType.ANIMAL_IDV_UPDATED),
                         ('notes', old_values['notes'], notes, EventType.NOTES_UPDATED),
                         ('notes_mother', old_values['notes_mother'], notes_mother, EventType.MOTHER_NOTES_UPDATED),
                         ('rp_animal', old_values['rp_animal'], rp_animal, EventType.RP_ANIMAL_UPDATED),
@@ -1020,6 +1026,7 @@ def find_and_update_registration(created_by_or_key: str, body, company_id: int |
             from ..models import RegisterBody
             update_body = RegisterBody(
                 animalNumber=body.animalNumber,
+                animalIdv=body.animalIdv if hasattr(body, 'animalIdv') else None,
                 motherId=body.motherId,
                 rpAnimal=body.rpAnimal,
                 rpMother=body.rpMother,
@@ -1084,6 +1091,7 @@ def update_animal_by_number(
         'notes_mother': snapshot.get('notes_mother') if snapshot else None,
         'death_date': snapshot.get('death_date') if snapshot else None,
         'sold_date': snapshot.get('sold_date') if snapshot else None,
+        'animal_idv': snapshot.get('animal_idv') if snapshot else None,
     }
     
     # If snapshot doesn't have values, try to get from most recent event
@@ -1103,6 +1111,8 @@ def update_animal_by_number(
                     old_values['rp_animal'] = payload.get('rp_animal')
                 if old_values['notes_mother'] is None and payload.get('notes_mother') is not None:
                     old_values['notes_mother'] = payload.get('notes_mother')
+                if old_values['animal_idv'] is None and payload.get('animal_idv') is not None:
+                    old_values['animal_idv'] = payload.get('animal_idv')
     
     # Normalize new values
     new_current_weight = None
@@ -1119,6 +1129,7 @@ def update_animal_by_number(
     new_color = _normalize_text(body.color)
     new_rp_animal = _normalize_text(body.rpAnimal)
     new_notes_mother = _normalize_text(body.notesMother)
+    new_animal_idv = _normalize_text(body.animalIdv) if hasattr(body, 'animalIdv') else None
     
     # Validate status if provided
     if new_status and new_status not in VALID_STATUSES:
@@ -1205,6 +1216,19 @@ def update_animal_by_number(
             field_name='notes_mother',
             old_value=old_values['notes_mother'],
             new_value=new_notes_mother,
+        )
+        events_emitted = True
+    
+    if new_animal_idv and new_animal_idv != old_values['animal_idv']:
+        emit_field_change(
+            event_type=EventType.ANIMAL_IDV_UPDATED,
+            animal_id=animal_id,
+            animal_number=animal_number,
+            company_id=company_id,
+            user_id=created_by_or_key,
+            field_name='animal_idv',
+            old_value=old_values['animal_idv'],
+            new_value=new_animal_idv,
         )
         events_emitted = True
     

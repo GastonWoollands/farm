@@ -46,6 +46,7 @@ const EVENT_TYPE_NAMES: Record<string, string> = {
   rp_mother_updated: 'RP madre actualizada',
   mother_weight_recorded: 'Peso de madre registrado',
   scrotal_circumference_recorded: 'Circunferencia escrotal registrada',
+  animal_idv_updated: 'IDV actualizado',
   insemination_recorded: 'Inseminación registrada',
   insemination_cancelled: 'Inseminación cancelada',
   insemination_date_corrected: 'Fecha de inseminación corregida',
@@ -95,6 +96,7 @@ function mapSnapshotToAnimal(snapshot: AnimalSnapshot): Animal {
     sold_date: snapshot.sold_date,
     insemination_round_id: snapshot.insemination_round_id,
     insemination_identifier: snapshot.insemination_identifier,
+    animal_idv: snapshot.animal_idv,
     // Note: snapshot doesn't have created_at, so it will be undefined for mothers/fathers
   }
 }
@@ -409,6 +411,7 @@ export function ClinicalHistoryPage({
             inseminationRoundId: editFormData.insemination_round_id || undefined,
             deathDate: editFormData.death_date || undefined,
             soldDate: editFormData.sold_date || undefined,
+            animalIdv: editFormData.animal_idv || undefined,
           }
 
           await apiService.updateAnimal(updateData)
@@ -439,6 +442,7 @@ export function ClinicalHistoryPage({
             color: editFormData.color || undefined,
             rpAnimal: editFormData.rp_animal || undefined,
             notesMother: editFormData.notes_mother || undefined,
+            animalIdv: editFormData.animal_idv || undefined,
           }
 
           await apiService.updateAnimalByNumber(updateData)
@@ -478,6 +482,7 @@ export function ClinicalHistoryPage({
           inseminationRoundId: editFormData.insemination_round_id || undefined,
           deathDate: editFormData.death_date || undefined,
           soldDate: editFormData.sold_date || undefined,
+          animalIdv: editFormData.animal_idv || undefined,
         }
 
         await apiService.registerAnimal(registerData)
@@ -520,6 +525,7 @@ export function ClinicalHistoryPage({
           inseminationRoundId: editFormData.insemination_round_id || undefined,
           deathDate: editFormData.death_date || undefined,
           soldDate: editFormData.sold_date || undefined,
+          animalIdv: editFormData.animal_idv || undefined,
         }
 
         await apiService.updateAnimal(updateData)
@@ -690,8 +696,9 @@ export function ClinicalHistoryPage({
                   </div>
                   <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
                     <span>Sexo: {getGenderName(animal.gender || '')}</span>
-                    <span>Estado: {getStatusName(animal.status || '')}</span>
-                    {animal.color && <span>Color: {animal.color.toLowerCase()}</span>}
+                                    <span>Estado: {getStatusName(animal.status || '')}</span>
+                                    {animal.color && <span>Color: {animal.color.toLowerCase()}</span>}
+                                    {animal.animal_idv && <span>IDV: {animal.animal_idv}</span>}
                     {animal.mother_id && (
                       <span className="flex items-center gap-1">
                         <Users className="h-3 w-3" />
@@ -1117,6 +1124,14 @@ export function ClinicalHistoryPage({
                 id="edit-rp-animal"
                 value={editFormData.rp_animal || ''}
                 onChange={e => setEditFormData({ ...editFormData, rp_animal: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-animal-idv">IDV (ID Visual)</Label>
+              <Input
+                id="edit-animal-idv"
+                value={editFormData.animal_idv || ''}
+                onChange={e => setEditFormData({ ...editFormData, animal_idv: e.target.value })}
               />
             </div>
             <div className="space-y-2">

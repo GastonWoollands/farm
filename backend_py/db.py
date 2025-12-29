@@ -961,4 +961,28 @@ def migrate_add_company_id_to_inseminations_ids():
 migrate_add_registration_fields()
 migrate_add_company_id_to_inseminations_ids()
 
+# Add animal_idv column to registrations and animal_snapshots tables
+def migrate_add_animal_idv():
+    """Add animal_idv (Visual ID) column to registrations and animal_snapshots tables"""
+    try:
+        # Add animal_idv to registrations table
+        _add_column_safely("registrations", "animal_idv", "TEXT")
+        
+        # Add animal_idv to animal_snapshots table
+        _add_column_safely("animal_snapshots", "animal_idv", "TEXT")
+        
+        # Create index for faster lookups by animal_idv
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_registrations_animal_idv ON registrations(animal_idv)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_animal_idv ON animal_snapshots(animal_idv)")
+            conn.commit()
+        except sqlite3.Error as e:
+            print(f"Error creating animal_idv indexes: {e}")
+        
+        print("Animal IDV migration completed successfully")
+    except sqlite3.Error as e:
+        print(f"Animal IDV migration error: {e}")
+
+migrate_add_animal_idv()
+
 

@@ -51,6 +51,7 @@ class EventType(str, Enum):
     COLOR_RECORDED = "color_recorded"
     ANIMAL_NUMBER_CORRECTED = "animal_number_corrected"
     BIRTH_DATE_CORRECTED = "birth_date_corrected"
+    ANIMAL_IDV_UPDATED = "animal_idv_updated"
     
     # Notes
     NOTES_UPDATED = "notes_updated"
@@ -99,6 +100,7 @@ REGISTRATION_EVENTS: List[EventType] = [
     EventType.COLOR_RECORDED,
     EventType.ANIMAL_NUMBER_CORRECTED,
     EventType.BIRTH_DATE_CORRECTED,
+    EventType.ANIMAL_IDV_UPDATED,
     EventType.NOTES_UPDATED,
     EventType.MOTHER_NOTES_UPDATED,
     EventType.RP_ANIMAL_UPDATED,
@@ -142,6 +144,7 @@ CORRECTION_FIELD_MAP: Dict[str, EventType] = {
     'color': EventType.COLOR_RECORDED,
     'animal_number': EventType.ANIMAL_NUMBER_CORRECTED,
     'born_date': EventType.BIRTH_DATE_CORRECTED,
+    'animal_idv': EventType.ANIMAL_IDV_UPDATED,
     'notes': EventType.NOTES_UPDATED,
     'notes_mother': EventType.MOTHER_NOTES_UPDATED,
     'rp_animal': EventType.RP_ANIMAL_UPDATED,
@@ -190,6 +193,7 @@ class BirthRegisteredPayload(EventPayload):
     scrotal_circumference: Optional[float] = None
     insemination_round_id: Optional[str] = None
     insemination_identifier: Optional[str] = None
+    animal_idv: Optional[str] = None
 
 
 @dataclass

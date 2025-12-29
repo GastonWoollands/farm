@@ -93,6 +93,7 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
           const searchLower = searchTerm.toLowerCase()
           return (
             (animal.animal_number || '').toLowerCase().includes(searchLower) ||
+            (animal.animal_idv || '').toLowerCase().includes(searchLower) ||
             (animal.rp_animal || '').toLowerCase().includes(searchLower) ||
             (animal.mother_id || '').toLowerCase().includes(searchLower) ||
             (animal.rp_mother || '').toLowerCase().includes(searchLower) ||
@@ -214,6 +215,7 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
       // Update directly on backend
       const updateData: UpdateBody = {
           animalNumber: editingAnimal.animal_number,
+          animalIdv: editFormData.animal_idv || undefined,
           createdAt: editingAnimal.created_at || '',
           rpAnimal: editFormData.rp_animal || undefined,
           motherId: editFormData.mother_id || undefined,
@@ -599,11 +601,18 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h3 className="font-semibold text-lg">{animal.animal_number}</h3>
-                        {animal.rp_animal && (
-                          <Badge variant="outline" className="mt-1">
-                            {animal.rp_animal}
-                          </Badge>
-                        )}
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {animal.animal_idv && (
+                            <Badge variant="secondary" className="text-xs">
+                              IDV: {animal.animal_idv}
+                            </Badge>
+                          )}
+                          {animal.rp_animal && (
+                            <Badge variant="outline" className="text-xs">
+                              {animal.rp_animal}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                       <Badge variant={animal.synced !== false ? "default" : "destructive"}>
                         {animal.synced !== false ? (
@@ -752,6 +761,16 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
           </DialogHeader>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-animal-idv">ID Visual (IDV)</Label>
+              <Input
+                id="edit-animal-idv"
+                value={editFormData.animal_idv || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, animal_idv: e.target.value })}
+                placeholder="e.g., V-001"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="edit-rp-animal">RP Animal</Label>
               <Input
