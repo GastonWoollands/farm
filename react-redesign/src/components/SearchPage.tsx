@@ -609,11 +609,11 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
                               IDV: {animal.animal_idv}
                             </Badge>
                           )}
-                          {animal.rp_animal && (
+                        {animal.rp_animal && (
                             <Badge variant="outline" className="text-xs">
-                              {animal.rp_animal}
-                            </Badge>
-                          )}
+                            {animal.rp_animal}
+                          </Badge>
+                        )}
                         </div>
                       </div>
                       <Badge variant={animal.synced !== false ? "default" : "destructive"}>
@@ -918,8 +918,8 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="edit-color">Color</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-color">Color</Label>
               <Select value={editFormData.color || ''} onValueChange={(value) => setEditFormData({ ...editFormData, color: value })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar color" />

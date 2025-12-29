@@ -625,18 +625,18 @@ def delete_registration(user_id: str, animal_number: str, created_at: str | None
             if created_at:
                 cursor = conn.execute(
                     """
-                    SELECT id FROM registrations
+                        SELECT id FROM registrations
                     WHERE animal_number = ? AND company_id = ? AND created_at = ?
-                    ORDER BY id DESC LIMIT 1
+                        ORDER BY id DESC LIMIT 1
                     """,
                     (animal_number, company_id, created_at),
                 )
             else:
                 cursor = conn.execute(
                     """
-                    SELECT id FROM registrations
+                        SELECT id FROM registrations
                     WHERE animal_number = ? AND company_id = ?
-                    ORDER BY id DESC LIMIT 1
+                        ORDER BY id DESC LIMIT 1
                     """,
                     (animal_number, company_id),
                 )
@@ -663,7 +663,7 @@ def delete_registration(user_id: str, animal_number: str, created_at: str | None
             conn.execute(
                 "DELETE FROM registrations WHERE id = ?",
                 (animal_id,),
-            )
+                )
             conn.commit()
             
     except HTTPException:

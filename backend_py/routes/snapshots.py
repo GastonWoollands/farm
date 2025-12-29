@@ -153,49 +153,52 @@ def get_snapshot_stats(
     
     from ..db import conn
     
-    # Get counts by status
-    cursor = conn.execute("""
+    # Exclude DELETED animals from all stats
+    deleted_filter = "AND (current_status IS NULL OR current_status != 'DELETED')"
+    
+    # Get counts by status (excluding DELETED)
+    cursor = conn.execute(f"""
         SELECT current_status, COUNT(*) as count
         FROM animal_snapshots
-        WHERE company_id = ?
+        WHERE company_id = ? {deleted_filter}
         GROUP BY current_status
     """, (company_id,))
     status_counts = dict(cursor.fetchall())
     
-    # Get counts by gender
-    cursor = conn.execute("""
+    # Get counts by gender (excluding DELETED)
+    cursor = conn.execute(f"""
         SELECT gender, COUNT(*) as count
         FROM animal_snapshots
-        WHERE company_id = ?
+        WHERE company_id = ? {deleted_filter}
         GROUP BY gender
     """, (company_id,))
     gender_counts = dict(cursor.fetchall())
     
-    # Get weight statistics
-    cursor = conn.execute("""
+    # Get weight statistics (excluding DELETED)
+    cursor = conn.execute(f"""
         SELECT 
             AVG(current_weight) as avg_weight,
             MIN(current_weight) as min_weight,
             MAX(current_weight) as max_weight,
             COUNT(current_weight) as count_with_weight
         FROM animal_snapshots
-        WHERE company_id = ? AND current_weight IS NOT NULL
+        WHERE company_id = ? AND current_weight IS NOT NULL {deleted_filter}
     """, (company_id,))
     weight_stats = cursor.fetchone()
     
-    # Get total count
-    cursor = conn.execute("""
-        SELECT COUNT(*) FROM animal_snapshots WHERE company_id = ?
+    # Get total count (excluding DELETED)
+    cursor = conn.execute(f"""
+        SELECT COUNT(*) FROM animal_snapshots WHERE company_id = ? {deleted_filter}
     """, (company_id,))
     total_count = cursor.fetchone()[0]
     
-    # Get insemination stats
-    cursor = conn.execute("""
+    # Get insemination stats (excluding DELETED)
+    cursor = conn.execute(f"""
         SELECT 
             SUM(insemination_count) as total_inseminations,
             COUNT(CASE WHEN insemination_count > 0 THEN 1 END) as animals_with_inseminations
         FROM animal_snapshots
-        WHERE company_id = ?
+        WHERE company_id = ? {deleted_filter}
     """, (company_id,))
     insem_stats = cursor.fetchone()
     

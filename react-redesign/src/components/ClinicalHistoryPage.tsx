@@ -696,8 +696,8 @@ export function ClinicalHistoryPage({
                   </div>
                   <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
                     <span>Sexo: {getGenderName(animal.gender || '')}</span>
-                                    <span>Estado: {getStatusName(animal.status || '')}</span>
-                                    {animal.color && <span>Color: {animal.color.toLowerCase()}</span>}
+                    <span>Estado: {getStatusName(animal.status || '')}</span>
+                    {animal.color && <span>Color: {animal.color.toLowerCase()}</span>}
                                     {animal.animal_idv && <span>IDV: {animal.animal_idv}</span>}
                     {animal.mother_id && (
                       <span className="flex items-center gap-1">
@@ -1259,9 +1259,9 @@ export function ClinicalHistoryPage({
             </div>
             {/* Show death date only when status is DEAD */}
             {editFormData.status === 'DEAD' && (
-              <div className="space-y-2">
+            <div className="space-y-2">
                 <Label htmlFor="edit-death-date">Fecha de Muerte</Label>
-                <Input
+              <Input
                   id="edit-death-date"
                   type="date"
                   value={editFormData.death_date || ''}
