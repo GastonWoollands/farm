@@ -171,7 +171,7 @@ export function Chatbot({ companyId }: ChatbotProps) {
                     <div className="space-y-1">
                       <p className="text-sm font-medium">Asistente de Datos</p>
                       <p className="text-xs opacity-75">
-                        Haz preguntas sobre tu granja en lenguaje natural
+                        Haz preguntas sobre tu cabaña en lenguaje natural
                       </p>
                     </div>
                     <div className="pt-4 space-y-1 text-xs opacity-60">

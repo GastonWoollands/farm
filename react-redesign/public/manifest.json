@@ -40,7 +40,7 @@
     {
       "name": "Ver Métricas",
       "short_name": "Métricas",
-      "description": "Ver métricas y estadísticas de la granja",
+      "description": "Ver métricas y estadísticas de la cabaña",
       "url": "/?tab=metrics",
       "icons": [
         {

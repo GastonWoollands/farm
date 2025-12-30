@@ -705,7 +705,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
       <Card>
         <CardHeader>
           <CardTitle className="text-xl">Resumen General</CardTitle>
-          <CardDescription>Métricas principales de la granja</CardDescription>
+          <CardDescription>Métricas principales de la cabaña</CardDescription>
         </CardHeader>
         <CardContent>
           {(() => {
@@ -718,7 +718,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="text-center p-4 bg-muted/30 rounded-lg">
                   <div className="text-3xl font-bold text-primary">{aliveCount}</div>
-                  <div className="text-sm text-muted-foreground">Animales Vivos en la Granja</div>
+                  <div className="text-sm text-muted-foreground">Animales Vivos en la Cabaña</div>
                   <div className="text-xs text-green-600 dark:text-green-400 mt-1">
                     En producción
                   </div>
@@ -734,7 +734,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                   <div className="text-3xl font-bold text-primary">{soldCount}</div>
                   <div className="text-sm text-muted-foreground">Animales Vendidos</div>
                   <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                    Vendidos de la granja
+                    Vendidos de la cabaña
                   </div>
                 </div>
               </div>

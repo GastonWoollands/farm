@@ -294,7 +294,7 @@ export function SettingsPage({ animals, stats }: SettingsPageProps) {
             Gestión de Datos
           </CardTitle>
           <CardDescription>
-            Importa, exporta y gestiona los datos de tu granja
+            Importa, exporta y gestiona los datos de tu cabaña
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -302,7 +302,7 @@ export function SettingsPage({ animals, stats }: SettingsPageProps) {
             <div className="space-y-4">
               <h4 className="font-medium">Exportar Datos</h4>
               <p className="text-sm text-muted-foreground">
-                Descarga todos los datos de tu granja en formato CSV
+                Descarga todos los datos de tu cabaña en formato CSV
               </p>
               <Button onClick={handleExport} className="w-full gap-2">
                 <Download className="h-4 w-4" />
