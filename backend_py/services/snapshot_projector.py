@@ -30,12 +30,15 @@ logger = logging.getLogger(__name__)
 
 def _handle_birth_registered(snapshot: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
     """Apply birth_registered event to snapshot."""
+    # Use current_weight if provided, fall back to weight (birth weight)
+    # Use explicit None check to handle 0 as a valid weight
+    weight_value = payload.get('current_weight') if payload.get('current_weight') is not None else payload.get('weight')
     return {
         **snapshot,
         'birth_date': payload.get('born_date'),
         'current_status': payload.get('status') or 'ALIVE',
         'gender': payload.get('gender'),
-        'current_weight': payload.get('weight'),
+        'current_weight': weight_value,
         'mother_id': payload.get('mother_id'),
         'father_id': payload.get('father_id'),
         'color': payload.get('color'),
@@ -996,6 +999,7 @@ def get_snapshots_for_company(
             (company_id, status, limit, offset)
         )
     else:
+        # By default, exclude DELETED animals from results
         cursor = conn.execute(
             """
             SELECT animal_id, animal_number, company_id, birth_date, mother_id, father_id,
@@ -1005,7 +1009,7 @@ def get_snapshots_for_company(
                    insemination_round_id, insemination_identifier, animal_idv,
                    last_event_id, last_event_time, snapshot_version, updated_at
             FROM animal_snapshots
-            WHERE company_id = ?
+            WHERE company_id = ? AND (current_status IS NULL OR current_status != 'DELETED')
             ORDER BY animal_number ASC
             LIMIT ? OFFSET ?
             """,

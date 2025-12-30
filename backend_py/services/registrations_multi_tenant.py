@@ -188,44 +188,46 @@ def get_registration_stats_multi_tenant(user: Dict) -> Dict:
         firebase_uid = user.get('firebase_uid')
         
         where_clause, params = get_data_filter_clause(company_id, firebase_uid)
+        # Exclude DELETED animals from all stats
+        deleted_filter = "AND (status IS NULL OR status != 'DELETED')"
         
-        # Total registrations
+        # Total registrations (excluding DELETED)
         cursor = conn.execute(
-            f"SELECT COUNT(*) FROM registrations WHERE {where_clause}",
+            f"SELECT COUNT(*) FROM registrations WHERE {where_clause} {deleted_filter}",
             params
         )
         total_registrations = cursor.fetchone()[0]
         
-        # By gender
+        # By gender (excluding DELETED)
         cursor = conn.execute(
             f"""
             SELECT gender, COUNT(*) 
             FROM registrations 
-            WHERE {where_clause} AND gender IS NOT NULL
+            WHERE {where_clause} AND gender IS NOT NULL {deleted_filter}
             GROUP BY gender
             """,
             params
         )
         gender_stats = dict(cursor.fetchall())
         
-        # By animal type
+        # By animal type (excluding DELETED)
         cursor = conn.execute(
             f"""
             SELECT animal_type, COUNT(*) 
             FROM registrations 
-            WHERE {where_clause} AND animal_type IS NOT NULL
+            WHERE {where_clause} AND animal_type IS NOT NULL {deleted_filter}
             GROUP BY animal_type
             """,
             params
         )
         animal_type_stats = dict(cursor.fetchall())
         
-        # Recent registrations (last 30 days)
+        # Recent registrations (last 30 days, excluding DELETED)
         cursor = conn.execute(
             f"""
             SELECT COUNT(*) 
             FROM registrations 
-            WHERE {where_clause} 
+            WHERE {where_clause} {deleted_filter}
             AND date(created_at) >= date('now', '-30 days')
             """,
             params

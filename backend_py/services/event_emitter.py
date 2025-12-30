@@ -267,6 +267,27 @@ def emit_death_recorded(
     )
 
 
+def emit_animal_deleted(
+    animal_id: int,
+    animal_number: str,
+    company_id: int,
+    user_id: str,
+    notes: Optional[str] = None,
+) -> int:
+    """Emit an animal_deleted event."""
+    payload = {
+        "notes": notes,
+    }
+    return emit_event(
+        event_type=EventType.ANIMAL_DELETED,
+        animal_id=animal_id,
+        animal_number=animal_number,
+        company_id=company_id,
+        user_id=user_id,
+        payload=payload,
+    )
+
+
 def emit_field_change(
     event_type: EventType,
     animal_id: int | None,

@@ -87,6 +87,9 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
 
       let filtered = [...animals] // Create a copy to avoid mutations
 
+      // Filter out DELETED animals - they should never appear in UI
+      filtered = filtered.filter(animal => animal.status !== 'DELETED')
+
       // Apply search filter
       if (searchTerm) {
         filtered = filtered.filter(animal => {
@@ -223,6 +226,7 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
           fatherId: editFormData.father_id || undefined,
           bornDate: editFormData.born_date || undefined,
           weight: editFormData.weight || undefined,
+          currentWeight: editFormData.current_weight || undefined,
           motherWeight: editFormData.mother_weight || undefined,
           weaningWeight: editFormData.weaning_weight || undefined,
           gender: editFormData.gender || undefined,
@@ -232,7 +236,8 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
           notesMother: editFormData.notes_mother || undefined,
           scrotalCircumference: editFormData.scrotal_circumference || undefined,
           inseminationRoundId: editFormData.insemination_round_id || undefined,
-          deathDate: editFormData.death_date || undefined
+          deathDate: editFormData.status === 'DEAD' ? editFormData.death_date || undefined : undefined,
+          soldDate: editFormData.status === 'SOLD' ? editFormData.sold_date || undefined : undefined
         }
 
       await apiService.updateAnimal(updateData)
@@ -607,11 +612,11 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
                               IDV: {animal.animal_idv}
                             </Badge>
                           )}
-                          {animal.rp_animal && (
+                        {animal.rp_animal && (
                             <Badge variant="outline" className="text-xs">
-                              {animal.rp_animal}
-                            </Badge>
-                          )}
+                            {animal.rp_animal}
+                          </Badge>
+                        )}
                         </div>
                       </div>
                       <Badge variant={animal.synced !== false ? "default" : "destructive"}>
@@ -818,45 +823,46 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-death-date">Fecha de Muerte</Label>
-              <Input
-                id="edit-death-date"
-                type="date"
-                value={editFormData.death_date || ''}
-                onChange={(e) => setEditFormData({ ...editFormData, death_date: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-weight">Peso</Label>
+              <Label htmlFor="edit-weight">Peso Nacimiento (kg)</Label>
               <Input
                 id="edit-weight"
                 type="number"
                 step="0.1"
-                value={editFormData.weight || ''}
-                onChange={(e) => setEditFormData({ ...editFormData, weight: parseFloat(e.target.value) || undefined })}
+                value={editFormData.weight ?? ''}
+                onChange={(e) => setEditFormData({ ...editFormData, weight: e.target.value ? parseFloat(e.target.value) : undefined })}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-mother-weight">Peso Madre</Label>
+              <Label htmlFor="edit-current-weight">Peso Actual (kg)</Label>
               <Input
-                id="edit-mother-weight"
+                id="edit-current-weight"
                 type="number"
                 step="0.1"
-                value={editFormData.mother_weight || ''}
-                onChange={(e) => setEditFormData({ ...editFormData, mother_weight: parseFloat(e.target.value) || undefined })}
+                value={editFormData.current_weight ?? ''}
+                onChange={(e) => setEditFormData({ ...editFormData, current_weight: e.target.value ? parseFloat(e.target.value) : undefined })}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-weaning-weight">Peso al Destete</Label>
+              <Label htmlFor="edit-weaning-weight">Peso al Destete (kg)</Label>
               <Input
                 id="edit-weaning-weight"
                 type="number"
                 step="0.1"
-                value={editFormData.weaning_weight || ''}
-                onChange={(e) => setEditFormData({ ...editFormData, weaning_weight: parseFloat(e.target.value) || undefined })}
+                value={editFormData.weaning_weight ?? ''}
+                onChange={(e) => setEditFormData({ ...editFormData, weaning_weight: e.target.value ? parseFloat(e.target.value) : undefined })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-mother-weight">Peso Madre (kg)</Label>
+              <Input
+                id="edit-mother-weight"
+                type="number"
+                step="0.1"
+                value={editFormData.mother_weight ?? ''}
+                onChange={(e) => setEditFormData({ ...editFormData, mother_weight: e.target.value ? parseFloat(e.target.value) : undefined })}
               />
             </div>
 
@@ -889,6 +895,32 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
               </Select>
             </div>
 
+            {/* Show death date only when status is DEAD */}
+            {editFormData.status === 'DEAD' && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-death-date">Fecha de Muerte</Label>
+                <Input
+                  id="edit-death-date"
+                  type="date"
+                  value={editFormData.death_date || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, death_date: e.target.value })}
+                />
+              </div>
+            )}
+
+            {/* Show sold date only when status is SOLD */}
+            {editFormData.status === 'SOLD' && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-sold-date">Fecha de Venta</Label>
+                <Input
+                  id="edit-sold-date"
+                  type="date"
+                  value={editFormData.sold_date || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, sold_date: e.target.value })}
+                />
+              </div>
+            )}
+
                     <div className="space-y-2">
                       <Label htmlFor="edit-color">Color</Label>
               <Select value={editFormData.color || ''} onValueChange={(value) => setEditFormData({ ...editFormData, color: value })}>
@@ -898,6 +930,7 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
                 <SelectContent>
                   <SelectItem value="COLORADO">Colorado</SelectItem>
                   <SelectItem value="NEGRO">Negro</SelectItem>
+                  <SelectItem value="MARRON">Marrón</SelectItem>
                   <SelectItem value="OTHERS">Otros</SelectItem>
                 </SelectContent>
               </Select>
@@ -908,13 +941,12 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
               <Select 
                 value={editFormData.insemination_round_id ? editFormData.insemination_round_id : 'none'} 
                 onValueChange={(value) => {
-                  // Handle clearing: if value is "none", set to undefined
                   const newValue = value === 'none' ? undefined : value
                   setEditFormData({ ...editFormData, insemination_round_id: newValue })
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar ronda de inseminación (opcional)" />
+                  <SelectValue placeholder="Seleccionar ronda (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Ninguna</SelectItem>
@@ -933,8 +965,8 @@ export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavi
                 id="edit-scrotal"
                 type="number"
                 step="0.1"
-                value={editFormData.scrotal_circumference || ''}
-                onChange={(e) => setEditFormData({ ...editFormData, scrotal_circumference: parseFloat(e.target.value) || undefined })}
+                value={editFormData.scrotal_circumference ?? ''}
+                onChange={(e) => setEditFormData({ ...editFormData, scrotal_circumference: e.target.value ? parseFloat(e.target.value) : undefined })}
               />
             </div>
 
