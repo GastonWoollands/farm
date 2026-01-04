@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routes import health, auth, registrations, admin, events, inseminations, father_assignment, animal_types, inseminations_ids, users, companies, user_context, chatbot
+from .routes import health, auth, registrations, admin, events, inseminations, father_assignment, animal_types, inseminations_ids, users, companies, user_context, chatbot, snapshots
 from .config import USE_POSTGRES
+import logging
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Farm Backend", version="0.1.0")
 

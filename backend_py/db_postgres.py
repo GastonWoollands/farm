@@ -76,7 +76,7 @@ async def set_user_context(connection: asyncpg.Connection, company_id: Optional[
         await connection.execute("SET LOCAL app.current_company_id = $1", company_id)
     else:
         # Setting to NULL for users without company (they'll see nothing due to RLS)
-        await connection.execute("SET LOCAL app.current_company_id = NULL")
+        await connection.execute("SET LOCAL app.current_company_id TO NULL")
 
 
 class DatabaseConnection:

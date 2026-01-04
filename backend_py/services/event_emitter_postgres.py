@@ -1,7 +1,7 @@
 """
-Event Emitter Service
+Event Emitter Service - PostgreSQL Async Implementation
 
-This module provides the infrastructure for emitting domain events.
+This module provides async PostgreSQL implementations for emitting domain events.
 Events are immutable records that capture business facts.
 
 Key principles:
@@ -16,68 +16,13 @@ import json
 import logging
 from datetime import datetime
 from typing import Dict, Optional, Any, List
-from ..config import USE_POSTGRES
-from ..db import conn
+from ..db_postgres import DatabaseConnection, execute_query
 from ..events.event_types import EventType
 
 logger = logging.getLogger(__name__)
 
-# Import Postgres async implementations if using Postgres
-_USE_POSTGRES = USE_POSTGRES
-if _USE_POSTGRES:
-    try:
-        from .event_emitter_postgres import (
-            emit_event as emit_event_postgres,
-            emit_mother_registered as emit_mother_registered_postgres,
-            emit_father_registered as emit_father_registered_postgres,
-            emit_birth_registered as emit_birth_registered_postgres,
-            emit_death_recorded as emit_death_recorded_postgres,
-            emit_animal_deleted as emit_animal_deleted_postgres,
-            emit_field_change as emit_field_change_postgres,
-            ensure_animal_has_events as ensure_animal_has_events_postgres,
-            emit_insemination_recorded as emit_insemination_recorded_postgres,
-            emit_insemination_cancelled as emit_insemination_cancelled_postgres,
-            get_events_for_animal as get_events_for_animal_postgres,
-            get_events_for_animal_by_number as get_events_for_animal_by_number_postgres,
-            get_events_since as get_events_since_postgres,
-        )
-    except ImportError:
-        logger.warning("Postgres event emitter not available, falling back to SQLite")
-        _USE_POSTGRES = False
 
-
-def emit_event(
-    event_type: EventType | str,
-    animal_id: int | None,
-    animal_number: str,
-    company_id: int,
-    user_id: str,
-    payload: Dict[str, Any],
-    metadata: Optional[Dict[str, Any]] = None,
-    event_time: Optional[str] = None,
-    event_version: int = 1,
-) -> int:
-    """Emit event - routes to Postgres async or SQLite sync based on USE_POSTGRES."""
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            emit_event_postgres(
-                event_type, animal_id, animal_number, company_id, user_id,
-                payload, metadata, event_time, event_version
-            )
-        )
-    return _emit_event_sqlite(
-        event_type, animal_id, animal_number, company_id, user_id,
-        payload, metadata, event_time, event_version
-    )
-
-
-def _emit_event_sqlite(
+async def emit_event(
     event_type: EventType | str,
     animal_id: int | None,
     animal_number: str,
@@ -89,7 +34,7 @@ def _emit_event_sqlite(
     event_version: int = 1,
 ) -> int:
     """
-    Emit an immutable domain event to the event store.
+    Emit an immutable domain event to the event store (PostgreSQL async).
     
     Args:
         event_type: The type of domain event (from EventType enum or string)
@@ -107,7 +52,6 @@ def _emit_event_sqlite(
     
     Raises:
         ValueError: If required parameters are missing
-        sqlite3.Error: If database operation fails
     """
     if not company_id:
         raise ValueError("company_id is required for all events")
@@ -124,9 +68,21 @@ def _emit_event_sqlite(
     # Generate unique event ID
     event_id = str(uuid.uuid4())
     
-    # Set event time to now if not provided
+    # Set event time to now if not provided, convert to datetime object
     if event_time is None:
-        event_time = datetime.utcnow().isoformat()
+        event_time = datetime.utcnow()
+    else:
+        # Convert ISO string to datetime object if needed
+        if isinstance(event_time, str):
+            try:
+                # Parse ISO format and convert to datetime
+                event_time = datetime.fromisoformat(event_time.replace('Z', '+00:00'))
+            except:
+                # If parsing fails, use current time
+                event_time = datetime.utcnow()
+        elif not isinstance(event_time, datetime):
+            # If it's not a datetime object, try to convert
+            event_time = datetime.utcnow()
     
     # Build default metadata
     default_metadata = {
@@ -137,14 +93,15 @@ def _emit_event_sqlite(
         default_metadata.update(metadata)
     
     try:
-        cursor = conn.execute(
-            """
-            INSERT INTO domain_events 
-            (event_id, animal_id, animal_number, event_type, event_version, 
-             payload, metadata, company_id, user_id, event_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
+        async with DatabaseConnection(company_id) as conn:
+            result = await conn.fetchrow(
+                """
+                INSERT INTO domain_events 
+                (event_id, animal_id, animal_number, event_type, event_version, 
+                 payload, metadata, company_id, user_id, event_time)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                RETURNING id
+                """,
                 event_id,
                 animal_id,
                 animal_number,
@@ -156,20 +113,18 @@ def _emit_event_sqlite(
                 user_id,
                 event_time,
             )
-        )
-        conn.commit()
-        
-        event_db_id = cursor.lastrowid
-        logger.info(f"Emitted event {event_type_str} (id={event_db_id}, event_id={event_id}) for animal {animal_number}")
-        
-        return event_db_id
-        
+            
+            event_db_id = result['id']
+            logger.info(f"Emitted event {event_type_str} (id={event_db_id}, event_id={event_id}) for animal {animal_number}")
+            
+            return event_db_id
+            
     except Exception as e:
         logger.error(f"Failed to emit event {event_type_str}: {e}")
         raise
 
 
-def emit_mother_registered(
+async def emit_mother_registered(
     animal_id: int | None,
     animal_number: str,
     company_id: int,
@@ -182,20 +137,6 @@ def emit_mother_registered(
     animal_idv: Optional[str] = None,
 ) -> int:
     """Emit a mother_registered event when a mother is first registered."""
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            emit_mother_registered_postgres(
-                animal_id, animal_number, company_id, user_id,
-                current_weight, status, color, notes, rp_animal, animal_idv
-            )
-        )
-    
     payload = {
         "animal_number": animal_number,
         "current_weight": current_weight,
@@ -207,7 +148,7 @@ def emit_mother_registered(
         "animal_idv": animal_idv,
     }
     
-    return emit_event(
+    return await emit_event(
         event_type=EventType.MOTHER_REGISTERED,
         animal_id=animal_id,
         animal_number=animal_number,
@@ -217,7 +158,7 @@ def emit_mother_registered(
     )
 
 
-def emit_father_registered(
+async def emit_father_registered(
     animal_id: int | None,
     animal_number: str,
     company_id: int,
@@ -241,7 +182,7 @@ def emit_father_registered(
         "animal_idv": animal_idv,
     }
     
-    return emit_event(
+    return await emit_event(
         event_type=EventType.FATHER_REGISTERED,
         animal_id=animal_id,
         animal_number=animal_number,
@@ -251,7 +192,7 @@ def emit_father_registered(
     )
 
 
-def emit_birth_registered(
+async def emit_birth_registered(
     animal_id: int,
     animal_number: str,
     company_id: int,
@@ -298,7 +239,7 @@ def emit_birth_registered(
         "animal_idv": animal_idv,
     }
     
-    return emit_event(
+    return await emit_event(
         event_type=EventType.BIRTH_REGISTERED,
         animal_id=animal_id,
         animal_number=animal_number,
@@ -309,7 +250,7 @@ def emit_birth_registered(
     )
 
 
-def emit_death_recorded(
+async def emit_death_recorded(
     animal_id: int,
     animal_number: str,
     company_id: int,
@@ -325,7 +266,7 @@ def emit_death_recorded(
         "notes": notes,
     }
     
-    return emit_event(
+    return await emit_event(
         event_type=EventType.DEATH_RECORDED,
         animal_id=animal_id,
         animal_number=animal_number,
@@ -336,7 +277,7 @@ def emit_death_recorded(
     )
 
 
-def emit_animal_deleted(
+async def emit_animal_deleted(
     animal_id: int,
     animal_number: str,
     company_id: int,
@@ -347,7 +288,7 @@ def emit_animal_deleted(
     payload = {
         "notes": notes,
     }
-    return emit_event(
+    return await emit_event(
         event_type=EventType.ANIMAL_DELETED,
         animal_id=animal_id,
         animal_number=animal_number,
@@ -357,7 +298,7 @@ def emit_animal_deleted(
     )
 
 
-def emit_field_change(
+async def emit_field_change(
     event_type: EventType,
     animal_id: int | None,
     animal_number: str,
@@ -376,7 +317,7 @@ def emit_field_change(
         "notes": notes,
     }
     
-    return emit_event(
+    return await emit_event(
         event_type=event_type,
         animal_id=animal_id,
         animal_number=animal_number,
@@ -386,7 +327,7 @@ def emit_field_change(
     )
 
 
-def ensure_animal_has_events(
+async def ensure_animal_has_events(
     animal_number: str,
     company_id: int,
     user_id: str,
@@ -417,121 +358,108 @@ def ensure_animal_has_events(
     Returns:
         True if events were created, False if animal already had events
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            ensure_animal_has_events_postgres(
-                animal_number, company_id, user_id, gender, weight,
-                current_weight, status, color, notes, rp_animal
-            )
-        )
-    
     if not animal_number or not animal_number.strip():
         return False
     
     try:
         # Check if animal has any domain events
-        cursor = conn.execute(
-            """
-            SELECT COUNT(*) FROM domain_events 
-            WHERE animal_number = ? AND company_id = ?
-            """,
-            (animal_number.strip().upper(), company_id)
-        )
-        count = cursor.fetchone()[0]
-        
-        if count > 0:
-            # Animal already has events
-            return False
-        
-        # Animal has no events, create a birth_registered event
-        # Try to find existing registration to get animal_id
-        cursor = conn.execute(
-            """
-            SELECT id FROM registrations 
-            WHERE animal_number = ? AND company_id = ?
-            LIMIT 1
-            """,
-            (animal_number.strip().upper(), company_id)
-        )
-        registration = cursor.fetchone()
-        
-        animal_id = registration[0] if registration else None
-        
-        # Determine gender - default to FEMALE if not specified
-        actual_gender = gender or 'FEMALE'
-        
-        # Emit appropriate event based on gender
-        if actual_gender == 'FEMALE':
-            emit_mother_registered(
-                animal_id=animal_id,
-                animal_number=animal_number.strip().upper(),
-                company_id=company_id,
-                user_id=user_id,
-                current_weight=current_weight,
-                status=status,
-                color=color,
-                notes=notes,
-                rp_animal=rp_animal,
+        async with DatabaseConnection(company_id) as conn:
+            count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM domain_events 
+                WHERE animal_number = $1 AND company_id = $2
+                """,
+                animal_number.strip().upper(),
+                company_id
             )
-        elif actual_gender == 'MALE':
-            emit_father_registered(
-                animal_id=animal_id,
-                animal_number=animal_number.strip().upper(),
-                company_id=company_id,
-                user_id=user_id,
-                current_weight=current_weight,
-                status=status,
-                color=color,
-                notes=notes,
-                rp_animal=rp_animal,
+            
+            if count > 0:
+                # Animal already has events
+                return False
+            
+            # Animal has no events, create a birth_registered event
+            # Try to find existing registration to get animal_id
+            registration = await conn.fetchrow(
+                """
+                SELECT id FROM registrations 
+                WHERE animal_number = $1 AND company_id = $2
+                LIMIT 1
+                """,
+                animal_number.strip().upper(),
+                company_id
             )
-        else:
-            # Fallback to birth_registered for unknown gender
-            emit_birth_registered(
-                animal_id=animal_id,
-                animal_number=animal_number.strip().upper(),
-                company_id=company_id,
-                user_id=user_id,
-                born_date=None,
-                weight=weight,
-                current_weight=current_weight,
-                gender=actual_gender,
-                status=status,
-                color=color,
-                mother_id=None,
-                father_id=None,
-                notes=notes,
-                notes_mother=None,
-                rp_animal=rp_animal,
-                rp_mother=None,
-                mother_weight=None,
-                weaning_weight=None,
-                scrotal_circumference=None,
-                insemination_round_id=None,
-                insemination_identifier=None,
-            )
-        
-        # Project snapshot if we have an animal_id
-        if animal_id:
-            try:
-                from .snapshot_projector import project_animal_snapshot
-                project_animal_snapshot(animal_id, company_id)
-            except Exception as e:
-                logger.warning(f"Failed to project snapshot for animal {animal_id}: {e}")
-        
-        return True
+            
+            animal_id = registration['id'] if registration else None
+            
+            # Determine gender - default to FEMALE if not specified
+            actual_gender = gender or 'FEMALE'
+            
+            # Emit appropriate event based on gender
+            if actual_gender == 'FEMALE':
+                await emit_mother_registered(
+                    animal_id=animal_id,
+                    animal_number=animal_number.strip().upper(),
+                    company_id=company_id,
+                    user_id=user_id,
+                    current_weight=current_weight,
+                    status=status,
+                    color=color,
+                    notes=notes,
+                    rp_animal=rp_animal,
+                )
+            elif actual_gender == 'MALE':
+                await emit_father_registered(
+                    animal_id=animal_id,
+                    animal_number=animal_number.strip().upper(),
+                    company_id=company_id,
+                    user_id=user_id,
+                    current_weight=current_weight,
+                    status=status,
+                    color=color,
+                    notes=notes,
+                    rp_animal=rp_animal,
+                )
+            else:
+                # Fallback to birth_registered for unknown gender
+                await emit_birth_registered(
+                    animal_id=animal_id,
+                    animal_number=animal_number.strip().upper(),
+                    company_id=company_id,
+                    user_id=user_id,
+                    born_date=None,
+                    weight=weight,
+                    current_weight=current_weight,
+                    gender=actual_gender,
+                    status=status,
+                    color=color,
+                    mother_id=None,
+                    father_id=None,
+                    notes=notes,
+                    notes_mother=None,
+                    rp_animal=rp_animal,
+                    rp_mother=None,
+                    mother_weight=None,
+                    weaning_weight=None,
+                    scrotal_circumference=None,
+                    insemination_round_id=None,
+                    insemination_identifier=None,
+                )
+            
+            # Project snapshot if we have an animal_id
+            if animal_id:
+                try:
+                    from .snapshot_projector_postgres import project_animal_snapshot
+                    await project_animal_snapshot(animal_id, company_id)
+                except Exception as e:
+                    logger.warning(f"Failed to project snapshot for animal {animal_id}: {e}")
+            
+            return True
     except Exception as e:
         logger.warning(f"Failed to ensure events for animal {animal_number}: {e}")
         return False
 
 
-def emit_insemination_recorded(
+async def emit_insemination_recorded(
     animal_number: str,  # mother_id serves as animal_number for inseminations
     company_id: int,
     user_id: str,
@@ -558,7 +486,7 @@ def emit_insemination_recorded(
         "notes": notes,
     }
     
-    return emit_event(
+    return await emit_event(
         event_type=EventType.INSEMINATION_RECORDED,
         animal_id=None,  # Inseminations don't have animal_id (mother_id is text)
         animal_number=animal_number,
@@ -569,7 +497,7 @@ def emit_insemination_recorded(
     )
 
 
-def emit_insemination_cancelled(
+async def emit_insemination_cancelled(
     animal_number: str,  # mother_id
     company_id: int,
     user_id: str,
@@ -591,7 +519,7 @@ def emit_insemination_cancelled(
         "previous_bull_id": previous_bull_id,
     }
     
-    return emit_event(
+    return await emit_event(
         event_type=EventType.INSEMINATION_CANCELLED,
         animal_id=None,
         animal_number=animal_number,
@@ -601,7 +529,7 @@ def emit_insemination_cancelled(
     )
 
 
-def get_events_for_animal(animal_id: int, company_id: int) -> List[Dict[str, Any]]:
+async def get_events_for_animal(animal_id: int, company_id: int) -> List[Dict[str, Any]]:
     """
     Get all domain events for a specific animal, ordered by event time.
     
@@ -612,97 +540,77 @@ def get_events_for_animal(animal_id: int, company_id: int) -> List[Dict[str, Any
     Returns:
         List of event dictionaries
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            get_events_for_animal_postgres(animal_id, company_id)
+    async with DatabaseConnection(company_id) as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, event_id, animal_id, animal_number, event_type, event_version,
+                   payload, metadata, company_id, user_id, event_time, created_at
+            FROM domain_events
+            WHERE animal_id = $1 AND company_id = $2
+            ORDER BY event_time ASC, id ASC
+            """,
+            animal_id,
+            company_id
         )
-    
-    cursor = conn.execute(
-        """
-        SELECT id, event_id, animal_id, animal_number, event_type, event_version,
-               payload, metadata, company_id, user_id, event_time, created_at
-        FROM domain_events
-        WHERE animal_id = ? AND company_id = ?
-        ORDER BY event_time ASC, id ASC
-        """,
-        (animal_id, company_id)
-    )
-    
-    rows = cursor.fetchall()
-    return [
-        {
-            "id": row[0],
-            "event_id": row[1],
-            "animal_id": row[2],
-            "animal_number": row[3],
-            "event_type": row[4],
-            "event_version": row[5],
-            "payload": json.loads(row[6]) if row[6] else {},
-            "metadata": json.loads(row[7]) if row[7] else {},
-            "company_id": row[8],
-            "user_id": row[9],
-            "event_time": row[10],
-            "created_at": row[11],
-        }
-        for row in rows
-    ]
+        
+        return [
+            {
+                "id": row['id'],
+                "event_id": row['event_id'],
+                "animal_id": row['animal_id'],
+                "animal_number": row['animal_number'],
+                "event_type": row['event_type'],
+                "event_version": row['event_version'],
+                "payload": row['payload'] if isinstance(row['payload'], dict) else json.loads(row['payload']),
+                "metadata": row['metadata'] if isinstance(row['metadata'], dict) else json.loads(row['metadata']) if row['metadata'] else {},
+                "company_id": row['company_id'],
+                "user_id": row['user_id'],
+                "event_time": row['event_time'].isoformat() if hasattr(row['event_time'], 'isoformat') else str(row['event_time']),
+                "created_at": row['created_at'].isoformat() if hasattr(row['created_at'], 'isoformat') else str(row['created_at']),
+            }
+            for row in rows
+        ]
 
 
-def get_events_for_animal_by_number(animal_number: str, company_id: int) -> List[Dict[str, Any]]:
+async def get_events_for_animal_by_number(animal_number: str, company_id: int) -> List[Dict[str, Any]]:
     """
     Get all domain events for a specific animal by animal_number.
     
     This is useful for insemination events where we don't have an animal_id.
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            get_events_for_animal_by_number_postgres(animal_number, company_id)
+    async with DatabaseConnection(company_id) as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, event_id, animal_id, animal_number, event_type, event_version,
+                   payload, metadata, company_id, user_id, event_time, created_at
+            FROM domain_events
+            WHERE animal_number = $1 AND company_id = $2
+            ORDER BY event_time ASC, id ASC
+            """,
+            animal_number,
+            company_id
         )
-    
-    cursor = conn.execute(
-        """
-        SELECT id, event_id, animal_id, animal_number, event_type, event_version,
-               payload, metadata, company_id, user_id, event_time, created_at
-        FROM domain_events
-        WHERE animal_number = ? AND company_id = ?
-        ORDER BY event_time ASC, id ASC
-        """,
-        (animal_number, company_id)
-    )
-    
-    rows = cursor.fetchall()
-    return [
-        {
-            "id": row[0],
-            "event_id": row[1],
-            "animal_id": row[2],
-            "animal_number": row[3],
-            "event_type": row[4],
-            "event_version": row[5],
-            "payload": json.loads(row[6]) if row[6] else {},
-            "metadata": json.loads(row[7]) if row[7] else {},
-            "company_id": row[8],
-            "user_id": row[9],
-            "event_time": row[10],
-            "created_at": row[11],
-        }
-        for row in rows
-    ]
+        
+        return [
+            {
+                "id": row['id'],
+                "event_id": row['event_id'],
+                "animal_id": row['animal_id'],
+                "animal_number": row['animal_number'],
+                "event_type": row['event_type'],
+                "event_version": row['event_version'],
+                "payload": row['payload'] if isinstance(row['payload'], dict) else json.loads(row['payload']),
+                "metadata": row['metadata'] if isinstance(row['metadata'], dict) else json.loads(row['metadata']) if row['metadata'] else {},
+                "company_id": row['company_id'],
+                "user_id": row['user_id'],
+                "event_time": row['event_time'].isoformat() if hasattr(row['event_time'], 'isoformat') else str(row['event_time']),
+                "created_at": row['created_at'].isoformat() if hasattr(row['created_at'], 'isoformat') else str(row['created_at']),
+            }
+            for row in rows
+        ]
 
 
-def get_events_since(
+async def get_events_since(
     company_id: int,
     since_event_id: Optional[int] = None,
     limit: int = 1000
@@ -718,58 +626,50 @@ def get_events_since(
     Returns:
         List of event dictionaries
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            get_events_since_postgres(company_id, since_event_id, limit)
-        )
-    
-    if since_event_id:
-        cursor = conn.execute(
-            """
-            SELECT id, event_id, animal_id, animal_number, event_type, event_version,
-                   payload, metadata, company_id, user_id, event_time, created_at
-            FROM domain_events
-            WHERE company_id = ? AND id > ?
-            ORDER BY id ASC
-            LIMIT ?
-            """,
-            (company_id, since_event_id, limit)
-        )
-    else:
-        cursor = conn.execute(
-            """
-            SELECT id, event_id, animal_id, animal_number, event_type, event_version,
-                   payload, metadata, company_id, user_id, event_time, created_at
-            FROM domain_events
-            WHERE company_id = ?
-            ORDER BY id ASC
-            LIMIT ?
-            """,
-            (company_id, limit)
-        )
-    
-    rows = cursor.fetchall()
-    return [
-        {
-            "id": row[0],
-            "event_id": row[1],
-            "animal_id": row[2],
-            "animal_number": row[3],
-            "event_type": row[4],
-            "event_version": row[5],
-            "payload": json.loads(row[6]) if row[6] else {},
-            "metadata": json.loads(row[7]) if row[7] else {},
-            "company_id": row[8],
-            "user_id": row[9],
-            "event_time": row[10],
-            "created_at": row[11],
-        }
-        for row in rows
-    ]
+    async with DatabaseConnection(company_id) as conn:
+        if since_event_id:
+            rows = await conn.fetch(
+                """
+                SELECT id, event_id, animal_id, animal_number, event_type, event_version,
+                       payload, metadata, company_id, user_id, event_time, created_at
+                FROM domain_events
+                WHERE company_id = $1 AND id > $2
+                ORDER BY id ASC
+                LIMIT $3
+                """,
+                company_id,
+                since_event_id,
+                limit
+            )
+        else:
+            rows = await conn.fetch(
+                """
+                SELECT id, event_id, animal_id, animal_number, event_type, event_version,
+                       payload, metadata, company_id, user_id, event_time, created_at
+                FROM domain_events
+                WHERE company_id = $1
+                ORDER BY id ASC
+                LIMIT $2
+                """,
+                company_id,
+                limit
+            )
+        
+        return [
+            {
+                "id": row['id'],
+                "event_id": row['event_id'],
+                "animal_id": row['animal_id'],
+                "animal_number": row['animal_number'],
+                "event_type": row['event_type'],
+                "event_version": row['event_version'],
+                "payload": row['payload'] if isinstance(row['payload'], dict) else json.loads(row['payload']),
+                "metadata": row['metadata'] if isinstance(row['metadata'], dict) else json.loads(row['metadata']) if row['metadata'] else {},
+                "company_id": row['company_id'],
+                "user_id": row['user_id'],
+                "event_time": row['event_time'].isoformat() if hasattr(row['event_time'], 'isoformat') else str(row['event_time']),
+                "created_at": row['created_at'].isoformat() if hasattr(row['created_at'], 'isoformat') else str(row['created_at']),
+            }
+            for row in rows
+        ]
 

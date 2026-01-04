@@ -1,9 +1,8 @@
 """
-Registration Projector Service
+Registration Projector Service - PostgreSQL Async Implementation
 
-This module projects snapshot data into the registrations table.
-The registrations table is a derived projection from events/snapshots,
-NOT the source of truth.
+This module provides async PostgreSQL implementations for projecting snapshot data into the registrations table.
+The registrations table is a derived projection from events/snapshots, NOT the source of truth.
 
 Key principles:
 - Registrations are derived from snapshots (which come from events)
@@ -12,43 +11,44 @@ Key principles:
 """
 
 import logging
-import sqlite3
+import secrets
 from datetime import datetime
 from typing import Dict, Optional, Any
-from ..config import USE_POSTGRES
-from ..db import conn
+from ..db_postgres import DatabaseConnection
 
 logger = logging.getLogger(__name__)
-
-# Import Postgres async implementations if using Postgres
-_USE_POSTGRES = USE_POSTGRES
-if _USE_POSTGRES:
-    try:
-        from .registration_projector_postgres import (
-            project_registration_from_snapshot as project_registration_from_snapshot_postgres,
-            project_registration_from_snapshot_data as project_registration_from_snapshot_data_postgres,
-        )
-    except ImportError:
-        logger.warning("Postgres registration projector not available, falling back to SQLite")
-        _USE_POSTGRES = False
 
 
 def generate_short_id() -> str:
     """Generate a unique short_id for registrations."""
-    cursor = conn.execute(
-        "SELECT substr(replace(hex(randomblob(16)), 'E', ''), 1, 10)"
-    )
-    return cursor.fetchone()[0]
+    # Generate random hex string (Postgres equivalent of SQLite randomblob)
+    return secrets.token_hex(5)[:10].upper()
 
 
-def project_registration_from_snapshot(
+def _convert_to_date(date_str: Optional[str]) -> Optional[Any]:
+    """Convert ISO date string to date object or None."""
+    if not date_str:
+        return None
+    try:
+        if isinstance(date_str, str):
+            # Parse ISO format
+            if 'T' in date_str:
+                return datetime.fromisoformat(date_str.replace('Z', '+00:00')).date()
+            else:
+                return datetime.strptime(date_str, '%Y-%m-%d').date()
+        return date_str
+    except:
+        return date_str
+
+
+async def project_registration_from_snapshot(
     animal_id: int,
     snapshot: Dict[str, Any],
     created_by: str,
     created_at: str,
 ) -> int:
     """
-    Project snapshot data into the registrations table.
+    Project snapshot data into the registrations table (PostgreSQL async).
     
     This is a derived write - the registration is populated from snapshot data,
     which itself is derived from domain events.
@@ -62,17 +62,6 @@ def project_registration_from_snapshot(
     Returns:
         The registration ID
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            project_registration_from_snapshot_postgres(animal_id, snapshot, created_by, created_at)
-        )
-    
     if not snapshot:
         logger.warning(f"Cannot project registration for animal_id={animal_id}: no snapshot")
         return animal_id
@@ -107,6 +96,20 @@ def project_registration_from_snapshot(
     sold_date = snapshot.get('sold_date')
     animal_idv = snapshot.get('animal_idv')
     
+    # Convert date strings to date objects
+    born_date_obj = _convert_to_date(born_date)
+    death_date_obj = _convert_to_date(death_date)
+    sold_date_obj = _convert_to_date(sold_date)
+    
+    # Convert created_at to timestamp
+    try:
+        if isinstance(created_at, str):
+            created_at_ts = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+        else:
+            created_at_ts = created_at
+    except:
+        created_at_ts = datetime.utcnow()
+    
     # Determine animal_type based on gender
     animal_type = None
     if gender:
@@ -116,48 +119,47 @@ def project_registration_from_snapshot(
             animal_type = 2  # Bull
     
     try:
-        # Check if registration already exists
-        cursor = conn.execute(
-            "SELECT id, short_id FROM registrations WHERE id = ?",
-            (animal_id,)
-        )
-        existing = cursor.fetchone()
-        
-        if existing:
-            # UPDATE existing registration
-            conn.execute(
-                """
-                UPDATE registrations SET
-                    animal_number = ?,
-                    mother_id = ?,
-                    father_id = ?,
-                    born_date = ?,
-                    weight = ?,
-                    current_weight = ?,
-                    gender = ?,
-                    animal_type = ?,
-                    status = ?,
-                    color = ?,
-                    notes = ?,
-                    notes_mother = ?,
-                    insemination_round_id = ?,
-                    insemination_identifier = ?,
-                    scrotal_circumference = ?,
-                    rp_animal = ?,
-                    rp_mother = ?,
-                    mother_weight = ?,
-                    weaning_weight = ?,
-                    death_date = ?,
-                    sold_date = ?,
-                    animal_idv = ?,
-                    updated_at = datetime('now')
-                WHERE id = ?
-                """,
-                (
+        async with DatabaseConnection(company_id) as conn:
+            # Check if registration already exists
+            existing = await conn.fetchrow(
+                "SELECT id, short_id FROM registrations WHERE id = $1",
+                animal_id
+            )
+            
+            if existing:
+                # UPDATE existing registration
+                await conn.execute(
+                    """
+                    UPDATE registrations SET
+                        animal_number = $1,
+                        mother_id = $2,
+                        father_id = $3,
+                        born_date = $4,
+                        weight = $5,
+                        current_weight = $6,
+                        gender = $7,
+                        animal_type = $8,
+                        status = $9,
+                        color = $10,
+                        notes = $11,
+                        notes_mother = $12,
+                        insemination_round_id = $13,
+                        insemination_identifier = $14,
+                        scrotal_circumference = $15,
+                        rp_animal = $16,
+                        rp_mother = $17,
+                        mother_weight = $18,
+                        weaning_weight = $19,
+                        death_date = $20,
+                        sold_date = $21,
+                        animal_idv = $22,
+                        updated_at = NOW()
+                    WHERE id = $23
+                    """,
                     animal_number,
                     mother_id,
                     father_id,
-                    born_date,
+                    born_date_obj,
                     weight,
                     current_weight,
                     gender,
@@ -173,39 +175,36 @@ def project_registration_from_snapshot(
                     rp_mother,
                     mother_weight,
                     weaning_weight,
-                    death_date,
-                    sold_date,
+                    death_date_obj,
+                    sold_date_obj,
                     animal_idv,
                     animal_id,
                 )
-            )
-            conn.commit()
-            logger.debug(f"Updated registration for animal_id={animal_id}")
-        else:
-            # INSERT new registration
-            short_id = generate_short_id()
-            conn.execute(
-                """
-                INSERT INTO registrations (
-                    id, animal_number, created_at, user_key, created_by, company_id,
-                    mother_id, father_id, born_date, weight, current_weight, gender, animal_type, 
-                    status, color, notes, notes_mother, short_id,
-                    insemination_round_id, insemination_identifier, scrotal_circumference, 
-                    rp_animal, rp_mother, mother_weight, weaning_weight,
-                    death_date, sold_date, animal_idv
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
+                logger.debug(f"Updated registration for animal_id={animal_id}")
+            else:
+                # INSERT new registration
+                short_id = generate_short_id()
+                await conn.execute(
+                    """
+                    INSERT INTO registrations (
+                        id, animal_number, created_at, user_key, created_by, company_id,
+                        mother_id, father_id, born_date, weight, current_weight, gender, animal_type, 
+                        status, color, notes, notes_mother, short_id,
+                        insemination_round_id, insemination_identifier, scrotal_circumference, 
+                        rp_animal, rp_mother, mother_weight, weaning_weight,
+                        death_date, sold_date, animal_idv
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+                    """,
                     animal_id,
                     animal_number,
-                    created_at,
+                    created_at_ts,
                     None,  # legacy user_key deprecated
                     created_by,
                     company_id,
                     mother_id,
                     father_id,
-                    born_date,
+                    born_date_obj,
                     weight,
                     current_weight,
                     gender,
@@ -222,22 +221,20 @@ def project_registration_from_snapshot(
                     rp_mother,
                     mother_weight,
                     weaning_weight,
-                    death_date,
-                    sold_date,
+                    death_date_obj,
+                    sold_date_obj,
                     animal_idv,
                 )
-            )
-            conn.commit()
-            logger.debug(f"Inserted registration for animal_id={animal_id}")
-        
-        return animal_id
-        
-    except sqlite3.Error as e:
+                logger.debug(f"Inserted registration for animal_id={animal_id}")
+            
+            return animal_id
+            
+    except Exception as e:
         logger.error(f"Error projecting registration for animal_id={animal_id}: {e}")
         raise
 
 
-def project_registration_from_snapshot_data(
+async def project_registration_from_snapshot_data(
     animal_id: int,
     animal_number: str,
     company_id: int,
@@ -272,24 +269,6 @@ def project_registration_from_snapshot_data(
     Returns:
         The registration ID
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            project_registration_from_snapshot_data_postgres(
-                animal_id, animal_number, company_id, created_by, created_at,
-                born_date, weight, current_weight, gender, status, color,
-                mother_id, father_id, notes, notes_mother, rp_animal, rp_mother,
-                mother_weight, weaning_weight, scrotal_circumference,
-                insemination_round_id, insemination_identifier, death_date,
-                sold_date, animal_idv
-            )
-        )
-    
     snapshot = {
         'animal_number': animal_number,
         'company_id': company_id,
@@ -314,7 +293,7 @@ def project_registration_from_snapshot_data(
         'animal_idv': animal_idv,
     }
     
-    return project_registration_from_snapshot(
+    return await project_registration_from_snapshot(
         animal_id=animal_id,
         snapshot=snapshot,
         created_by=created_by,
