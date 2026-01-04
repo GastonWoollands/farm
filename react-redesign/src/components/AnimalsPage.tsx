@@ -18,33 +18,47 @@ import {
   CheckCircle,
   Edit,
   Trash2,
-  Upload
+  Upload,
+  History
 } from 'lucide-react'
 import { formatDate, getGenderName } from '@/lib/utils'
 import { apiService, Animal, RegisterBody, InseminationRound } from '@/services/api'
+import { localStorageService } from '@/services/localStorage'
 import { usePrefixes } from '@/contexts/PrefixesContext'
 import { useEffect } from 'react'
 import { InseminationsUploadDialog } from './InseminationsUploadDialog'
+import { AnimalHistoryDialog } from './AnimalHistoryDialog'
+import { DuplicateAnimalDialog } from './DuplicateAnimalDialog'
 
 
 interface AnimalsPageProps {
   animals: Animal[]
+  allAnimals: Animal[] // All animals for duplicate checking
   onAnimalsChange: (animals: Animal[]) => void
   onStatsChange: () => void
+  onNavigateToSearch?: (searchTerm: string) => void
+  onNavigateToHistory?: (animalNumber: string) => void
 }
 
-export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: AnimalsPageProps) {
+export function AnimalsPage({ animals, allAnimals, onAnimalsChange, onStatsChange, onNavigateToSearch, onNavigateToHistory }: AnimalsPageProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isRegistering, setIsRegistering] = useState(false)
   const [isUploadingInseminations, setIsUploadingInseminations] = useState(false)
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [selectedAnimalForHistory, setSelectedAnimalForHistory] = useState<Animal | null>(null)
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
+  const [duplicateAnimal, setDuplicateAnimal] = useState<Animal | null>(null)
   const { prefixes } = usePrefixes()
   const [isRecordsExpanded, setIsRecordsExpanded] = useState(false)
   const [inseminationRounds, setInseminationRounds] = useState<InseminationRound[]>([])
   const [selectedRoundId, setSelectedRoundId] = useState<string>('all')
+  
+  // Special prefixes that bypass duplicate checking
+  const SPECIAL_PREFIXES = ['TEMP-', 'UNKNOWN-', 'SIN-ID-', 'SINID-']
   const [formData, setFormData] = useState({
     animalNumber: prefixes.animalPrefix,
+    animalIdv: '',
     rpAnimal: '',
     motherId: prefixes.motherPrefix,
     rpMother: '',
@@ -59,7 +73,9 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
     notes: '',
     notesMother: '',
     scrotalCircumference: '',
-    inseminationRoundId: ''
+    inseminationRoundId: '',
+    deathDate: '',
+    soldDate: ''
   })
 
   // Fetch insemination rounds
@@ -78,9 +94,26 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
   }, [])
 
   const totalAnimals = animals.length
-  const pendingAnimals = animals.filter(a => a.synced === false).length
-  const syncedAnimals = animals.filter(a => a.synced !== false).length
+  // Check for localId to identify pending records (new architecture)
+  const pendingAnimals = animals.filter(a => 'localId' in a && (a as any).localId !== undefined).length
+  const syncedAnimals = totalAnimals - pendingAnimals
 
+  // Check for duplicate animal numbers against ALL animals (not just displayed ones)
+  const checkForDuplicate = (animalNumber: string): Animal | null => {
+    if (!animalNumber) return null
+    
+    // Skip check if animal_number has special prefix
+    const hasSpecialPrefix = SPECIAL_PREFIXES.some(prefix => 
+      animalNumber.toUpperCase().startsWith(prefix)
+    )
+    if (hasSpecialPrefix) return null
+    
+    // Check if animal_number already exists in ALL animals list (case-insensitive)
+    // Use allAnimals (complete list) instead of animals (display subset)
+    return allAnimals.find(a => 
+      a.animal_number?.toUpperCase() === animalNumber.toUpperCase()
+    ) || null
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -93,12 +126,29 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+
+    // Check for duplicate before proceeding
+    const existing = checkForDuplicate(formData.animalNumber)
+    if (existing) {
+      setDuplicateAnimal(existing)
+      setDuplicateDialogOpen(true)
+      return  // Stop here, show dialog instead
+    }
+
+    // Continue with registration
+    await performRegistration()
+  }
+
+  // Extracted registration logic to be reusable
+  const performRegistration = async () => {
     setIsLoading(true)
     setError(null)
 
     try {
       const registerData: RegisterBody = {
         animalNumber: formData.animalNumber,
+        animalIdv: formData.animalIdv || undefined,
         rpAnimal: formData.rpAnimal || undefined,
         motherId: formData.motherId || undefined,
         rpMother: formData.rpMother || undefined,
@@ -113,12 +163,15 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         notes: formData.notes || undefined,
         notesMother: formData.notesMother || undefined,
         scrotalCircumference: formData.scrotalCircumference ? parseFloat(formData.scrotalCircumference) : undefined,
-        inseminationRoundId: formData.inseminationRoundId || undefined
+        inseminationRoundId: formData.inseminationRoundId || undefined,
+        deathDate: formData.deathDate || undefined,
+        soldDate: formData.soldDate || undefined
       }
 
       // Add to local storage (replicates original frontend behavior)
       const animalData: Omit<Animal, 'id'> = {
         animal_number: registerData.animalNumber,
+        animal_idv: registerData.animalIdv,
         born_date: registerData.bornDate,
         mother_id: registerData.motherId,
         father_id: registerData.fatherId,
@@ -138,9 +191,21 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         mother_weight: registerData.motherWeight,
         weaning_weight: registerData.weaningWeight
       }
-      await apiService.addLocalRecord(animalData)
+      await apiService.addPendingRecord(animalData)
       
-      // Refresh local data
+      // Trigger sync immediately if online (fixes "pendiente" staying unsynced issue)
+      if (navigator.onLine) {
+        try {
+          console.log('[Registration] Online - syncing immediately...')
+          await apiService.syncLocalRecords()
+          console.log('[Registration] Sync completed successfully')
+        } catch (syncError) {
+          console.warn('[Registration] Sync failed, will retry later:', syncError)
+          // Don't throw - record is safely in pending storage, will sync later
+        }
+      }
+      
+      // Refresh local data (will show synced status if sync succeeded)
       const updatedAnimals = await apiService.getDisplayRecords(10)
       onAnimalsChange(updatedAnimals)
       
@@ -150,6 +215,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
       // Reset form
       setFormData({
         animalNumber: prefixes.animalPrefix,
+        animalIdv: '',
         rpAnimal: '',
         motherId: prefixes.motherPrefix,
         rpMother: '',
@@ -164,7 +230,9 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
         notes: '',
         notesMother: '',
         scrotalCircumference: '',
-        inseminationRoundId: ''
+        inseminationRoundId: '',
+        deathDate: '',
+        soldDate: ''
       })
       setIsRegistering(false)
     } catch (err: any) {
@@ -183,11 +251,23 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
     setError(null)
 
     try {
-      // Delete from backend
-      await apiService.deleteAnimal(animal.animal_number, animal.created_at || '')
+      // Check if this is a pending (unsynced) record
+      const isPending = 'localId' in animal && (animal as any).localId !== undefined
       
-      // Update parent component
-      onAnimalsChange(animals.filter(a => a.animal_number !== animal.animal_number))
+      if (isPending) {
+        // Delete from localStorage pending records
+        const localId = (animal as any).localId
+        await localStorageService.deletePendingRecord(localId)
+        console.log('[Delete] Removed pending record:', animal.animal_number, 'localId:', localId)
+      } else {
+        // Delete from backend (synced record)
+        await apiService.deleteAnimal(animal.animal_number, animal.created_at || '')
+        console.log('[Delete] Deleted synced record from backend:', animal.animal_number)
+      }
+      
+      // Refresh the display
+      const updatedAnimals = await apiService.getDisplayRecords(10)
+      onAnimalsChange(updatedAnimals)
       
       // Update stats
       onStatsChange()
@@ -196,6 +276,26 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Handle "Register Anyway" action from duplicate dialog
+  const handleRegisterAnyway = async () => {
+    setDuplicateDialogOpen(false)
+    await performRegistration()
+  }
+
+  // Handle "Edit Existing" action from duplicate dialog
+  const handleEditExisting = () => {
+    setDuplicateDialogOpen(false)
+    if (duplicateAnimal && onNavigateToSearch) {
+      onNavigateToSearch(duplicateAnimal.animal_number)
+    }
+  }
+
+  // Handle dialog close
+  const handleDuplicateDialogClose = () => {
+    setDuplicateDialogOpen(false)
+    setDuplicateAnimal(null)
   }
 
   const handleExport = async () => {
@@ -333,7 +433,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="animalNumber">ID del Animal *</Label>
+                      <Label htmlFor="animalNumber">ID del Animal (IDE) *</Label>
                       <Input
                         id="animalNumber"
                         name="animalNumber"
@@ -341,6 +441,16 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         onChange={handleInputChange}
                         placeholder={`${prefixes.animalPrefix}001-24`}
                         required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="animalIdv">ID Visual (IDV)</Label>
+                      <Input
+                        id="animalIdv"
+                        name="animalIdv"
+                        value={formData.animalIdv}
+                        onChange={handleInputChange}
+                        placeholder="e.g., V-001"
                       />
                     </div>
                     <div className="space-y-2">
@@ -444,17 +554,62 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="status">Estado</Label>
-                      <Select name="status" value={formData.status} onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}>
+                      <Select
+                        name="status"
+                        value={formData.status}
+                        onValueChange={(value) =>
+                          setFormData(prev => ({
+                            ...prev,
+                            status: value,
+                            deathDate:
+                              value === 'DEAD' && !prev.deathDate
+                                ? new Date().toISOString().split('T')[0]
+                                : prev.deathDate,
+                            soldDate:
+                              value === 'SOLD' && !prev.soldDate
+                                ? new Date().toISOString().split('T')[0]
+                                : prev.soldDate
+                          }))
+                        }
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="ALIVE">Vivo</SelectItem>
                           <SelectItem value="DEAD">Muerto</SelectItem>
+                          <SelectItem value="SOLD">Vendido</SelectItem>
                           <SelectItem value="UNKNOWN">Desconocido</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {formData.status === 'DEAD' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="deathDate">Fecha de Muerte</Label>
+                        <Input
+                          id="deathDate"
+                          name="deathDate"
+                          type="date"
+                          value={formData.deathDate}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                    )}
+
+                    {formData.status === 'SOLD' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="soldDate">Fecha de Venta</Label>
+                        <Input
+                          id="soldDate"
+                          name="soldDate"
+                          type="date"
+                          value={formData.soldDate}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       <Label htmlFor="color">Color</Label>
                       <Select name="color" value={formData.color} onValueChange={(value) => setFormData(prev => ({ ...prev, color: value }))}>
@@ -530,6 +685,7 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                       setIsRegistering(false)
                       setFormData({
                         animalNumber: prefixes.animalPrefix,
+                        animalIdv: '',
                         rpAnimal: '',
                         motherId: prefixes.motherPrefix,
                         rpMother: '',
@@ -544,7 +700,9 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         notes: '',
                         notesMother: '',
                         scrotalCircumference: '',
-                        inseminationRoundId: ''
+                        inseminationRoundId: '',
+                        deathDate: '',
+                        soldDate: ''
                       })
                     }}>
                       Cancelar
@@ -609,8 +767,8 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                               {animal.rp_animal}
                             </Badge>
                           )}
-                          <Badge variant={animal.synced !== false ? "default" : "destructive"} className="text-xs">
-                            {animal.synced !== false ? 'Sincronizado' : 'Pendiente'}
+                          <Badge variant={'localId' in animal && (animal as any).localId !== undefined ? "destructive" : "default"} className="text-xs">
+                            {'localId' in animal && (animal as any).localId !== undefined ? 'Pendiente' : 'Sincronizado'}
                           </Badge>
                         </div>
                         <div className="text-sm text-muted-foreground space-y-1">
@@ -625,6 +783,30 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
                         </div>
                       </div>
                       <div className="flex items-center gap-2 justify-end sm:justify-start">
+                        {onNavigateToHistory && (
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            onClick={() => onNavigateToHistory(animal.animal_number)}
+                            className="flex-1 sm:flex-none"
+                            title="Ver historia clínica"
+                          >
+                            <History className="h-4 w-4" />
+                            <span className="ml-1 sm:hidden">Historia</span>
+                          </Button>
+                        )}
+                        {!onNavigateToHistory && (
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            onClick={() => setSelectedAnimalForHistory(animal)}
+                            className="flex-1 sm:flex-none"
+                            title="Ver historial de eventos"
+                          >
+                            <History className="h-4 w-4" />
+                            <span className="ml-1 sm:hidden">Historial</span>
+                          </Button>
+                        )}
                         <Button size="sm" variant="ghost" className="flex-1 sm:flex-none">
                           <Edit className="h-4 w-4" />
                           <span className="ml-1 sm:hidden">Editar</span>
@@ -741,6 +923,28 @@ export function AnimalsPage({ animals, onAnimalsChange, onStatsChange }: Animals
           </div>
         </CardContent>
       </Card>
+
+      {/* Animal History Dialog - Event Sourcing Integration */}
+      {/* Note: This uses the new domain_events table for audit trail.
+          Main animal data still comes from registrations table until full migration. */}
+      {selectedAnimalForHistory && (
+        <AnimalHistoryDialog
+          animal={selectedAnimalForHistory}
+          open={!!selectedAnimalForHistory}
+          onOpenChange={(open) => {
+            if (!open) setSelectedAnimalForHistory(null)
+          }}
+        />
+      )}
+
+      {/* Duplicate Animal Warning Dialog */}
+      <DuplicateAnimalDialog
+        existingAnimal={duplicateAnimal}
+        isOpen={duplicateDialogOpen}
+        onClose={handleDuplicateDialogClose}
+        onEditExisting={handleEditExisting}
+        onRegisterAnyway={handleRegisterAnyway}
+      />
     </div>
   )
 }

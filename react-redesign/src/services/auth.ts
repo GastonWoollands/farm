@@ -37,9 +37,16 @@ class AuthService {
           photoURL: firebaseUser.photoURL
         }
         
-        // Set auth token for API calls
-        const token = await firebaseUser.getIdToken()
-        apiService.setAuthToken(token)
+        // Try to get token, but don't fail if offline
+        // Firebase caches auth state locally, so user can still be "logged in" offline
+        try {
+          const token = await firebaseUser.getIdToken()
+          apiService.setAuthToken(token)
+        } catch (tokenError) {
+          console.warn('[Auth] Could not refresh token (likely offline):', tokenError)
+          // User is still authenticated locally, just can't make API calls
+          // Keep the user logged in for offline functionality
+        }
       } else {
         this.currentUser = null
         apiService.setAuthToken(null)

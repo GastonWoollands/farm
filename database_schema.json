@@ -14,7 +14,7 @@
         "updated_at": "TEXT DEFAULT (datetime('now'))",
         "is_active": "BOOLEAN DEFAULT 1"
       },
-      "rel": {"1:N": ["users", "registrations", "inseminations", "events_state", "inseminations_ids"]}
+      "rel": {"1:N": ["users", "registrations", "inseminations", "events_state", "inseminations_ids", "domain_events", "animal_snapshots"]}
     },
     "users": {
       "cols": {
@@ -67,6 +67,7 @@
         "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
         "short_id": "TEXT UNIQUE",
         "animal_number": "TEXT NOT NULL",
+        "animal_idv": "TEXT",
         "created_at": "TEXT NOT NULL",
         "user_key": "TEXT",
         "created_by": "TEXT",
@@ -78,6 +79,8 @@
         "gender": "TEXT",
         "animal_type": "INTEGER",
         "status": "TEXT",
+        "death_date": "TEXT",
+        "sold_date": "TEXT",
         "color": "TEXT",
         "notes": "TEXT",
         "notes_mother": "TEXT",
@@ -88,6 +91,7 @@
         "rp_mother": "TEXT",
         "mother_weight": "REAL"
       },
+      "status_values": ["ALIVE", "DEAD", "SOLD", "DELETED"],
       "unique": ["user_key+animal_number+mother_id+father_id", "created_by+animal_number+mother_id+father_id"],
       "rel": {"N:1": "companies", "1:N": "events_state"},
       "triggers": ["track_registration_insert", "track_registration_update"]
@@ -128,6 +132,56 @@
       },
       "event_types": ["born", "death", "correccion", "inseminacion", "eliminacion_inseminacion"],
       "rel": {"N:1": ["registrations", "companies"]}
+    },
+    "domain_events": {
+      "cols": {
+        "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+        "event_type": "TEXT NOT NULL",
+        "animal_id": "INTEGER",
+        "animal_number": "TEXT",
+        "company_id": "INTEGER FK→companies(id) ON DELETE SET NULL",
+        "payload": "TEXT",
+        "user_id": "TEXT",
+        "occurred_at": "TEXT NOT NULL DEFAULT (datetime('now'))"
+      },
+      "description": "Immutable event log for event sourcing - contains all changes to animals as events",
+      "event_types": ["BIRTH_REGISTERED", "MOTHER_REGISTERED", "FATHER_REGISTERED", "CURRENT_WEIGHT_RECORDED", "DEATH_RECORDED", "SOLD_RECORDED", "GENDER_UPDATED", "COLOR_UPDATED", "ANIMAL_IDV_UPDATED", "ANIMAL_DELETED"],
+      "rel": {"N:1": "companies"}
+    },
+    "animal_snapshots": {
+      "cols": {
+        "animal_id": "INTEGER PRIMARY KEY",
+        "animal_number": "TEXT NOT NULL",
+        "animal_idv": "TEXT",
+        "company_id": "INTEGER FK→companies(id) ON DELETE SET NULL",
+        "birth_date": "TEXT",
+        "mother_id": "TEXT",
+        "father_id": "TEXT",
+        "current_status": "TEXT",
+        "current_weight": "REAL",
+        "weaning_weight": "REAL",
+        "gender": "TEXT",
+        "color": "TEXT",
+        "death_date": "TEXT",
+        "sold_date": "TEXT",
+        "last_insemination_date": "TEXT",
+        "insemination_count": "INTEGER DEFAULT 0",
+        "notes": "TEXT",
+        "notes_mother": "TEXT",
+        "rp_animal": "TEXT",
+        "rp_mother": "TEXT",
+        "mother_weight": "REAL",
+        "scrotal_circumference": "REAL",
+        "insemination_round_id": "TEXT",
+        "insemination_identifier": "TEXT",
+        "last_event_id": "INTEGER",
+        "last_event_time": "TEXT",
+        "snapshot_version": "INTEGER DEFAULT 1",
+        "updated_at": "TEXT DEFAULT (datetime('now'))"
+      },
+      "description": "Derived current state of animals projected from domain_events - used for fast queries",
+      "status_values": ["ALIVE", "DEAD", "SOLD", "DELETED"],
+      "rel": {"N:1": "companies"}
     }
   },
   "logical_rels": {
@@ -137,7 +191,7 @@
   },
   "multi_tenant": {
     "col": "company_id",
-    "tables": ["registrations", "inseminations", "events_state", "inseminations_ids"]
+    "tables": ["registrations", "inseminations", "events_state", "inseminations_ids", "domain_events", "animal_snapshots"]
   },
   "auth": {
     "primary": "Firebase",

@@ -6,6 +6,7 @@ class ValidateKeyBody(BaseModel):
 
 class RegisterBody(BaseModel):
     animalNumber: str
+    animalIdv: str | None = None
     createdAt: str | None = None
     motherId: str | None = None
     fatherId: str | None = None
@@ -24,9 +25,13 @@ class RegisterBody(BaseModel):
     rpMother: str | None = None
     motherWeight: float | None = None
     weaningWeight: float | None = None
+    currentWeight: float | None = None
+    deathDate: str | None = None
+    soldDate: str | None = None
 
 class UpdateBody(BaseModel):
     animalNumber: str
+    animalIdv: str | None = None
     createdAt: str
     motherId: str | None = None
     fatherId: str | None = None
@@ -45,9 +50,28 @@ class UpdateBody(BaseModel):
     rpMother: str | None = None
     motherWeight: float | None = None
     weaningWeight: float | None = None
+    currentWeight: float | None = None
+    deathDate: str | None = None
+    soldDate: str | None = None
     
     class Config:
         # Allow extra fields and be more lenient with validation
+        extra = "ignore"
+        validate_assignment = True
+
+class UpdateAnimalByNumberBody(BaseModel):
+    animalNumber: str
+    animalIdv: str | None = None
+    currentWeight: float | None = None
+    notes: str | None = None
+    status: str | None = None
+    color: str | None = None
+    rpAnimal: str | None = None
+    notesMother: str | None = None
+    deathDate: str | None = None
+    soldDate: str | None = None
+    
+    class Config:
         extra = "ignore"
         validate_assignment = True
 

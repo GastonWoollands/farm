@@ -1,14 +1,16 @@
 import { API_BASE_URL, API_ENDPOINTS } from '@/config/api'
-import { localStorageService, LocalRecord } from './localStorage'
+import { localStorageService, PendingRecord } from './localStorage'
 
 // Types
 export interface Animal {
   id?: number  // Optional since export-multi-tenant doesn't return id
   animal_number: string
+  animal_idv?: string  // Visual ID (IDV)
   born_date?: string
   mother_id?: string
   father_id?: string
   weight?: number
+  current_weight?: number
   gender?: string
   animal_type?: number
   status?: string
@@ -23,17 +25,21 @@ export interface Animal {
   rp_mother?: string
   mother_weight?: number
   weaning_weight?: number
+  death_date?: string
+  sold_date?: string
   synced?: boolean
 }
 
 export interface RegisterBody {
   animalNumber: string
+  animalIdv?: string  // Visual ID (IDV)
   rpAnimal?: string
   motherId?: string
   rpMother?: string
   fatherId?: string
   bornDate?: string
   weight?: number
+  currentWeight?: number
   motherWeight?: number
   weaningWeight?: number
   gender?: string
@@ -45,10 +51,13 @@ export interface RegisterBody {
   scrotalCircumference?: number
   inseminationRoundId?: string
   inseminationIdentifier?: string
+  deathDate?: string
+  soldDate?: string
 }
 
 export interface UpdateBody {
   animalNumber: string
+  animalIdv?: string  // Visual ID (IDV)
   createdAt: string
   rpAnimal?: string
   motherId?: string
@@ -56,6 +65,7 @@ export interface UpdateBody {
   fatherId?: string
   bornDate?: string
   weight?: number
+  currentWeight?: number
   motherWeight?: number
   weaningWeight?: number
   gender?: string
@@ -65,12 +75,26 @@ export interface UpdateBody {
   notesMother?: string
   scrotalCircumference?: number
   inseminationRoundId?: string
+  deathDate?: string
+  soldDate?: string
+}
+
+export interface UpdateAnimalByNumberBody {
+  animalNumber: string
+  animalIdv?: string  // Visual ID (IDV)
+  currentWeight?: number
+  notes?: string
+  status?: string
+  color?: string
+  rpAnimal?: string
+  notesMother?: string
 }
 
 export interface RegistrationStats {
   totalAnimals: number
   aliveAnimals: number
   deadAnimals: number
+  soldAnimals?: number
   maleAnimals: number
   femaleAnimals: number
   avgWeight: number
@@ -147,6 +171,73 @@ export interface Company {
   name: string
   created_at?: string
   has_company?: boolean
+}
+
+// =============================================================================
+// EVENT SOURCING TYPES (New Architecture)
+// =============================================================================
+
+export interface AnimalSnapshot {
+  animal_id: number
+  animal_number: string
+  animal_idv?: string  // Visual ID (IDV)
+  company_id: number
+  birth_date?: string
+  mother_id?: string
+  father_id?: string
+  current_status?: string
+  current_weight?: number
+  weaning_weight?: number
+  gender?: string
+  color?: string
+  death_date?: string
+  sold_date?: string
+  last_insemination_date?: string
+  insemination_count?: number
+  notes?: string
+  notes_mother?: string
+  rp_animal?: string
+  rp_mother?: string
+  mother_weight?: number
+  scrotal_circumference?: number
+  insemination_round_id?: string
+  insemination_identifier?: string
+  last_event_id?: number
+  last_event_time?: string
+  snapshot_version?: number
+  updated_at?: string
+}
+
+export interface DomainEvent {
+  id: number
+  event_id: string
+  animal_id?: number
+  animal_number: string
+  event_type: string
+  event_version: number
+  payload: Record<string, unknown>
+  metadata: Record<string, unknown>
+  company_id: number
+  user_id: string
+  event_time: string
+  created_at: string
+}
+
+export interface SnapshotStats {
+  total_animals: number
+  by_status: Record<string, number>
+  by_gender: Record<string, number>
+  weight: {
+    average?: number
+    minimum?: number
+    maximum?: number
+    count_with_weight: number
+  }
+  inseminations: {
+    total: number
+    animals_with_inseminations: number
+  }
+  company_id: number
 }
 
 // API Service Class
@@ -237,6 +328,13 @@ class ApiService {
     })
   }
 
+  async updateAnimalByNumber(animal: UpdateAnimalByNumberBody): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>(`${API_ENDPOINTS.REGISTER}/update-by-number`, {
+      method: 'PUT',
+      body: JSON.stringify(animal)
+    })
+  }
+
   async deleteAnimal(animalNumber: string, createdAt: string): Promise<{ ok: boolean }> {
     return this.request<{ ok: boolean }>(API_ENDPOINTS.REGISTER, {
       method: 'DELETE',
@@ -253,6 +351,7 @@ class ApiService {
     const totalAnimals = data.length
     const aliveAnimals = data.filter(animal => animal.status === 'ALIVE').length
     const deadAnimals = data.filter(animal => animal.status === 'DEAD').length
+    const soldAnimals = data.filter(animal => animal.status === 'SOLD').length
     const maleAnimals = data.filter(animal => animal.gender === 'MALE').length
     const femaleAnimals = data.filter(animal => animal.gender === 'FEMALE').length
     
@@ -266,6 +365,7 @@ class ApiService {
       totalAnimals,
       aliveAnimals,
       deadAnimals,
+      soldAnimals,
       maleAnimals,
       femaleAnimals,
       avgWeight: Math.round(avgWeight * 100) / 100,
@@ -389,108 +489,136 @@ class ApiService {
     })
   }
 
-  // Sync functionality - replicates original frontend behavior
-  async syncLocalRecords(): Promise<{ synced: number, imported: number }> {
+  // ========================================
+  // SNAPSHOTS & EVENTS (Event Sourcing)
+  // Snapshots: Derived state for fast reads
+  // Events: Immutable audit history
+  // ========================================
+  // TODO: Uncomment when ready for full event sourcing integration
+  
+  /*
+  // Get all animal snapshots for the company
+  async getAnimalSnapshots(
+    limit: number = 100, 
+    offset: number = 0, 
+    status?: string
+  ): Promise<{ snapshots: AnimalSnapshot[], count: number }> {
+    const params = new URLSearchParams()
+    params.set('limit', limit.toString())
+    params.set('offset', offset.toString())
+    if (status) params.set('status', status)
+    
+    return this.request<{ snapshots: AnimalSnapshot[], count: number }>(
+      `/snapshots?${params.toString()}`
+    )
+  }
+
+  // Get a single animal's snapshot
+  async getAnimalSnapshot(animalId: number): Promise<AnimalSnapshot> {
+    return this.request<AnimalSnapshot>(`/snapshots/${animalId}`)
+  }
+
+  // Get snapshot statistics
+  async getSnapshotStats(): Promise<SnapshotStats> {
+    return this.request<SnapshotStats>('/snapshots/stats')
+  }
+  */
+
+  // Get event history for an animal (audit trail)
+  async getAnimalHistory(animalId: number): Promise<{ events: DomainEvent[], count: number }> {
+    return this.request<{ events: DomainEvent[], count: number }>(
+      `/events/animal/${animalId}/history`
+    )
+  }
+
+  // Get event history by animal number
+  async getAnimalHistoryByNumber(animalNumber: string): Promise<{ events: DomainEvent[], count: number }> {
+    return this.request<{ events: DomainEvent[], count: number }>(
+      `/events/history/by-number/${encodeURIComponent(animalNumber)}`
+    )
+  }
+
+  // Get animal snapshot by animal number
+  async getAnimalSnapshotByNumber(animalNumber: string): Promise<AnimalSnapshot> {
+    return this.request<AnimalSnapshot>(
+      `/snapshots/by-number/${encodeURIComponent(animalNumber)}`
+    )
+  }
+
+  // ========================================
+  // SYNC FUNCTIONALITY - Clean Architecture
+  // 1. Push pending records to server
+  // 2. DELETE pending records (they're now on server)
+  // 3. Fetch ALL data from server
+  // 4. REPLACE server cache completely (never merge!)
+  // ========================================
+
+  async syncLocalRecords(): Promise<{ synced: number, cached: number }> {
     if (!this.authToken) {
       throw new Error('No authentication token available')
     }
 
-    const unsyncedRecords = await localStorageService.getRecords({ unsyncedOnly: true })
-    console.log('Found unsynced records:', unsyncedRecords.length)
+    // Step 1: Get pending records
+    const pendingRecords = await localStorageService.getPendingRecords()
+    console.log('[Sync] Found pending records:', pendingRecords.length)
 
     let syncedCount = 0
+    const syncedLocalIds: number[] = []
 
-    // Sync each unsynced record
-    for (const record of unsyncedRecords) {
+    // Step 2: Push each pending record to server
+    for (const record of pendingRecords) {
       try {
-        let response: Response
-
-        if (record.backendId) {
-          // This is an edited record - use PUT
-          console.log('Using PUT for edited record:', record.backendId)
-          response = await fetch(`${this.baseURL}/register/${record.backendId}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.authToken}`
-            },
-            body: JSON.stringify({
-              animalNumber: record.animal_number,
-              motherId: record.mother_id ?? null,
-              fatherId: record.father_id ?? null,
-              bornDate: record.born_date ?? null,
-              weight: record.weight ?? null,
-              gender: record.gender ?? null,
-              animalType: record.animal_type ?? null,
-              scrotalCircumference: record.scrotal_circumference ?? null,
-              inseminationRoundId: record.insemination_round_id ?? null,
-              status: record.status ?? null,
-              color: record.color ?? null,
-              notes: record.notes ?? null,
-              notesMother: record.notes_mother ?? null,
-              rpAnimal: record.rp_animal ?? null,
-              rpMother: record.rp_mother ?? null,
-              motherWeight: record.mother_weight ?? null,
-              weaningWeight: record.weaning_weight ?? null
-            })
+        console.log('[Sync] Pushing record:', record.animal_number)
+        
+        const response = await fetch(`${this.baseURL}${API_ENDPOINTS.REGISTER}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.authToken}`
+          },
+          body: JSON.stringify({
+            animalNumber: record.animal_number,
+            animalIdv: record.animal_idv ?? null,
+            createdAt: record.createdAt,
+            motherId: record.mother_id ?? null,
+            fatherId: record.father_id ?? null,
+            bornDate: record.born_date ?? null,
+            weight: record.weight ?? null,
+            gender: record.gender ?? null,
+            animalType: record.animal_type ?? null,
+            scrotalCircumference: record.scrotal_circumference ?? null,
+            inseminationRoundId: record.insemination_round_id ?? null,
+            status: record.status ?? null,
+            color: record.color ?? null,
+            notes: record.notes ?? null,
+            notesMother: record.notes_mother ?? null,
+            rpAnimal: record.rp_animal ?? null,
+            rpMother: record.rp_mother ?? null,
+            motherWeight: record.mother_weight ?? null,
+            weaningWeight: record.weaning_weight ?? null
           })
-        } else {
-          // This is a new record - use POST
-          console.log('Using POST for new record')
-          response = await fetch(`${this.baseURL}${API_ENDPOINTS.REGISTER}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.authToken}`
-            },
-            body: JSON.stringify({
-              animalNumber: record.animal_number,
-              createdAt: record.created_at,
-              motherId: record.mother_id ?? null,
-              fatherId: record.father_id ?? null,
-              bornDate: record.born_date ?? null,
-              weight: record.weight ?? null,
-              gender: record.gender ?? null,
-              animalType: record.animal_type ?? null,
-              scrotalCircumference: record.scrotal_circumference ?? null,
-              inseminationRoundId: record.insemination_round_id ?? null,
-              status: record.status ?? null,
-              color: record.color ?? null,
-              notes: record.notes ?? null,
-              notesMother: record.notes_mother ?? null,
-              rpAnimal: record.rp_animal ?? null,
-              rpMother: record.rp_mother ?? null,
-              motherWeight: record.mother_weight ?? null,
-              weaningWeight: record.weaning_weight ?? null
-            })
-          })
-        }
+        })
 
         if (response.ok) {
-          if (record.backendId) {
-            // For updates, just mark as synced
-            await localStorageService.markAsSynced(record.id)
-          } else {
-            // For new records, get the backend ID from the response
-            const responseData = await response.json()
-            const backendId = responseData?.id
-            if (backendId) {
-              await localStorageService.markAsSynced(record.id, backendId)
-            } else {
-              await localStorageService.markAsSynced(record.id)
-            }
-          }
           syncedCount++
+          syncedLocalIds.push(record.localId)
+          console.log('[Sync] Successfully synced:', record.animal_number)
         } else {
-          console.warn('Sync failed for record', record.id, response.status, response.statusText)
+          console.warn('[Sync] Failed to sync record:', record.animal_number, response.status)
         }
       } catch (error) {
-        console.warn('Network error during sync for record', record.id, error)
+        console.warn('[Sync] Network error for record:', record.animal_number, error)
       }
     }
 
-    // After pushing, pull latest records from server
-    let importedCount = 0
+    // Step 3: DELETE synced records from pending storage
+    for (const localId of syncedLocalIds) {
+      await localStorageService.removePendingRecord(localId)
+    }
+    console.log('[Sync] Removed synced records from pending:', syncedLocalIds.length)
+
+    // Step 4: Fetch ALL data from server and REPLACE cache
+    let cachedCount = 0
     try {
       const response = await fetch(`${this.baseURL}${API_ENDPOINTS.EXPORT}?format=json`, {
         headers: { 'Authorization': `Bearer ${this.authToken}` }
@@ -498,36 +626,100 @@ class ApiService {
 
       if (response.ok) {
         const serverData = await response.json()
-        await localStorageService.importFromServer(serverData)
-        importedCount = serverData.items ? serverData.items.length : serverData.length
-        console.log('Imported from server:', importedCount)
+        // REPLACE entire cache (never merge!)
+        await localStorageService.setServerCache(serverData)
+        cachedCount = serverData.items ? serverData.items.length : serverData.length
+        console.log('[Sync] Replaced server cache:', cachedCount, 'records')
       }
     } catch (error) {
-      console.warn('Error importing from server:', error)
+      console.warn('[Sync] Error fetching server data:', error)
     }
 
-    return { synced: syncedCount, imported: importedCount }
+    return { synced: syncedCount, cached: cachedCount }
   }
 
-  // Get pending count from local storage
+  // Full refresh - fetch fresh data from server and replace cache
+  async refreshData(): Promise<{ success: boolean, count: number }> {
+    if (!this.authToken) {
+      throw new Error('No authentication token available')
+    }
+
+    console.log('[Refresh] Fetching fresh data from server...')
+    
+    try {
+      const response = await fetch(`${this.baseURL}${API_ENDPOINTS.EXPORT}?format=json`, {
+        headers: { 'Authorization': `Bearer ${this.authToken}` }
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const serverData = await response.json()
+      // REPLACE entire cache
+      await localStorageService.setServerCache(serverData)
+      
+      const count = serverData.items ? serverData.items.length : serverData.length
+      console.log('[Refresh] Replaced server cache:', count, 'records')
+      
+      return { success: true, count }
+    } catch (error) {
+      console.error('[Refresh] Failed to refresh data:', error)
+      throw error
+    }
+  }
+
+  // Clear all cache and refresh from server
+  async clearCacheAndRefresh(): Promise<{ success: boolean, count: number }> {
+    console.log('[ClearCache] Clearing all local storage...')
+    await localStorageService.clearAll()
+    return await this.refreshData()
+  }
+
+  // ========================================
+  // LOCAL STORAGE ACCESSORS
+  // ========================================
+
+  // Get pending count
   async getPendingCount(): Promise<number> {
     return await localStorageService.getPendingCount()
   }
 
-  // Get display records (unsynced first, then last 10 synced)
-  async getDisplayRecords(limit: number = 10): Promise<LocalRecord[]> {
+  // Get all records for display (pending + cached)
+  async getDisplayRecords(limit: number = 10): Promise<Animal[]> {
     return await localStorageService.getDisplayRecords(limit)
   }
 
-  // Add local record (replicates original frontend behavior)
-  async addLocalRecord(record: Omit<Animal, 'id'>): Promise<LocalRecord> {
-    return await localStorageService.addRecord(record)
+  // Get all records (pending + cached)
+  async getAllLocalRecords(): Promise<Animal[]> {
+    return await localStorageService.getAllRecords()
   }
 
-  // Delete local record
-  async deleteLocalRecord(id: number): Promise<void> {
-    return await localStorageService.deleteRecord(id)
+  // Get only cached server data
+  async getCachedRecords(): Promise<Animal[]> {
+    return await localStorageService.getServerCache()
+  }
+
+  // Add a pending record (offline registration)
+  async addPendingRecord(record: Omit<Animal, 'id'>): Promise<PendingRecord> {
+    return await localStorageService.addPendingRecord(record)
+  }
+
+  // Delete a pending record
+  async deletePendingRecord(localId: number): Promise<void> {
+    return await localStorageService.deletePendingRecord(localId)
+  }
+
+  // Get storage status
+  getStorageStatus() {
+    return localStorageService.getStorageStatus()
+  }
+
+  // Migrate legacy data (call once on app startup)
+  async migrateLegacyData(): Promise<void> {
+    return await localStorageService.migrateFromLegacy()
   }
 }
 
 export const apiService = new ApiService()
+

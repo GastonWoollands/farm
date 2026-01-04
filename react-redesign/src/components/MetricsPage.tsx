@@ -705,39 +705,41 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
       <Card>
         <CardHeader>
           <CardTitle className="text-xl">Resumen General</CardTitle>
-          <CardDescription>Métricas principales de la granja</CardDescription>
+          <CardDescription>Métricas principales de la cabaña</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="text-center p-4 bg-muted/30 rounded-lg">
-              <div className="text-3xl font-bold text-primary">{metrics.overview.total}</div>
-              <div className="text-sm text-muted-foreground">Total Animales</div>
-              <div className="text-xs text-green-600 dark:text-green-400 mt-1">
-                {metrics.overview.synced} sincronizados
+          {(() => {
+            // Calculate counts with fallback to animals array if stats are missing
+            const aliveCount = stats.aliveAnimals ?? animals.filter(a => a.status === 'ALIVE').length
+            const deadCount = stats.deadAnimals ?? animals.filter(a => a.status === 'DEAD').length
+            const soldCount = stats.soldAnimals ?? animals.filter(a => a.status === 'SOLD').length
+            
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="text-center p-4 bg-muted/30 rounded-lg">
+                  <div className="text-3xl font-bold text-primary">{aliveCount}</div>
+                  <div className="text-sm text-muted-foreground">Animales Vivos en la Cabaña</div>
+                  <div className="text-xs text-green-600 dark:text-green-400 mt-1">
+                    En producción
+                  </div>
+                </div>
+                <div className="text-center p-4 bg-muted/30 rounded-lg">
+                  <div className="text-3xl font-bold text-primary">{deadCount}</div>
+                  <div className="text-sm text-muted-foreground">Animales Muertos</div>
+                  <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    Pérdidas registradas
+                  </div>
+                </div>
+                <div className="text-center p-4 bg-muted/30 rounded-lg">
+                  <div className="text-3xl font-bold text-primary">{soldCount}</div>
+                  <div className="text-sm text-muted-foreground">Animales Vendidos</div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    Vendidos de la cabaña
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="text-center p-4 bg-muted/30 rounded-lg">
-              <div className="text-3xl font-bold text-primary">{metrics.overview.syncRate}%</div>
-              <div className="text-sm text-muted-foreground">Sincronización</div>
-              <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                {metrics.overview.pending} pendientes
-              </div>
-            </div>
-            <div className="text-center p-4 bg-muted/30 rounded-lg">
-              <div className="text-3xl font-bold text-primary">{currentRound?.mothers.totalMothers || 0}</div>
-              <div className="text-sm text-muted-foreground">Madres Activas</div>
-              <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                {currentRound?.mothers.totalOffspring || 0} crías
-              </div>
-            </div>
-            <div className="text-center p-4 bg-muted/30 rounded-lg">
-              <div className="text-3xl font-bold text-primary">{formatWeight(currentRound?.weight.average || 0)}</div>
-              <div className="text-sm text-muted-foreground">Peso Promedio</div>
-              <div className="text-xs text-purple-600 mt-1">
-                {formatWeight(currentRound?.weight.min || 0)} - {formatWeight(currentRound?.weight.max || 0)}
-              </div>
-            </div>
-          </div>
+            )
+          })()}
         </CardContent>
       </Card>
 
@@ -1371,7 +1373,7 @@ export function MetricsPage({ animals, stats }: MetricsPageProps) {
                           return (
                             <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded">
                               <span className="text-sm">
-                                {item.status === 'ALIVE' ? 'Vivos' : item.status === 'DEAD' ? 'Muertos' : 'Desconocido'}
+                                {item.status === 'ALIVE' ? 'Vivos' : item.status === 'DEAD' ? 'Muertos' : item.status === 'SOLD' ? 'Vendidos' : 'Desconocido'}
                               </span>
                               <div className="flex items-center gap-2 justify-end" style={{ minWidth: '6rem' }}>
                                 <div className="w-[2.5rem] flex justify-end">

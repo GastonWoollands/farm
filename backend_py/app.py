@@ -42,5 +42,6 @@ app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(companies.router, prefix="/companies", tags=["companies"])
 app.include_router(user_context.router, prefix="/user-context", tags=["user-context"])
 app.include_router(chatbot.router)
+app.include_router(snapshots.router, tags=["snapshots"])
 
 

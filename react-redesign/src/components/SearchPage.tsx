@@ -15,18 +15,20 @@ import {
   Clock,
   Users,
   Weight,
-  Calendar
+  Calendar,
+  History
 } from 'lucide-react'
 import { formatDate, getGenderName, getStatusName } from '@/lib/utils'
 import { Animal, apiService, UpdateBody, InseminationRound } from '@/services/api'
-import { localStorageService } from '@/services/localStorage'
 
 interface SearchPageProps {
   animals: Animal[]
   onAnimalsChange: (animals: Animal[]) => void
+  initialSearchTerm?: string
+  onNavigateToHistory?: (animalNumber: string) => void
 }
 
-export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
+export function SearchPage({ animals, onAnimalsChange, initialSearchTerm, onNavigateToHistory }: SearchPageProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filters, setFilters] = useState({
     gender: '',
@@ -62,6 +64,13 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
     fetchInseminationRounds()
   }, [])
 
+  // Pre-fill search term when navigating from duplicate dialog
+  useEffect(() => {
+    if (initialSearchTerm) {
+      setSearchTerm(initialSearchTerm)
+    }
+  }, [initialSearchTerm])
+
   // Debug logging
   console.log('SearchPage - animals received:', animals)
   console.log('SearchPage - animals length:', animals?.length || 0)
@@ -78,12 +87,16 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
 
       let filtered = [...animals] // Create a copy to avoid mutations
 
+      // Filter out DELETED animals - they should never appear in UI
+      filtered = filtered.filter(animal => animal.status !== 'DELETED')
+
       // Apply search filter
       if (searchTerm) {
         filtered = filtered.filter(animal => {
           const searchLower = searchTerm.toLowerCase()
           return (
             (animal.animal_number || '').toLowerCase().includes(searchLower) ||
+            (animal.animal_idv || '').toLowerCase().includes(searchLower) ||
             (animal.rp_animal || '').toLowerCase().includes(searchLower) ||
             (animal.mother_id || '').toLowerCase().includes(searchLower) ||
             (animal.rp_mother || '').toLowerCase().includes(searchLower) ||
@@ -195,29 +208,17 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
     setError(null)
 
     try {
-      // Check if this is a local record by checking if it has a local ID
-      const localRecords = await localStorageService.getRecords()
-      const localRecord = localRecords.find(r => 
-        r.animal_number === editingAnimal.animal_number && 
-        r.created_at === editingAnimal.created_at
-      )
+      // Check if online - editing requires server connection
+      if (!navigator.onLine) {
+        setError('Debes estar conectado a internet para editar registros.')
+        setIsLoading(false)
+        return
+      }
 
-      if (localRecord) {
-        // Update in local storage
-        await localStorageService.updateRecord(localRecord.id, editFormData)
-        
-        // Try to sync if online
-        if (navigator.onLine) {
-          try {
-            await apiService.syncLocalRecords()
-          } catch (syncErr) {
-            console.warn('Sync failed after edit:', syncErr)
-          }
-        }
-      } else {
-        // Update directly on backend
-        const updateData: UpdateBody = {
+      // Update directly on backend
+      const updateData: UpdateBody = {
           animalNumber: editingAnimal.animal_number,
+          animalIdv: editFormData.animal_idv || undefined,
           createdAt: editingAnimal.created_at || '',
           rpAnimal: editFormData.rp_animal || undefined,
           motherId: editFormData.mother_id || undefined,
@@ -225,6 +226,7 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           fatherId: editFormData.father_id || undefined,
           bornDate: editFormData.born_date || undefined,
           weight: editFormData.weight || undefined,
+          currentWeight: editFormData.current_weight || undefined,
           motherWeight: editFormData.mother_weight || undefined,
           weaningWeight: editFormData.weaning_weight || undefined,
           gender: editFormData.gender || undefined,
@@ -233,28 +235,20 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           notes: editFormData.notes || undefined,
           notesMother: editFormData.notes_mother || undefined,
           scrotalCircumference: editFormData.scrotal_circumference || undefined,
-          inseminationRoundId: editFormData.insemination_round_id || undefined
+          inseminationRoundId: editFormData.insemination_round_id || undefined,
+          deathDate: editFormData.status === 'DEAD' ? editFormData.death_date || undefined : undefined,
+          soldDate: editFormData.status === 'SOLD' ? editFormData.sold_date || undefined : undefined
         }
 
-        await apiService.updateAnimal(updateData)
-        
-        // Refresh animals from backend after successful update
-        try {
-          const refreshedData = await apiService.getRegistrations(1000)
-          onAnimalsChange(refreshedData.registrations)
-        } catch (refreshError) {
-          console.warn('Failed to refresh animals after update:', refreshError)
-          // Fallback to local update if refresh fails
-          onAnimalsChange(animals.map(a => 
-            a.animal_number === editingAnimal.animal_number 
-              ? { ...a, ...editFormData }
-              : a
-          ))
-        }
-      }
-
-      // For local records, update the parent component with edited data
-      if (localRecord) {
+      await apiService.updateAnimal(updateData)
+      
+      // Refresh animals from backend after successful update
+      try {
+        const refreshedData = await apiService.getRegistrations(1000)
+        onAnimalsChange(refreshedData.registrations)
+      } catch (refreshError) {
+        console.warn('Failed to refresh animals after update:', refreshError)
+        // Fallback to local update if refresh fails
         onAnimalsChange(animals.map(a => 
           a.animal_number === editingAnimal.animal_number 
             ? { ...a, ...editFormData }
@@ -437,6 +431,7 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                 <SelectContent>
                   <SelectItem value="ALIVE">Vivo</SelectItem>
                   <SelectItem value="DEAD">Muerto</SelectItem>
+                  <SelectItem value="SOLD">Vendido</SelectItem>
                   <SelectItem value="UNKNOWN">Desconocido</SelectItem>
                 </SelectContent>
               </Select>
@@ -611,11 +606,18 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h3 className="font-semibold text-lg">{animal.animal_number}</h3>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {animal.animal_idv && (
+                            <Badge variant="secondary" className="text-xs">
+                              IDV: {animal.animal_idv}
+                            </Badge>
+                          )}
                         {animal.rp_animal && (
-                          <Badge variant="outline" className="mt-1">
+                            <Badge variant="outline" className="text-xs">
                             {animal.rp_animal}
                           </Badge>
                         )}
+                        </div>
                       </div>
                       <Badge variant={animal.synced !== false ? "default" : "destructive"}>
                         {animal.synced !== false ? (
@@ -722,6 +724,16 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                     </div>
 
                     <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t">
+                      {onNavigateToHistory && (
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => onNavigateToHistory(animal.animal_number)}
+                          title="Ver historia clínica"
+                        >
+                          <History className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => handleEdit(animal)} disabled={isLoading}>
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -754,6 +766,16 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
           </DialogHeader>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-animal-idv">ID Visual (IDV)</Label>
+              <Input
+                id="edit-animal-idv"
+                value={editFormData.animal_idv || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, animal_idv: e.target.value })}
+                placeholder="e.g., V-001"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="edit-rp-animal">RP Animal</Label>
               <Input
@@ -801,35 +823,46 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-weight">Peso</Label>
+              <Label htmlFor="edit-weight">Peso Nacimiento (kg)</Label>
               <Input
                 id="edit-weight"
                 type="number"
                 step="0.1"
-                value={editFormData.weight || ''}
-                onChange={(e) => setEditFormData({ ...editFormData, weight: parseFloat(e.target.value) || undefined })}
+                value={editFormData.weight ?? ''}
+                onChange={(e) => setEditFormData({ ...editFormData, weight: e.target.value ? parseFloat(e.target.value) : undefined })}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-mother-weight">Peso Madre</Label>
+              <Label htmlFor="edit-current-weight">Peso Actual (kg)</Label>
               <Input
-                id="edit-mother-weight"
+                id="edit-current-weight"
                 type="number"
                 step="0.1"
-                value={editFormData.mother_weight || ''}
-                onChange={(e) => setEditFormData({ ...editFormData, mother_weight: parseFloat(e.target.value) || undefined })}
+                value={editFormData.current_weight ?? ''}
+                onChange={(e) => setEditFormData({ ...editFormData, current_weight: e.target.value ? parseFloat(e.target.value) : undefined })}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-weaning-weight">Peso al Destete</Label>
+              <Label htmlFor="edit-weaning-weight">Peso al Destete (kg)</Label>
               <Input
                 id="edit-weaning-weight"
                 type="number"
                 step="0.1"
-                value={editFormData.weaning_weight || ''}
-                onChange={(e) => setEditFormData({ ...editFormData, weaning_weight: parseFloat(e.target.value) || undefined })}
+                value={editFormData.weaning_weight ?? ''}
+                onChange={(e) => setEditFormData({ ...editFormData, weaning_weight: e.target.value ? parseFloat(e.target.value) : undefined })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-mother-weight">Peso Madre (kg)</Label>
+              <Input
+                id="edit-mother-weight"
+                type="number"
+                step="0.1"
+                value={editFormData.mother_weight ?? ''}
+                onChange={(e) => setEditFormData({ ...editFormData, mother_weight: e.target.value ? parseFloat(e.target.value) : undefined })}
               />
             </div>
 
@@ -856,13 +889,40 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                 <SelectContent>
                   <SelectItem value="ALIVE">Vivo</SelectItem>
                   <SelectItem value="DEAD">Muerto</SelectItem>
+                  <SelectItem value="SOLD">Vendido</SelectItem>
                   <SelectItem value="UNKNOWN">Desconocido</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="edit-color">Color</Label>
+            {/* Show death date only when status is DEAD */}
+            {editFormData.status === 'DEAD' && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-death-date">Fecha de Muerte</Label>
+                <Input
+                  id="edit-death-date"
+                  type="date"
+                  value={editFormData.death_date || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, death_date: e.target.value })}
+                />
+              </div>
+            )}
+
+            {/* Show sold date only when status is SOLD */}
+            {editFormData.status === 'SOLD' && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-sold-date">Fecha de Venta</Label>
+                <Input
+                  id="edit-sold-date"
+                  type="date"
+                  value={editFormData.sold_date || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, sold_date: e.target.value })}
+                />
+              </div>
+            )}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-color">Color</Label>
               <Select value={editFormData.color || ''} onValueChange={(value) => setEditFormData({ ...editFormData, color: value })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar color" />
@@ -870,6 +930,7 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                 <SelectContent>
                   <SelectItem value="COLORADO">Colorado</SelectItem>
                   <SelectItem value="NEGRO">Negro</SelectItem>
+                  <SelectItem value="MARRON">Marrón</SelectItem>
                   <SelectItem value="OTHERS">Otros</SelectItem>
                 </SelectContent>
               </Select>
@@ -880,13 +941,12 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
               <Select 
                 value={editFormData.insemination_round_id ? editFormData.insemination_round_id : 'none'} 
                 onValueChange={(value) => {
-                  // Handle clearing: if value is "none", set to undefined
                   const newValue = value === 'none' ? undefined : value
                   setEditFormData({ ...editFormData, insemination_round_id: newValue })
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar ronda de inseminación (opcional)" />
+                  <SelectValue placeholder="Seleccionar ronda (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Ninguna</SelectItem>
@@ -905,8 +965,8 @@ export function SearchPage({ animals, onAnimalsChange }: SearchPageProps) {
                 id="edit-scrotal"
                 type="number"
                 step="0.1"
-                value={editFormData.scrotal_circumference || ''}
-                onChange={(e) => setEditFormData({ ...editFormData, scrotal_circumference: parseFloat(e.target.value) || undefined })}
+                value={editFormData.scrotal_circumference ?? ''}
+                onChange={(e) => setEditFormData({ ...editFormData, scrotal_circumference: e.target.value ? parseFloat(e.target.value) : undefined })}
               />
             </div>
 

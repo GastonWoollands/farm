@@ -2,10 +2,11 @@ from fastapi import APIRouter, Header, HTTPException, Response, Request, UploadF
 import csv
 import io
 from ..config import VALID_KEYS, ADMIN_SECRET
-from ..models import RegisterBody, DeleteBody, UpdateBody
+from ..models import RegisterBody, DeleteBody, UpdateBody, UpdateAnimalByNumberBody
 from ..services.registrations import (
     insert_registration, delete_registration as svc_delete, update_registration, export_rows,
-    get_registrations_multi_tenant, export_rows_multi_tenant, get_registration_stats_multi_tenant
+    get_registrations_multi_tenant, export_rows_multi_tenant, get_registration_stats_multi_tenant,
+    update_animal_by_number
 )
 from ..services.firebase_auth import verify_bearer_id_token
 from ..services.auth_service import authenticate_user
@@ -29,6 +30,38 @@ def register(body: RegisterBody, request: Request, x_user_key: str | None = Head
         # Legacy users have no company (company_id = None)
         record_id = insert_registration(x_user_key, body, None)
         return {"ok": True, "id": record_id}
+
+@router.put("/register/update-by-number")
+def update_animal_by_number_endpoint(body: UpdateAnimalByNumberBody, request: Request, x_user_key: str | None = Header(default=None)):
+    """Update an animal by animal_number only. Used for mothers/fathers that don't have registration records."""
+    # Try new authentication first (creates user automatically)
+    user, company_id = authenticate_user(request)
+    if user:
+        user_id = user.get('firebase_uid')
+    else:
+        # Fallback to legacy key if token missing
+        if not x_user_key or x_user_key not in VALID_KEYS:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        # Block legacy users without company_id from updating records
+        raise HTTPException(
+            status_code=403, 
+            detail="Legacy users without company assignment cannot update records. Please use authenticated access with company assignment."
+        )
+    
+    # Require company_id for all updates
+    if not company_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Company assignment required to update records. Please ensure your user account is assigned to a company."
+        )
+    
+    try:
+        update_animal_by_number(user_id, body, company_id)
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating animal: {str(e)}")
 
 @router.put("/register/update")
 def update_registration_by_identifier(body: UpdateBody, request: Request, x_user_key: str | None = Header(default=None)):
@@ -54,15 +87,41 @@ def update_registration_by_identifier(body: UpdateBody, request: Request, x_user
         )
     
     # Find the record by animalNumber and createdAt
-    from ..services.registrations import find_and_update_registration
+    from ..services.registrations import find_and_update_registration, update_animal_by_number
+    from ..services.snapshot_projector import get_snapshot_by_number
+    from ..models import UpdateAnimalByNumberBody
+    
     try:
         result = find_and_update_registration(user_id, body, company_id)
-        if not result:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Record not found for animal_number={body.animalNumber}, created_at={body.createdAt}. Please verify the animal exists and you have permission to update it."
-            )
-        return {"ok": True}
+        if result:
+            return {"ok": True}
+        
+        # Fallback: Check if animal exists in snapshots (mother/father)
+        animal_number = body.animalNumber.upper().strip() if body.animalNumber else None
+        if animal_number:
+            snapshot = get_snapshot_by_number(animal_number, company_id)
+            if snapshot:
+                # Convert UpdateBody to UpdateAnimalByNumberBody format
+                update_by_number_body = UpdateAnimalByNumberBody(
+                    animalNumber=body.animalNumber,
+                    animalIdv=body.animalIdv,
+                    currentWeight=body.currentWeight or body.weight,
+                    notes=body.notes,
+                    status=body.status,
+                    color=body.color,
+                    rpAnimal=body.rpAnimal,
+                    notesMother=body.notesMother,
+                    deathDate=body.deathDate,
+                    soldDate=body.soldDate
+                )
+                update_animal_by_number(user_id, update_by_number_body, company_id)
+                return {"ok": True}
+        
+        # Animal not found in registrations or snapshots
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Record not found for animal_number={body.animalNumber}, created_at={body.createdAt}. Please verify the animal exists and you have permission to update it."
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -96,12 +155,28 @@ def update_registration_endpoint(animal_id: int, body: RegisterBody, request: Re
 
 @router.delete("/register")
 def delete_registration(body: DeleteBody, request: Request, x_user_key: str | None = Header(default=None)):
-    decoded = verify_bearer_id_token(request.headers.get('Authorization'))
-    user_id = decoded.get('uid') if decoded else None
-    if not user_id:
+    # Try new authentication first (creates user automatically)
+    user, company_id = authenticate_user(request)
+    if user:
+        user_id = user.get('firebase_uid')
+    else:
+        # Fallback to legacy key if token missing
         if not x_user_key or x_user_key not in VALID_KEYS:
             raise HTTPException(status_code=401, detail="Unauthorized")
-    svc_delete(user_id or x_user_key, body.animalNumber, body.createdAt)
+        # Block legacy users without company_id from deleting records
+        raise HTTPException(
+            status_code=403, 
+            detail="Legacy users without company assignment cannot delete records. Please use authenticated access with company assignment."
+        )
+    
+    # Require company_id for all deletes
+    if not company_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Company assignment required to delete records. Please ensure your user account is assigned to a company."
+        )
+    
+    svc_delete(user_id, body.animalNumber, body.createdAt, company_id)
     return {"ok": True}
 
 @router.get("/export")

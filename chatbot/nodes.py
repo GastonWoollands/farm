@@ -43,6 +43,9 @@ El usuario actual pertenece a la compañía con ID: {company_id}.
 7. Asegúrate de que la consulta final termine con un punto y coma `;`.
 8. IMPORTANTE: LA QUERY SOLO PUEDE TENER SELECT, NO PERMITIDO DELETE, UPDATE, INSERT, ETC.
 9. EXTREMA IMPORTANCIA: SOLO CREA UNA QUERY SQL FILTRADA POR company_id!!!
+10. **FILTRO DE ANIMALES ELIMINADOS:** SIEMPRE incluye el filtro `(status IS NULL OR status != 'DELETED')` cuando consultes la tabla `registrations`.
+    - Los animales con status='DELETED' fueron eliminados y NO deben aparecer en los resultados.
+    - Este filtro es OBLIGATORIO para mantener consistencia con la interfaz de usuario.
 
 10. **CONTEXTO DE CONVERSACIÓN**: Si hay historial de conversación, úsalo para entender referencias como "esas madres", "ellos", "esos registros", etc.
     - Si la pregunta hace referencia a resultados anteriores, usa esos valores en la consulta SQL.
@@ -128,13 +131,17 @@ Cuando expliques diferencias entre métricas, usa lenguaje claro y conceptual, S
 - Esta tabla contiene los TERNEROS/ANIMALES RECIÉN NACIDOS o REGISTRADOS, NO las madres adultas.
 - `id`: IDENTIFICADOR TÉCNICO INTERNO - NUNCA usar cuando el usuario pregunta por "id" de animales. Solo para relaciones técnicas.
 - `animal_number`: Es el ID del animal REGISTRADO (el ternero/recién nacido). Ejemplo: "COW-002" es un ternero registrado. **USA ESTE cuando el usuario pregunta por "id de animal", "identificador de animal", "número de animal".**
+- `animal_idv`: Es el ID VISUAL del animal (IDV). Cuando el usuario pregunta por "IDV", "ID visual", "identificador visual", usa este campo.
 - `mother_id`: Es el ID de la MADRE (la vaca adulta que parió). Ejemplo: "MOTHER-002" es la madre. **USA ESTE cuando el usuario pregunta por "id de madre", "identificador de madre", "código de madre".**
 - `father_id`: Es el ID del TORO/PADRE (el semental). **USA ESTE cuando el usuario pregunta por "id de toro", "identificador de toro", "código de toro", "id del padre".**
 - `born_date`: Fecha de nacimiento del ternero.
 - `weight`: Peso del TERNERO registrado (NO el peso de la madre).
 - `mother_weight`: Peso de la MADRE (si está disponible).
 - `gender`: Género del ternero (MALE/FEMALE/UNKNOWN).
-- `status`: Estado del ternero (ALIVE/DEAD).
+- `status`: Estado del ternero. Valores posibles: ALIVE (vivo), DEAD (muerto), SOLD (vendido), DELETED (eliminado).
+  - **IMPORTANTE:** Los animales con status='DELETED' fueron eliminados y NUNCA deben aparecer en resultados.
+- `death_date`: Fecha de muerte del animal. Solo tiene valor si status='DEAD'.
+- `sold_date`: Fecha de venta del animal. Solo tiene valor si status='SOLD'.
 
 **Tabla `inseminations` (Inseminaciones):**
 - Contiene registros de inseminaciones realizadas a las MADRES (vacas adultas).
@@ -182,25 +189,43 @@ Cuando expliques diferencias entre métricas, usa lenguaje claro y conceptual, S
 **Ejemplos:**
 
 Usuario: "¿Cuántos registros hay en la tabla registrations?"
-SQL: SELECT COUNT(*) FROM registrations WHERE company_id = {company_id};
+SQL: SELECT COUNT(*) FROM registrations WHERE company_id = {company_id} AND (status IS NULL OR status != 'DELETED');
+
+Usuario: "¿Cuántos animales tengo?"
+SQL: SELECT COUNT(*) FROM registrations WHERE company_id = {company_id} AND (status IS NULL OR status != 'DELETED');
 
 Usuario: "¿Cuál es el evento más reciente?"
 SQL: SELECT * FROM events_state WHERE company_id = {company_id} ORDER BY created_at DESC LIMIT 1;
 
 Usuario: "Dame los terneros de las madres MOTHER-002 y AC988"
-SQL: SELECT * FROM registrations WHERE company_id = {company_id} AND mother_id IN ('MOTHER-002', 'AC988');
+SQL: SELECT * FROM registrations WHERE company_id = {company_id} AND (status IS NULL OR status != 'DELETED') AND mother_id IN ('MOTHER-002', 'AC988');
 
 Usuario: "Dame los ids de los animales"
-SQL: SELECT animal_number FROM registrations WHERE company_id = {company_id};
+SQL: SELECT animal_number FROM registrations WHERE company_id = {company_id} AND (status IS NULL OR status != 'DELETED');
 
 Usuario: "Muestra los identificadores de las madres"
-SQL: SELECT DISTINCT mother_id FROM registrations WHERE company_id = {company_id} AND mother_id IS NOT NULL;
+SQL: SELECT DISTINCT mother_id FROM registrations WHERE company_id = {company_id} AND (status IS NULL OR status != 'DELETED') AND mother_id IS NOT NULL;
 
 Usuario: "¿Cuál es el id del animal con mayor peso?"
-SQL: SELECT animal_number FROM registrations WHERE company_id = {company_id} ORDER BY weight DESC LIMIT 1;
+SQL: SELECT animal_number FROM registrations WHERE company_id = {company_id} AND (status IS NULL OR status != 'DELETED') ORDER BY weight DESC LIMIT 1;
 
 Usuario: "Dame los códigos de los toros"
 SQL: SELECT DISTINCT bull_id FROM inseminations WHERE company_id = {company_id} AND bull_id IS NOT NULL;
+
+Usuario: "¿Cuál es el IDV del animal COW-001?"
+SQL: SELECT animal_idv FROM registrations WHERE company_id = {company_id} AND animal_number = 'COW-001' AND (status IS NULL OR status != 'DELETED');
+
+Usuario: "¿Cuántos animales han muerto?"
+SQL: SELECT COUNT(*) FROM registrations WHERE company_id = {company_id} AND status = 'DEAD';
+
+Usuario: "¿Cuándo murió el animal COW-005?"
+SQL: SELECT death_date FROM registrations WHERE company_id = {company_id} AND animal_number = 'COW-005' AND status = 'DEAD';
+
+Usuario: "¿Cuántos animales vendidos hay?"
+SQL: SELECT COUNT(*) FROM registrations WHERE company_id = {company_id} AND status = 'SOLD';
+
+Usuario: "¿Cuándo se vendió el animal COW-010?"
+SQL: SELECT sold_date FROM registrations WHERE company_id = {company_id} AND animal_number = 'COW-010' AND status = 'SOLD';
 
 Pregunta actual: {question}
 SQL:
@@ -863,16 +888,21 @@ Resultados de la consulta (JSON):
 - Esta tabla contiene TERNEROS/ANIMALES RECIÉN NACIDOS, NO las madres adultas.
 - `id`: IDENTIFICADOR TÉCNICO INTERNO - NUNCA mostrar al usuario.
 - `animal_number`: Es el ID del ANIMAL REGISTRADO (el ternero/recién nacido). Ejemplo: "COW-002" es un ternero. **Este es el "id" que el usuario quiere ver cuando pregunta por "id de animal".**
+- `animal_idv`: Es el ID VISUAL del animal. Cuando el usuario pregunta por "IDV", "ID visual", muestra este campo.
 - `mother_id`: Es el ID de la MADRE (la vaca adulta que parió). Ejemplo: "MOTHER-002" es la madre. **Este es el "id" que el usuario quiere ver cuando pregunta por "id de madre".**
 - `father_id`: Es el ID del TORO/PADRE. **Este es el "id" que el usuario quiere ver cuando pregunta por "id de toro" o "id del padre".**
 - `weight`: Peso del TERNERO registrado (NO el peso de la madre).
 - `mother_weight`: Peso de la MADRE (si está disponible).
 - `born_date`: Fecha de nacimiento del ternero.
+- `status`: Estado del animal (ALIVE=vivo, DEAD=muerto, SOLD=vendido).
+- `death_date`: Fecha de muerte del animal (si status='DEAD').
+- `sold_date`: Fecha de venta del animal (si status='SOLD').
 
 **DIFERENCIAS IMPORTANTES:**
 - Si la pregunta es sobre "MADRES", el campo relevante es `mother_id`, NO `animal_number`.
 - Si la pregunta es sobre "TERNEROS" o "animales registrados", el campo relevante es `animal_number`.
 - `animal_number` = el ternero/animal registrado (el "id" del animal para el usuario)
+- `animal_idv` = el ID visual del animal (cuando preguntan por "IDV")
 - `mother_id` = la madre (vaca adulta) (el "id" de la madre para el usuario)
 - `father_id`/`bull_id` = el toro/padre (el "id" del toro para el usuario)
 - `weight` = peso del TERNERO (NO de la madre)
@@ -919,9 +949,13 @@ Cuando expliques métricas, usa lenguaje conceptual y claro, SIN mencionar SQL, 
 - Si la pregunta es sobre métricas o diferencias, explica claramente qué significa cada métrica usando lenguaje simple y conceptual.
 - Usa nombres de columnas legibles (pero solo cuando muestres datos, no en explicaciones de métricas):
   - `animal_number` → "Número de animal", "ID del animal", "Identificador del animal", o "Código del animal" (si es ternero)
+  - `animal_idv` → "IDV", "ID Visual", "Identificador Visual"
   - `mother_id` → "ID de madre", "Identificador de madre", "Código de madre", o "Madre"
   - `father_id`/`bull_id` → "ID de toro", "Identificador de toro", "Código de toro", o "Toro"
   - `insemination_identifier` → "ID de inseminación", "Identificador de inseminación", o "Código de inseminación"
+  - `status` → "Estado" (ALIVE=Vivo, DEAD=Muerto, SOLD=Vendido)
+  - `death_date` → "Fecha de muerte"
+  - `sold_date` → "Fecha de venta"
   - `weight` → "Peso"
   - `born_date` → "Fecha de nacimiento"
   - `gender` → "Género"

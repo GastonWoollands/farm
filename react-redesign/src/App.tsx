@@ -2,17 +2,20 @@ import { useState, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  BarChart3, 
-  Users, 
-  Search, 
-  Settings, 
-  Wifi, 
+import {
+  BarChart3,
+  Users,
+  Search,
+  Settings,
+  Wifi,
   WifiOff,
   LogOut,
   Building2,
   Sun,
-  Moon
+  Moon,
+  Download,
+  RefreshCw,
+  History,
 } from 'lucide-react'
 
 // Import page components
@@ -22,11 +25,45 @@ import { AnimalsPage } from './components/AnimalsPage'
 import { SearchPage } from './components/SearchPage'
 import { SettingsPage } from './components/SettingsPage'
 import { Chatbot } from './components/Chatbot'
+import { ClinicalHistoryPage } from './components/ClinicalHistoryPage'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { PrefixesProvider } from './contexts/PrefixesContext'
 import { authService, AuthUser } from './services/auth'
 import { apiService, Animal, RegistrationStats } from './services/api'
-import { register, registerPWAInstallPrompt } from './utils/serviceWorker'
+import { localStorageService } from './services/localStorage'
+import { register, registerPWAInstallPrompt, skipWaitingAndReload } from './utils/serviceWorker'
+
+// Helper function to calculate stats from local records (works offline)
+function calculateStatsFromRecords(records: Animal[]): RegistrationStats {
+  const totalAnimals = records.length
+  const aliveAnimals = records.filter(animal => animal.status === 'ALIVE').length
+  const deadAnimals = records.filter(animal => animal.status === 'DEAD').length
+  const soldAnimals = records.filter(animal => animal.status === 'SOLD').length
+  const maleAnimals = records.filter(animal => animal.gender === 'MALE').length
+  const femaleAnimals = records.filter(animal => animal.gender === 'FEMALE').length
+  
+  const weights = records
+    .filter(animal => animal.weight && animal.weight > 0)
+    .map(animal => animal.weight!)
+  
+  const avgWeight = weights.length > 0 
+    ? weights.reduce((sum, weight) => sum + weight, 0) / weights.length 
+    : 0
+  const minWeight = weights.length > 0 ? Math.min(...weights) : 0
+  const maxWeight = weights.length > 0 ? Math.max(...weights) : 0
+  
+  return {
+    totalAnimals,
+    aliveAnimals,
+    deadAnimals,
+    soldAnimals,
+    maleAnimals,
+    femaleAnimals,
+    avgWeight: Math.round(avgWeight * 100) / 100,
+    minWeight,
+    maxWeight
+  }
+}
 
 // Types
 interface AppState {
@@ -38,6 +75,9 @@ interface AppState {
   animals: Animal[] // All animals for metrics
   displayAnimals: Animal[] // Recent animals for UI display
   stats: RegistrationStats | null
+  updateAvailable: boolean
+  searchTerm?: string // For pre-filling search when navigating from duplicate dialog
+  selectedAnimalNumber?: string // For navigating to history tab with a selected animal
 }
 
 function AppContent() {
@@ -49,154 +89,182 @@ function AppContent() {
     currentCompanyId: null,
     animals: [],
     displayAnimals: [],
-    stats: null
+    stats: null,
+    updateAvailable: false,
+    searchTerm: undefined
   })
 
   const [activeTab, setActiveTab] = useState('metrics')
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [backendError] = useState<string | null>(null)
   const { theme, toggleTheme } = useTheme()
 
-  // Real authentication and data loading
+  // Data loading with clean cache architecture
+  // ONLINE: Server is source of truth - fetch from API
+  // OFFLINE: Show cached data + pending records
   useEffect(() => {
     const initializeApp = async () => {
       try {
+        // Migrate legacy data format (one-time migration)
+        await apiService.migrateLegacyData()
+        
         // Listen to auth state changes
         const unsubscribe = authService.onAuthStateChange(async (user) => {
           if (user) {
             setAppState(prev => ({ ...prev, user }))
             
-            // Load user context and data
-            try {
-              console.log('Loading user context...')
-              const context = await apiService.getUserContext()
-              console.log('User context loaded:', context)
+            const isOnline = navigator.onLine
+            console.log('[App] User authenticated, online:', isOnline)
+            
+            if (isOnline) {
+              // ========================================
+              // ONLINE: Server is the source of truth
+              // ========================================
+              console.log('[App] Online - fetching from server...')
               
-              setAppState(prev => ({
-                ...prev,
-                currentCompany: context.company?.name || 'Personal Data',
-                // Backend returns company.id from user_context endpoint
-                currentCompanyId: context.company?.id || context.company?.company_id || null
-              }))
-              
-              // Load all records for metrics calculation
               try {
-                console.log('Loading all records for metrics...')
-                const allRecords = await apiService.getRegistrations(1000) // Get all records
-                console.log('All records loaded:', allRecords.registrations.length)
-                
-                // Also get recent records for display
-                const displayRecords = await apiService.getDisplayRecords(10)
-                
+                // Load user context
+                const context = await apiService.getUserContext()
                 setAppState(prev => ({
                   ...prev,
-                  animals: allRecords.registrations, // All records for metrics
-                  displayAnimals: displayRecords // Recent records for UI
+                  currentCompany: context.company?.name || 'Personal Data',
+                  currentCompanyId: context.company?.id || context.company?.company_id || null
                 }))
-              } catch (allRecordsError) {
-                console.warn('Could not load all records:', allRecordsError)
-                // Fallback to local records
-                try {
-                  const localRecords = await apiService.getDisplayRecords(10)
-                  setAppState(prev => ({
-                    ...prev,
-                    animals: localRecords, // Use local records for both
-                    displayAnimals: localRecords
-                  }))
-                } catch (localError) {
-                  console.warn('Could not load local records:', localError)
-                  setAppState(prev => ({
-                    ...prev,
-                    animals: [],
-                    displayAnimals: []
-                  }))
-                }
-              }
-              
-              // Get pending count and load stats
-              try {
-                console.log('Getting pending count...')
+                
+                // Sync pending records first (push to server, delete from pending)
                 const pendingCount = await apiService.getPendingCount()
-                console.log('Pending count:', pendingCount)
+                if (pendingCount > 0) {
+                  console.log('[App] Syncing', pendingCount, 'pending records...')
+                  await apiService.syncLocalRecords()
+                }
                 
+                // Fetch fresh data from server
+                const allRecords = await apiService.getRegistrations(1000)
                 const statsData = await apiService.getStats()
-                console.log('Stats data loaded:', statsData)
                 
-                setAppState(prev => ({
-                  ...prev,
-                  stats: statsData,
-                  pendingCount
-                }))
-              } catch (statsError) {
-                console.warn('Could not load stats data:', statsError)
-                setAppState(prev => ({
-                  ...prev,
-                  stats: null,
-                  pendingCount: 0
-                }))
-              }
-
-              // Trigger sync in background
-              try {
-                console.log('Starting background sync...')
-                const syncResult = await apiService.syncLocalRecords()
-                console.log('Sync completed:', syncResult)
+                // Update cache with server data
+                await localStorageService.setServerCache({ items: allRecords.registrations })
                 
-                // Reload all data after sync
-                const updatedAllRecords = await apiService.getRegistrations(1000)
-                const updatedDisplayRecords = await apiService.getDisplayRecords(10)
+                // Get display records (pending + cached)
+                const displayRecords = await apiService.getDisplayRecords(10)
                 const updatedPendingCount = await apiService.getPendingCount()
                 
                 setAppState(prev => ({
                   ...prev,
-                  animals: updatedAllRecords.registrations,
-                  displayAnimals: updatedDisplayRecords,
+                  animals: allRecords.registrations,
+                  displayAnimals: displayRecords,
+                  stats: statsData,
                   pendingCount: updatedPendingCount
                 }))
-              } catch (syncError) {
-                console.warn('Sync failed:', syncError)
+                
+                console.log('[App] Server data loaded:', allRecords.registrations.length, 'records')
+              } catch (error) {
+                console.warn('[App] Server fetch failed, falling back to cache:', error)
+                // Fall back to cached data
+                await loadFromCache()
               }
-            } catch (error) {
-              console.error('Error loading user context:', error)
-              console.error('Error details:', {
-                message: error instanceof Error ? error.message : 'Unknown error',
-                stack: error instanceof Error ? error.stack : undefined
-              })
-              // Set default values if API fails
-              setAppState(prev => ({
-                ...prev,
-                currentCompany: 'Personal Data',
-                animals: [],
-                stats: null,
-                pendingCount: 0
-              }))
+            } else {
+              // ========================================
+              // OFFLINE: Load from cache + pending
+              // ========================================
+              console.log('[App] Offline - loading from cache...')
+              await loadFromCache()
             }
+            
+            setIsLoading(false)
           } else {
+            // User not logged in
             setAppState(prev => ({
               ...prev,
               user: null,
               currentCompany: 'Personal Data',
+              currentCompanyId: null,
               animals: [],
+              displayAnimals: [],
               stats: null,
               pendingCount: 0
             }))
+            setIsLoading(false)
           }
-          setIsLoading(false)
         })
-
-        // Check online status
-        const updateOnlineStatus = () => {
-          setAppState(prev => ({ ...prev, isOnline: navigator.onLine }))
+        
+        // Helper to load from cache
+        async function loadFromCache() {
+          try {
+            const allRecords = await apiService.getAllLocalRecords()
+            const displayRecords = await apiService.getDisplayRecords(10)
+            const pendingCount = await apiService.getPendingCount()
+            const stats = calculateStatsFromRecords(allRecords)
+            
+            setAppState(prev => ({
+              ...prev,
+              animals: allRecords,
+              displayAnimals: displayRecords,
+              stats,
+              pendingCount
+            }))
+            
+            console.log('[App] Loaded from cache:', allRecords.length, 'records,', pendingCount, 'pending')
+          } catch (error) {
+            console.error('[App] Failed to load from cache:', error)
+          }
         }
 
-    window.addEventListener('online', updateOnlineStatus)
-    window.addEventListener('offline', updateOnlineStatus)
-    updateOnlineStatus()
+        // Check online status and auto-sync when coming back online
+        const handleOnlineStatusChange = async () => {
+          const isNowOnline = navigator.onLine
+          setAppState(prev => ({ ...prev, isOnline: isNowOnline }))
+          
+          // Auto-sync when coming back online
+          if (isNowOnline) {
+            console.log('[App] Connection restored - auto-syncing...')
+            try {
+              // Sync pending records
+              const pendingCount = await apiService.getPendingCount()
+              if (pendingCount > 0) {
+                console.log('[App] Auto-syncing', pendingCount, 'pending records...')
+                await apiService.syncLocalRecords()
+              }
+              
+              // Refresh data from server
+              const allRecords = await apiService.getRegistrations(1000)
+              const statsData = await apiService.getStats()
+              
+              // Update cache with server data
+              await localStorageService.setServerCache({ items: allRecords.registrations })
+              
+              // Get display records
+              const displayRecords = await apiService.getDisplayRecords(10)
+              const updatedPendingCount = await apiService.getPendingCount()
+              
+              setAppState(prev => ({
+                ...prev,
+                animals: allRecords.registrations,
+                displayAnimals: displayRecords,
+                stats: statsData,
+                pendingCount: updatedPendingCount
+              }))
+              
+              console.log('[App] Auto-sync completed:', allRecords.registrations.length, 'records')
+            } catch (error) {
+              console.warn('[App] Auto-sync failed:', error)
+            }
+          }
+        }
+
+        window.addEventListener('online', handleOnlineStatusChange)
+        window.addEventListener('offline', () => {
+          setAppState(prev => ({ ...prev, isOnline: false }))
+        })
+        setAppState(prev => ({ ...prev, isOnline: navigator.onLine }))
 
         return () => {
           unsubscribe()
-          window.removeEventListener('online', updateOnlineStatus)
-          window.removeEventListener('offline', updateOnlineStatus)
+          window.removeEventListener('online', handleOnlineStatusChange)
+          window.removeEventListener('offline', () => {
+            setAppState(prev => ({ ...prev, isOnline: false }))
+          })
         }
       } catch (error) {
         console.error('Error initializing app:', error)
@@ -206,19 +274,22 @@ function AppContent() {
 
     initializeApp()
     
-    // Register service worker for PWA (only in production)
-    if (import.meta.env.PROD) {
-      register({
-        onSuccess: (registration) => {
-          console.log('Service Worker registered successfully:', registration)
-        },
-        onUpdate: (registration) => {
-          console.log('Service Worker updated:', registration)
-        }
-      })
-    } else {
-      console.log('Service Worker disabled in development')
-    }
+    // Register service worker for PWA
+    register({
+      onNeedRefresh: () => {
+        console.log('[PWA] New version available! Showing update prompt...')
+        setAppState(prev => ({ ...prev, updateAvailable: true }))
+      },
+      onOfflineReady: () => {
+        console.log('[PWA] App is ready to work offline!')
+      },
+      onRegistered: (registration) => {
+        console.log('[PWA] Service Worker registered:', registration)
+      },
+      onRegisterError: (error) => {
+        console.error('[PWA] Registration error:', error)
+      }
+    })
     
     // Register PWA install prompt
     const installPrompt = registerPWAInstallPrompt()
@@ -230,6 +301,51 @@ function AppContent() {
       await authService.signOut()
     } catch (error) {
       console.error('Error signing out:', error)
+    }
+  }
+
+  // Refresh data from server (clears cache and gets fresh data)
+  const handleRefresh = async () => {
+    if (!navigator.onLine) {
+      console.warn('[Refresh] Cannot refresh while offline')
+      return
+    }
+
+    setIsRefreshing(true)
+    try {
+      console.log('[Refresh] Syncing and refreshing data...')
+      
+      // First sync any pending records
+      const pendingCount = await apiService.getPendingCount()
+      if (pendingCount > 0) {
+        console.log('[Refresh] Syncing', pendingCount, 'pending records first...')
+        await apiService.syncLocalRecords()
+      }
+      
+      // Fetch fresh data from server and update cache
+      const allRecords = await apiService.getRegistrations(1000)
+      const statsData = await apiService.getStats()
+      
+      // Replace cache with fresh server data
+      await localStorageService.setServerCache({ items: allRecords.registrations })
+      
+      // Get display records
+      const displayRecords = await apiService.getDisplayRecords(10)
+      const updatedPendingCount = await apiService.getPendingCount()
+      
+      setAppState(prev => ({
+        ...prev,
+        animals: allRecords.registrations,
+        displayAnimals: displayRecords,
+        stats: statsData,
+        pendingCount: updatedPendingCount
+      }))
+      
+      console.log('[Refresh] Data refresh completed:', allRecords.registrations.length, 'records')
+    } catch (error) {
+      console.error('[Refresh] Failed to refresh data:', error)
+    } finally {
+      setIsRefreshing(false)
     }
   }
 
@@ -252,8 +368,32 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Update Available Banner */}
+      {appState.updateAvailable && (
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-primary text-primary-foreground">
+          <div className="container mx-auto px-4 py-2 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-sm">
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Nueva versión disponible.</span>
+              <span className="sm:hidden">¡Nueva versión!</span>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                skipWaitingAndReload()
+              }}
+              className="gap-1 text-xs"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Actualizar ahora
+            </Button>
+          </div>
+        </div>
+      )}
+      
       {/* Header - Mobile responsive with centered title */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className={`sticky ${appState.updateAvailable ? 'top-10' : 'top-0'} z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60`}>
         <div className="container mx-auto px-4">
           {/* Mobile Layout */}
           <div className="flex flex-col space-y-3 py-4 md:hidden">
@@ -272,6 +412,17 @@ function AppContent() {
                   title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
                 >
                   {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                </Button>
+                {/* Refresh button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={!appState.isOnline || isRefreshing}
+                  className="text-muted-foreground hover:text-foreground p-2"
+                  title="Actualizar datos"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
               <Button
@@ -319,6 +470,18 @@ function AppContent() {
                 title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
               >
                 {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              </Button>
+              {/* Refresh button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={!appState.isOnline || isRefreshing}
+                className="text-muted-foreground hover:text-foreground gap-1"
+                title="Actualizar datos desde el servidor"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span className="hidden lg:inline">{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
               </Button>
             </div>
 
@@ -375,7 +538,7 @@ function AppContent() {
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Navigation - Clean tab design */}
-          <TabsList className="grid w-full grid-cols-4 mb-8">
+          <TabsList className="grid w-full grid-cols-5 mb-8">
             <TabsTrigger value="metrics" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
               <span className="hidden sm:inline">Métricas</span>
@@ -387,6 +550,10 @@ function AppContent() {
             <TabsTrigger value="search" className="flex items-center gap-2">
               <Search className="h-4 w-4" />
               <span className="hidden sm:inline">Buscar</span>
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              <span className="hidden sm:inline">Historia</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
@@ -411,6 +578,7 @@ function AppContent() {
           <TabsContent value="animals" className="mt-0">
             <AnimalsPage 
               animals={appState.displayAnimals}
+              allAnimals={appState.animals}
               onAnimalsChange={(animals) => setAppState(prev => ({ ...prev, displayAnimals: animals }))}
               onStatsChange={async () => {
                 try {
@@ -424,11 +592,65 @@ function AppContent() {
                   console.error('Error refreshing stats:', error)
                 }
               }}
+              onNavigateToSearch={(searchTerm) => {
+                // Switch to search tab and pass search term to pre-fill search input
+                setActiveTab('search')
+                setAppState(prev => ({ ...prev, searchTerm }))
+              }}
+              onNavigateToHistory={(animalNumber) => {
+                // Switch to history tab with selected animal
+                setActiveTab('history')
+                setAppState(prev => ({ ...prev, selectedAnimalNumber: animalNumber }))
+              }}
             />
           </TabsContent>
 
           <TabsContent value="search" className="mt-0">
-            <SearchPage animals={appState.animals} onAnimalsChange={(animals) => setAppState(prev => ({ ...prev, animals }))} />
+            <SearchPage 
+              animals={appState.animals} 
+              onAnimalsChange={(animals) => setAppState(prev => ({ ...prev, animals }))}
+              initialSearchTerm={appState.searchTerm}
+              onNavigateToHistory={(animalNumber) => {
+                // Switch to history tab with selected animal
+                setActiveTab('history')
+                setAppState(prev => ({ ...prev, selectedAnimalNumber: animalNumber }))
+              }}
+            />
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-0">
+            <ClinicalHistoryPage
+              allAnimals={appState.animals}
+              selectedAnimalNumber={appState.selectedAnimalNumber}
+              onAnimalUpdated={(updated: Animal) => {
+                setAppState(prev => ({
+                  ...prev,
+                  animals: prev.animals.map(a =>
+                    a.animal_number === updated.animal_number ? { ...a, ...updated } : a
+                  ),
+                }))
+              }}
+              onStatsChange={async () => {
+                try {
+                  const stats = await apiService.getStats()
+                  setAppState(prev => ({ 
+                    ...prev, 
+                    stats
+                  }))
+                } catch (error) {
+                  console.error('Error refreshing stats:', error)
+                }
+              }}
+              onSelectAnimal={(animalNumber: string) => {
+                setAppState(prev => ({ ...prev, selectedAnimalNumber: animalNumber }))
+              }}
+              onBackToSearch={(animalNumber?: string) => {
+                setActiveTab('search')
+                if (animalNumber) {
+                  setAppState(prev => ({ ...prev, searchTerm: animalNumber }))
+                }
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-0">
