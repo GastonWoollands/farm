@@ -16,68 +16,14 @@ import json
 import logging
 from datetime import datetime
 from typing import Dict, Optional, Any, List
-from ..config import USE_POSTGRES
+from psycopg2 import Error as PostgresError, IntegrityError
 from ..db import conn
 from ..events.event_types import EventType
 
 logger = logging.getLogger(__name__)
 
-# Import Postgres async implementations if using Postgres
-_USE_POSTGRES = USE_POSTGRES
-if _USE_POSTGRES:
-    try:
-        from .event_emitter_postgres import (
-            emit_event as emit_event_postgres,
-            emit_mother_registered as emit_mother_registered_postgres,
-            emit_father_registered as emit_father_registered_postgres,
-            emit_birth_registered as emit_birth_registered_postgres,
-            emit_death_recorded as emit_death_recorded_postgres,
-            emit_animal_deleted as emit_animal_deleted_postgres,
-            emit_field_change as emit_field_change_postgres,
-            ensure_animal_has_events as ensure_animal_has_events_postgres,
-            emit_insemination_recorded as emit_insemination_recorded_postgres,
-            emit_insemination_cancelled as emit_insemination_cancelled_postgres,
-            get_events_for_animal as get_events_for_animal_postgres,
-            get_events_for_animal_by_number as get_events_for_animal_by_number_postgres,
-            get_events_since as get_events_since_postgres,
-        )
-    except ImportError:
-        logger.warning("Postgres event emitter not available, falling back to SQLite")
-        _USE_POSTGRES = False
-
 
 def emit_event(
-    event_type: EventType | str,
-    animal_id: int | None,
-    animal_number: str,
-    company_id: int,
-    user_id: str,
-    payload: Dict[str, Any],
-    metadata: Optional[Dict[str, Any]] = None,
-    event_time: Optional[str] = None,
-    event_version: int = 1,
-) -> int:
-    """Emit event - routes to Postgres async or SQLite sync based on USE_POSTGRES."""
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            emit_event_postgres(
-                event_type, animal_id, animal_number, company_id, user_id,
-                payload, metadata, event_time, event_version
-            )
-        )
-    return _emit_event_sqlite(
-        event_type, animal_id, animal_number, company_id, user_id,
-        payload, metadata, event_time, event_version
-    )
-
-
-def _emit_event_sqlite(
     event_type: EventType | str,
     animal_id: int | None,
     animal_number: str,
@@ -107,7 +53,7 @@ def _emit_event_sqlite(
     
     Raises:
         ValueError: If required parameters are missing
-        sqlite3.Error: If database operation fails
+        PostgresError: If database operation fails
     """
     if not company_id:
         raise ValueError("company_id is required for all events")
@@ -182,20 +128,6 @@ def emit_mother_registered(
     animal_idv: Optional[str] = None,
 ) -> int:
     """Emit a mother_registered event when a mother is first registered."""
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            emit_mother_registered_postgres(
-                animal_id, animal_number, company_id, user_id,
-                current_weight, status, color, notes, rp_animal, animal_idv
-            )
-        )
-    
     payload = {
         "animal_number": animal_number,
         "current_weight": current_weight,
@@ -417,20 +349,6 @@ def ensure_animal_has_events(
     Returns:
         True if events were created, False if animal already had events
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            ensure_animal_has_events_postgres(
-                animal_number, company_id, user_id, gender, weight,
-                current_weight, status, color, notes, rp_animal
-            )
-        )
-    
     if not animal_number or not animal_number.strip():
         return False
     
@@ -612,17 +530,6 @@ def get_events_for_animal(animal_id: int, company_id: int) -> List[Dict[str, Any
     Returns:
         List of event dictionaries
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            get_events_for_animal_postgres(animal_id, company_id)
-        )
-    
     cursor = conn.execute(
         """
         SELECT id, event_id, animal_id, animal_number, event_type, event_version,
@@ -643,8 +550,8 @@ def get_events_for_animal(animal_id: int, company_id: int) -> List[Dict[str, Any
             "animal_number": row[3],
             "event_type": row[4],
             "event_version": row[5],
-            "payload": json.loads(row[6]) if row[6] else {},
-            "metadata": json.loads(row[7]) if row[7] else {},
+            "payload": row[6] if isinstance(row[6], dict) else (json.loads(row[6]) if row[6] else {}),
+            "metadata": row[7] if isinstance(row[7], dict) else (json.loads(row[7]) if row[7] else {}),
             "company_id": row[8],
             "user_id": row[9],
             "event_time": row[10],
@@ -660,17 +567,6 @@ def get_events_for_animal_by_number(animal_number: str, company_id: int) -> List
     
     This is useful for insemination events where we don't have an animal_id.
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            get_events_for_animal_by_number_postgres(animal_number, company_id)
-        )
-    
     cursor = conn.execute(
         """
         SELECT id, event_id, animal_id, animal_number, event_type, event_version,
@@ -691,8 +587,8 @@ def get_events_for_animal_by_number(animal_number: str, company_id: int) -> List
             "animal_number": row[3],
             "event_type": row[4],
             "event_version": row[5],
-            "payload": json.loads(row[6]) if row[6] else {},
-            "metadata": json.loads(row[7]) if row[7] else {},
+            "payload": row[6] if isinstance(row[6], dict) else (json.loads(row[6]) if row[6] else {}),
+            "metadata": row[7] if isinstance(row[7], dict) else (json.loads(row[7]) if row[7] else {}),
             "company_id": row[8],
             "user_id": row[9],
             "event_time": row[10],
@@ -718,17 +614,6 @@ def get_events_since(
     Returns:
         List of event dictionaries
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            get_events_since_postgres(company_id, since_event_id, limit)
-        )
-    
     if since_event_id:
         cursor = conn.execute(
             """
@@ -763,8 +648,8 @@ def get_events_since(
             "animal_number": row[3],
             "event_type": row[4],
             "event_version": row[5],
-            "payload": json.loads(row[6]) if row[6] else {},
-            "metadata": json.loads(row[7]) if row[7] else {},
+            "payload": row[6] if isinstance(row[6], dict) else (json.loads(row[6]) if row[6] else {}),
+            "metadata": row[7] if isinstance(row[7], dict) else (json.loads(row[7]) if row[7] else {}),
             "company_id": row[8],
             "user_id": row[9],
             "event_time": row[10],

@@ -3,9 +3,10 @@ Updated registrations service with multi-tenant support
 This shows how to modify existing services to use company-based filtering
 """
 
-import sqlite3
+from datetime import datetime
 from typing import Optional, List, Dict, Tuple
 from fastapi import HTTPException
+from psycopg2 import Error as PostgresError
 from ..db import conn
 from ..models import RegisterBody, UpdateBody
 from .auth_service import get_data_filter_clause
@@ -32,7 +33,7 @@ def insert_registration_multi_tenant(user: Dict, body: RegisterBody) -> int:
                 """,
                 (
                     body.animalNumber,
-                    body.createdAt or sqlite3.datetime.datetime.now().isoformat(),
+                    body.createdAt or datetime.now().isoformat(),
                     None,  # user_key for legacy compatibility
                     firebase_uid,
                     body.motherId,
@@ -64,14 +65,14 @@ def insert_registration_multi_tenant(user: Dict, body: RegisterBody) -> int:
                     body.animalNumber,
                     "created",
                     firebase_uid,
-                    sqlite3.datetime.datetime.now().isoformat(),
+                    datetime.now().isoformat(),
                     f"Animal registered by {user.get('display_name', 'Unknown')}",
                     company_id
                 )
             )
             
             return record_id
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
 
@@ -121,7 +122,7 @@ def get_registrations_multi_tenant(user: Dict, limit: int = 100) -> List[Dict]:
             }
             for row in rows
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
 
@@ -166,7 +167,7 @@ def export_rows_multi_tenant(
         
         cols = [d[0] for d in cursor.description]
         return [dict(zip(cols, r)) for r in cursor.fetchall()]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
 
@@ -242,5 +243,5 @@ def get_registration_stats_multi_tenant(user: Dict) -> Dict:
             "company_id": company_id,
             "is_company_data": company_id is not None
         }
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")

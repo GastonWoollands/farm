@@ -1,7 +1,14 @@
 import os
-import sqlite3
-from pathlib import Path
-from .config import DB_PATH
+import threading
+import logging
+import psycopg2
+import psycopg2.pool
+import psycopg2.extras
+import re
+from psycopg2 import Error as PostgresError, IntegrityError, OperationalError
+from .config import DATABASE_URL, DB_POOL_MIN_SIZE, DB_POOL_MAX_SIZE, DB_TIMEOUT
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # EVENT SOURCING MIGRATION FLAG
@@ -11,978 +18,296 @@ from .config import DB_PATH
 # Keep True during migration period for safety/backward compatibility.
 ENABLE_LEGACY_TRIGGERS = True  # Set to False after full migration to event sourcing
 
-# Ensure data directory exists
-Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-
-db_path = Path(DB_PATH)
-data_dir = db_path.parent
-data_dir.mkdir(parents=True, exist_ok=True)
-
-try:
-    os.chmod(data_dir, 0o777)
-except PermissionError:
-    pass
-
-# Initialize DB and table
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-
-# Create animal_types lookup table
-conn.execute(
-    """
-    CREATE TABLE IF NOT EXISTS animal_types (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        description TEXT
-    )
-    """
-)
-
-# Create inseminations_ids lookup table
-conn.execute(
-    """
-    CREATE TABLE IF NOT EXISTS inseminations_ids (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        insemination_round_id TEXT NOT NULL,
-        initial_date DATE NOT NULL,
-        end_date DATE NOT NULL,
-        notes TEXT,
-        company_id INTEGER,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now')),
-        FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE SET NULL,
-        UNIQUE(insemination_round_id, company_id)
-    )
-    """
-)
-
-# Insert default animal types
-conn.execute(
-    """
-    INSERT OR IGNORE INTO animal_types (id, name, description) VALUES 
-    (1, 'cow', 'Female cattle'),
-    (2, 'bull', 'Male cattle')
-    """
-)
-
-# Insert initial insemination data
-conn.execute(
-    """
-    INSERT OR IGNORE INTO inseminations_ids (insemination_round_id, initial_date, end_date, notes) VALUES 
-    ('2024', '2024-10-31', '2024-11-18', 'initial insemination data')
-    """
-)
-
-conn.execute(
-    """
-    CREATE TABLE IF NOT EXISTS registrations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        short_id TEXT UNIQUE,
-        animal_number TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        user_key TEXT,
-        created_by TEXT,
-        company_id INTEGER,
-        mother_id TEXT,
-        father_id TEXT,
-        born_date TEXT,
-        weight REAL,
-        gender TEXT,
-        animal_type INTEGER,
-        status TEXT,
-        color TEXT,
-        notes TEXT,
-        notes_mother TEXT,
-        insemination_round_id TEXT,
-        insemination_identifier TEXT,
-        scrotal_circumference REAL,
-        FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE SET NULL
-    )
-    """
-)
-
-# Create events_state table for tracking all changes (LEGACY - being replaced by domain_events)
-conn.execute(
-    """
-    CREATE TABLE IF NOT EXISTS events_state (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        animal_id INTEGER NOT NULL,
-        animal_number TEXT NOT NULL,
-        event_type TEXT NOT NULL,
-        modified_field TEXT,
-        old_value TEXT,
-        new_value TEXT,
-        user_id TEXT NOT NULL,
-        company_id INTEGER,
-        event_date TEXT NOT NULL DEFAULT (datetime('now')),
-        notes TEXT,
-        FOREIGN KEY (animal_id) REFERENCES registrations (id) ON DELETE CASCADE,
-        FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE SET NULL
-    )
-    """
-)
-conn.commit()
-
 # =============================================================================
-# EVENT SOURCING TABLES (New Architecture)
+# CONNECTION POOL
 # =============================================================================
+# Global connection pool instance
+_pool = None
 
-# Create domain_events table - IMMUTABLE event store (source of truth)
-conn.execute(
-    """
-    CREATE TABLE IF NOT EXISTS domain_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_id TEXT NOT NULL UNIQUE,
-        animal_id INTEGER,
-        animal_number TEXT NOT NULL,
-        event_type TEXT NOT NULL,
-        event_version INTEGER DEFAULT 1,
-        payload TEXT NOT NULL,
-        metadata TEXT,
-        company_id INTEGER NOT NULL,
-        user_id TEXT NOT NULL,
-        event_time TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        FOREIGN KEY (company_id) REFERENCES companies (id)
-    )
-    """
-)
 
-# Create indexes for domain_events
-conn.execute("CREATE INDEX IF NOT EXISTS idx_domain_events_animal ON domain_events(animal_id, event_time)")
-conn.execute("CREATE INDEX IF NOT EXISTS idx_domain_events_company ON domain_events(company_id, event_time)")
-conn.execute("CREATE INDEX IF NOT EXISTS idx_domain_events_type ON domain_events(event_type, event_time)")
-conn.execute("CREATE INDEX IF NOT EXISTS idx_domain_events_event_id ON domain_events(event_id)")
-conn.commit()
-
-# Create animal_snapshots table - DERIVED state (rebuildable from events)
-conn.execute(
-    """
-    CREATE TABLE IF NOT EXISTS animal_snapshots (
-        animal_id INTEGER PRIMARY KEY,
-        animal_number TEXT NOT NULL,
-        company_id INTEGER NOT NULL,
-        birth_date TEXT,
-        mother_id TEXT,
-        father_id TEXT,
-        current_status TEXT,
-        current_weight REAL,
-        weaning_weight REAL,
-        gender TEXT,
-        color TEXT,
-        death_date TEXT,
-        sold_date TEXT,
-        last_insemination_date TEXT,
-        insemination_count INTEGER DEFAULT 0,
-        notes TEXT,
-        notes_mother TEXT,
-        rp_animal TEXT,
-        rp_mother TEXT,
-        mother_weight REAL,
-        scrotal_circumference REAL,
-        insemination_round_id TEXT,
-        insemination_identifier TEXT,
-        last_event_id INTEGER,
-        last_event_time TEXT,
-        snapshot_version INTEGER DEFAULT 1,
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        FOREIGN KEY (animal_id) REFERENCES registrations (id),
-        FOREIGN KEY (company_id) REFERENCES companies (id)
-    )
-    """
-)
-
-# Create indexes for animal_snapshots
-conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_company ON animal_snapshots(company_id)")
-conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_status ON animal_snapshots(company_id, current_status)")
-conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_animal_number ON animal_snapshots(animal_number)")
-conn.commit()
-
-def _add_column_safely(table_name: str, column_name: str, column_type: str) -> bool:
-    """
-    Safely add a column to a table if it doesn't exist.
-    Returns True if the column was added, False if it already existed.
-    """
+def init_pool():
+    """Initialize the connection pool"""
+    global _pool
+    if _pool is not None:
+        return _pool
+    
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL environment variable is required for PostgreSQL connection")
+    
     try:
-        # Check if column already exists
-        cursor = conn.execute(f"PRAGMA table_info({table_name})")
-        columns = [row[1] for row in cursor.fetchall()]
+        _pool = psycopg2.pool.ThreadedConnectionPool(
+            minconn=DB_POOL_MIN_SIZE,
+            maxconn=DB_POOL_MAX_SIZE,
+            dsn=DATABASE_URL,
+            connect_timeout=DB_TIMEOUT
+        )
+        # Test the pool by getting and returning a connection
+        test_conn = _pool.getconn()
+        test_conn.close()
+        _pool.putconn(test_conn)
+        return _pool
+    except Exception as e:
+        raise RuntimeError(f"Failed to initialize connection pool: {e}")
+
+
+def close_pool():
+    """Close all connections in the pool"""
+    global _pool
+    if _pool is not None:
+        _pool.closeall()
+        _pool = None
+
+
+def get_pool():
+    """Get the connection pool instance"""
+    if _pool is None:
+        raise RuntimeError("Connection pool not initialized. Call init_pool() first.")
+    return _pool
+
+
+# =============================================================================
+# POSTGRES CONNECTION WRAPPER
+# =============================================================================
+# This wrapper makes Postgres look like SQLite so existing code continues to work
+
+class PostgresCursor:
+    """Cursor wrapper that mimics SQLite cursor behavior"""
+    def __init__(self, cursor):
+        self._cursor = cursor
+        self._lastrowid = None
+    
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+    
+    @property
+    def lastrowid(self):
+        """Return the last inserted row ID"""
+        return self._lastrowid
+    
+    def _convert_value(self, value):
+        """Convert date/datetime objects to ISO format strings"""
+        from datetime import date, datetime
         
-        if column_name not in columns:
-            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
-            conn.commit()
-            print(f"Added {column_name} to {table_name} table")
-            return True
-        return False
-    except sqlite3.Error as e:
-        print(f"Error adding {column_name} to {table_name}: {e}")
-        return False
+        if value is None:
+            return None
+        elif isinstance(value, date) and not isinstance(value, datetime):
+            return value.isoformat()
+        elif isinstance(value, datetime):
+            return value.isoformat()
+        else:
+            return value
+    
+    def _convert_row(self, row):
+        """Convert all values in a row tuple"""
+        if row is None:
+            return None
+        return tuple(self._convert_value(val) for val in row)
+    
+    def fetchone(self):
+        """Fetch one row and convert date/datetime objects to strings"""
+        row = self._cursor.fetchone()
+        return self._convert_row(row)
+    
+    def fetchall(self):
+        """Fetch all rows and convert date/datetime objects to strings"""
+        rows = self._cursor.fetchall()
+        return [self._convert_row(row) for row in rows]
+    
+    def execute(self, query, params=None):
+        return self._cursor.execute(query, params)
+    
+    @property
+    def description(self):
+        return self._cursor.description
 
-# Add animal_number column to existing events_state table if it doesn't exist
-try:
-    conn.execute("ALTER TABLE events_state ADD COLUMN animal_number TEXT")
-    conn.commit()
-except sqlite3.OperationalError:
-    pass  # Column already exists
 
-
-def create_unique_index() -> None:
-    try:
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_user_animal_mother_father ON registrations(user_key, animal_number, IFNULL(mother_id, ''), IFNULL(father_id, ''))"
-        )
-        conn.commit()
-    except sqlite3.OperationalError:
+class PooledPostgresConnection:
+    """Postgres connection wrapper that uses connection pool and mimics SQLite interface"""
+    def __init__(self, pool):
+        self.pool = pool
+        self._thread_local = threading.local()
+    
+    def _get_connection(self):
+        """Get connection from pool or thread-local storage"""
+        if hasattr(self._thread_local, 'connection'):
+            return self._thread_local.connection
+        
         try:
-            conn.execute(
-                """
-                DELETE FROM registrations
-                WHERE rowid NOT IN (
-                    SELECT MIN(rowid) FROM registrations
-                    GROUP BY user_key, animal_number, IFNULL(mother_id, ''), IFNULL(father_id, '')
-                )
-                """
-            )
-            conn.commit()
-            conn.execute(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uniq_user_animal_mother_father ON registrations(user_key, animal_number, IFNULL(mother_id, ''), IFNULL(father_id, ''))"
-            )
-            conn.commit()
-        except sqlite3.OperationalError:
-            pass
-    # New index for Firebase user-based uniqueness
-    try:
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_createdby_animal_mother_father ON registrations(created_by, animal_number, IFNULL(mother_id, ''), IFNULL(father_id, ''))"
-        )
-        conn.commit()
-    except sqlite3.OperationalError:
+            conn = self.pool.getconn()
+            conn.autocommit = False
+            return conn
+        except Exception as e:
+            raise RuntimeError(f"Failed to get connection from pool: {e}")
+    
+    def _return_connection(self, conn):
+        """Return connection to pool if not in transaction context"""
+        if not hasattr(self._thread_local, 'connection'):
+            try:
+                self.pool.putconn(conn)
+            except Exception as e:
+                print(f"Warning: Failed to return connection to pool: {e}")
+    
+    def _convert_query(self, query):
+        """Convert SQLite-style queries to PostgreSQL-compatible queries"""
+        # Convert ? placeholders to %s
+        converted = query.replace('?', '%s')
+        
+        pattern = r"(?i)substr\s*\(\s*replace\s*\(\s*hex\s*\(\s*randomblob\s*\(\s*\d+\s*\)\s*\)\s*,\s*([\"']?)E\1\s*,\s*([\"']?)\2\s*\)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)"
+        def replace_short_id_pattern(match):
+            start = int(match.group(3))
+            length = int(match.group(4))
+            return f"substring(replace(translate(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''), 'E', ''), {start}, {length})"
+        
+        converted = re.sub(pattern, replace_short_id_pattern, converted)
+        
+        pattern2 = r"(?i)hex\s*\(\s*randomblob\s*\(\s*\d+\s*\)\s*\)"
+        def replace_randomblob_hex(match):
+            return "translate(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')"
+        
+        converted = re.sub(pattern2, replace_randomblob_hex, converted)
+        
+        return converted
+    
+    def execute(self, query, params=None):
+        """Execute a query and return a cursor-like object"""
+        conn = self._get_connection()
+        converted_query = self._convert_query(query)
+        cursor = conn.cursor()
+        
+        try:
+            query_upper = converted_query.strip().upper()
+            if (query_upper.startswith('INSERT') and 
+                'RETURNING' not in query_upper and 
+                'ON CONFLICT' not in query_upper):
+                if ';' in converted_query:
+                    parts = converted_query.rsplit(';', 1)
+                    converted_query = parts[0] + ' RETURNING id;' + parts[1] if len(parts) > 1 else parts[0] + ' RETURNING id'
+                else:
+                    converted_query = converted_query.rstrip() + ' RETURNING id'
+            
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Executing query: {converted_query[:200]}...")
+                if params:
+                    logger.debug(f"With params: {params}")
+            
+            if params:
+                cursor.execute(converted_query, params)
+            else:
+                cursor.execute(converted_query)
+            
+            lastrowid = None
+            if query_upper.startswith('INSERT'):
+                if 'RETURNING' in converted_query.upper():
+                    result = cursor.fetchone()
+                    if result:
+                        lastrowid = result[0]
+            
+            wrapped_cursor = PostgresCursor(cursor)
+            wrapped_cursor._lastrowid = lastrowid
+            return wrapped_cursor
+        except Exception as e:
+            cursor.close()
+            logger.error(f"Database query execution failed: {str(e)}", exc_info=True)
+            logger.error(f"Original query: {query[:500]}")
+            logger.error(f"Converted query: {converted_query[:500]}")
+            if params:
+                logger.error(f"Query params: {params}")
+            if not hasattr(self._thread_local, 'connection'):
+                self._return_connection(conn)
+            raise
+        finally:
+            if not hasattr(self._thread_local, 'connection'):
+                self._return_connection(conn)
+    
+    def commit(self):
+        """Commit the current transaction"""
+        if hasattr(self._thread_local, 'connection'):
+            self._thread_local.connection.commit()
+        else:
+            raise RuntimeError("Cannot commit: not in a transaction context")
+    
+    def rollback(self):
+        """Rollback the current transaction"""
+        if hasattr(self._thread_local, 'connection'):
+            self._thread_local.connection.rollback()
+        else:
+            raise RuntimeError("Cannot rollback: not in a transaction context")
+    
+    def __enter__(self):
+        """Context manager entry - start transaction and hold connection"""
+        conn = self._get_connection()
+        self._thread_local.connection = conn
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - commit or rollback and return connection"""
+        if not hasattr(self._thread_local, 'connection'):
+            return False
+        
+        conn = self._thread_local.connection
+        try:
+            if exc_type is None:
+                conn.commit()
+            else:
+                conn.rollback()
+        finally:
+            delattr(self._thread_local, 'connection')
+            self._return_connection(conn)
+        
+        return False
+    
+    def close(self):
+        """Close is a no-op for pooled connections - they're managed by the pool"""
         pass
-
-create_unique_index()
-
-# Create indexes for new insemination tracking columns
-try:
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_registrations_insemination_round_id ON registrations(insemination_round_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_registrations_insemination_identifier ON registrations(insemination_identifier)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_registrations_mother_insemination ON registrations(mother_id, insemination_round_id, insemination_identifier)")
-    conn.commit()
-except sqlite3.Error as e:
-    print(f"Error creating insemination indexes: {e}")
-
-# Create trigger for automatic event tracking
-def create_events_trigger():
-    """Create trigger to automatically track changes in events_state table"""
-    try:
-        conn.execute("DROP TRIGGER IF EXISTS track_registration_insert")
-        conn.execute("DROP TRIGGER IF EXISTS track_registration_update")
-        
-        # Create INSERT trigger (birth event)
-        conn.execute("""
-        CREATE TRIGGER track_registration_insert
-        AFTER INSERT ON registrations
-        FOR EACH ROW
-        BEGIN
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) VALUES (
-                NEW.id, NEW.animal_number, 'born', NULL, NULL, NEW.status, 
-                COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                datetime('now'), NEW.notes
-            );
-        END;
-        """)
-        
-        # Create UPDATE trigger (track field changes)
-        conn.execute("""
-        CREATE TRIGGER track_registration_update
-        AFTER UPDATE ON registrations
-        FOR EACH ROW
-        BEGIN
-            -- Track status changes (death event)
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'death', 'status', OLD.status, NEW.status, 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE OLD.status != NEW.status AND NEW.status = 'DEAD';
-            
-            -- Track other field changes (corrections)
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'animal_number', OLD.animal_number, NEW.animal_number, 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE OLD.animal_number != NEW.animal_number;
-            
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'mother_id', 
-                   COALESCE(OLD.mother_id, 'NULL'), 
-                   COALESCE(NEW.mother_id, 'NULL'), 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE (OLD.mother_id IS NULL AND NEW.mother_id IS NOT NULL) 
-               OR (OLD.mother_id IS NOT NULL AND NEW.mother_id IS NULL) 
-               OR (OLD.mother_id != NEW.mother_id);
-            
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'father_id', 
-                   COALESCE(OLD.father_id, 'NULL'), 
-                   COALESCE(NEW.father_id, 'NULL'), 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE (OLD.father_id IS NULL AND NEW.father_id IS NOT NULL) 
-               OR (OLD.father_id IS NOT NULL AND NEW.father_id IS NULL) 
-               OR (OLD.father_id != NEW.father_id);
-            
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'born_date', OLD.born_date, NEW.born_date, 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE OLD.born_date != NEW.born_date;
-            
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'weight', 
-                   COALESCE(CAST(OLD.weight AS TEXT), 'NULL'), 
-                   COALESCE(CAST(NEW.weight AS TEXT), 'NULL'), 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE (OLD.weight IS NULL AND NEW.weight IS NOT NULL) 
-               OR (OLD.weight IS NOT NULL AND NEW.weight IS NULL) 
-               OR (OLD.weight != NEW.weight);
-            
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'weaning_weight', 
-                   COALESCE(CAST(OLD.weaning_weight AS TEXT), 'NULL'), 
-                   COALESCE(CAST(NEW.weaning_weight AS TEXT), 'NULL'), 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE (OLD.weaning_weight IS NULL AND NEW.weaning_weight IS NOT NULL) 
-               OR (OLD.weaning_weight IS NOT NULL AND NEW.weaning_weight IS NULL) 
-               OR (OLD.weaning_weight != NEW.weaning_weight);
-            
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'gender', 
-                   COALESCE(OLD.gender, 'NULL'), 
-                   COALESCE(NEW.gender, 'NULL'), 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE (OLD.gender IS NULL AND NEW.gender IS NOT NULL) 
-               OR (OLD.gender IS NOT NULL AND NEW.gender IS NULL) 
-               OR (OLD.gender != NEW.gender);
-            
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'status', OLD.status, NEW.status, 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE OLD.status != NEW.status AND NEW.status != 'DEAD';
-            
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'color', OLD.color, NEW.color, 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE OLD.color != NEW.color;
-            
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'notes', OLD.notes, NEW.notes, 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE OLD.notes != NEW.notes;
-            
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'notes_mother', OLD.notes_mother, NEW.notes_mother, 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE OLD.notes_mother != NEW.notes_mother;
-            
-            INSERT INTO events_state (
-                animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                user_id, event_date, notes
-            ) 
-            SELECT NEW.id, NEW.animal_number, 'correccion', 'scrotal_circumference', 
-                   COALESCE(CAST(OLD.scrotal_circumference AS TEXT), 'NULL'), 
-                   COALESCE(CAST(NEW.scrotal_circumference AS TEXT), 'NULL'), 
-                   COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                   datetime('now'), NEW.notes
-            WHERE (OLD.scrotal_circumference IS NULL AND NEW.scrotal_circumference IS NOT NULL) 
-               OR (OLD.scrotal_circumference IS NOT NULL AND NEW.scrotal_circumference IS NULL) 
-               OR (OLD.scrotal_circumference != NEW.scrotal_circumference);
-        END;
-        """)
-        conn.commit()
-    except sqlite3.Error as e:
-        print(f"Error creating events trigger: {e}")
-
-# Only create legacy triggers if flag is enabled
-if ENABLE_LEGACY_TRIGGERS:
-    create_events_trigger()
-else:
-    # Drop legacy triggers if they exist
-    try:
-        conn.execute("DROP TRIGGER IF EXISTS track_registration_insert")
-        conn.execute("DROP TRIGGER IF EXISTS track_registration_update")
-        conn.commit()
-        print("Legacy registration triggers disabled (ENABLE_LEGACY_TRIGGERS=False)")
-    except sqlite3.Error as e:
-        print(f"Error dropping legacy triggers: {e}")
-
-# Update existing records to set updated_at = created_at (after all columns are added)
-try:
-    conn.execute("UPDATE registrations SET updated_at = created_at WHERE updated_at IS NULL")
-    conn.commit()
-except sqlite3.OperationalError:
-    pass  # Column doesn't exist, skip update
-
-# Initialize inseminations table
-def create_inseminations_table():
-    """Create the inseminations table and related structures"""
-    try:
-        # Create the inseminations table
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS inseminations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                insemination_identifier TEXT NOT NULL,
-                insemination_round_id TEXT NOT NULL,
-                mother_id TEXT NOT NULL,
-                mother_visual_id TEXT,
-                bull_id TEXT,
-                insemination_date DATE NOT NULL,
-                registration_date TEXT NOT NULL DEFAULT (datetime('now')),
-                animal_type TEXT,
-                notes TEXT,
-                created_by TEXT NOT NULL,
-                company_id INTEGER,
-                updated_at TEXT DEFAULT (datetime('now')),
-                FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE SET NULL
-            )
-            """
-        )
-        
-        # Create unique constraint to prevent duplicate inseminations for same cow on same date per company
-        # This ensures company_id is part of the uniqueness constraint to prevent cross-company data conflicts
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_mother_insemination_date_company ON inseminations(mother_id, insemination_date, company_id)"
-        )
-        # Keep old index for backward compatibility (can be removed in future migration)
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uniq_mother_insemination_date ON inseminations(mother_id, insemination_date) WHERE company_id IS NULL"
-        )
-        
-        # Create indexes for performance optimization
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_id ON inseminations(mother_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_visual_id ON inseminations(mother_visual_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_id ON inseminations(insemination_round_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_insemination_date ON inseminations(insemination_date)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_bull_id ON inseminations(bull_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_created_by ON inseminations(created_by)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_registration_date ON inseminations(registration_date)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_visual_date ON inseminations(mother_visual_id, insemination_date DESC)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_date ON inseminations(insemination_round_id, insemination_date DESC)")
-        
-        # Create triggers for automatic event tracking (only if legacy triggers enabled)
-        conn.execute("DROP TRIGGER IF EXISTS track_insemination_insert")
-        conn.execute("DROP TRIGGER IF EXISTS track_insemination_update")
-        conn.execute("DROP TRIGGER IF EXISTS track_insemination_delete")
-        
-        if ENABLE_LEGACY_TRIGGERS:
-            # Create INSERT trigger (insemination event)
-            conn.execute("""
-            CREATE TRIGGER track_insemination_insert
-            AFTER INSERT ON inseminations
-            FOR EACH ROW
-            BEGIN
-                INSERT INTO events_state (
-                    animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                    user_id, event_date, notes
-                ) VALUES (
-                    NEW.mother_id, 
-                    NEW.mother_visual_id, 
-                    'inseminacion', 
-                    'insemination_date', 
-                    NULL, 
-                    NEW.insemination_date, 
-                    NEW.created_by, 
-                    datetime('now'), 
-                    NEW.notes
-                );
-            END;
-            """)
-            
-            # Create UPDATE trigger (track field changes)
-            conn.execute("""
-            CREATE TRIGGER track_insemination_update
-            AFTER UPDATE ON inseminations
-            FOR EACH ROW
-            BEGIN
-                -- Track insemination date changes
-                INSERT INTO events_state (
-                    animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                    user_id, event_date, notes
-                ) 
-                SELECT NEW.mother_id, NEW.mother_visual_id, 'correccion', 'insemination_date', 
-                       OLD.insemination_date, NEW.insemination_date, 
-                       NEW.created_by, datetime('now'), NEW.notes
-                WHERE OLD.insemination_date != NEW.insemination_date;
-                
-                -- Track bull_id changes
-                INSERT INTO events_state (
-                    animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                    user_id, event_date, notes
-                ) 
-                SELECT NEW.mother_id, NEW.mother_visual_id, 'correccion', 'bull_id', 
-                       COALESCE(OLD.bull_id, 'NULL'), COALESCE(NEW.bull_id, 'NULL'), 
-                       NEW.created_by, datetime('now'), NEW.notes
-                WHERE (OLD.bull_id IS NULL AND NEW.bull_id IS NOT NULL) 
-                   OR (OLD.bull_id IS NOT NULL AND NEW.bull_id IS NULL) 
-                   OR (OLD.bull_id != NEW.bull_id);
-                
-                -- Track notes changes
-                INSERT INTO events_state (
-                    animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                    user_id, event_date, notes
-                ) 
-                SELECT NEW.mother_id, NEW.mother_visual_id, 'correccion', 'insemination_notes', 
-                       OLD.notes, NEW.notes, 
-                       NEW.created_by, datetime('now'), NEW.notes
-                WHERE OLD.notes != NEW.notes;
-            END;
-            """)
-            
-            # Create DELETE trigger
-            conn.execute("""
-            CREATE TRIGGER track_insemination_delete
-            AFTER DELETE ON inseminations
-            FOR EACH ROW
-            BEGIN
-                INSERT INTO events_state (
-                    animal_id, animal_number, event_type, modified_field, old_value, new_value, 
-                    user_id, event_date, notes
-                ) VALUES (
-                    OLD.mother_id, 
-                    OLD.mother_visual_id, 
-                    'eliminacion_inseminacion', 
-                    'insemination_date', 
-                    OLD.insemination_date, 
-                    NULL, 
-                    OLD.created_by, 
-                    datetime('now'), 
-                    'Inseminación eliminada'
-                );
-            END;
-            """)
-        else:
-            print("Legacy insemination triggers disabled (ENABLE_LEGACY_TRIGGERS=False)")
-        
-        conn.commit()
-        
-        # Add animal_type column to existing inseminations table if it doesn't exist
-        try:
-            conn.execute("ALTER TABLE inseminations ADD COLUMN animal_type TEXT")
-            conn.commit()
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-        
-        # Add insemination_round_id column to existing inseminations table if it doesn't exist
-        try:
-            conn.execute("ALTER TABLE inseminations ADD COLUMN insemination_round_id TEXT")
-            conn.commit()
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-        
-        # Make mother_visual_id nullable (migration for existing databases)
-        try:
-            # SQLite doesn't support ALTER COLUMN, so we need to recreate the table
-            # But first check if the column is already nullable by checking the schema
-            cursor = conn.execute("PRAGMA table_info(inseminations)")
-            columns = cursor.fetchall()
-            mother_visual_id_col = next((col for col in columns if col[1] == 'mother_visual_id'), None)
-            
-            if mother_visual_id_col and mother_visual_id_col[3] == 1:  # 1 means NOT NULL
-                print("Migrating mother_visual_id to nullable...")
-                # Create new table with nullable mother_visual_id
-                conn.execute("""
-                    CREATE TABLE inseminations_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        insemination_identifier TEXT NOT NULL,
-                        insemination_round_id TEXT NOT NULL,
-                        mother_id TEXT NOT NULL,
-                        mother_visual_id TEXT,
-                        bull_id TEXT,
-                        insemination_date DATE NOT NULL,
-                        registration_date TEXT NOT NULL DEFAULT (datetime('now')),
-                        animal_type TEXT,
-                        notes TEXT,
-                        created_by TEXT NOT NULL,
-                        updated_at TEXT DEFAULT (datetime('now'))
-                    )
-                """)
-                
-                # Copy data from old table to new table
-                conn.execute("""
-                    INSERT INTO inseminations_new 
-                    SELECT id, insemination_identifier, insemination_round_id, mother_id, 
-                           mother_visual_id, bull_id, insemination_date, registration_date, 
-                           animal_type, notes, created_by, updated_at
-                    FROM inseminations
-                """)
-                
-                # Drop old table and rename new one
-                conn.execute("DROP TABLE inseminations")
-                conn.execute("ALTER TABLE inseminations_new RENAME TO inseminations")
-                
-                # Recreate indexes
-                conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uniq_mother_insemination_date ON inseminations(mother_id, insemination_date)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_id ON inseminations(mother_id)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_visual_id ON inseminations(mother_visual_id)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_id ON inseminations(insemination_round_id)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_insemination_date ON inseminations(insemination_date)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_bull_id ON inseminations(bull_id)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_created_by ON inseminations(created_by)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_registration_date ON inseminations(registration_date)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_visual_date ON inseminations(mother_visual_id, insemination_date DESC)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_date ON inseminations(insemination_round_id, insemination_date DESC)")
-                
-                conn.commit()
-                print("Migration completed - mother_visual_id is now nullable")
-        except sqlite3.OperationalError as e:
-            print(f"Migration skipped: {e}")
-            pass  # Migration already applied or not needed
-        
-        # Migrate insemination_date from TEXT to DATE, mother_id from INTEGER to TEXT, and remove foreign key if needed
-        try:
-            # Check if insemination_date column exists and is TEXT type, or mother_id is INTEGER
-            cursor = conn.execute("PRAGMA table_info(inseminations)")
-            columns = cursor.fetchall()
-            insemination_date_col = next((col for col in columns if col[1] == 'insemination_date'), None)
-            mother_id_col = next((col for col in columns if col[1] == 'mother_id'), None)
-            
-            # Check if foreign key constraint exists
-            cursor = conn.execute("PRAGMA foreign_key_list(inseminations)")
-            fk_exists = len(cursor.fetchall()) > 0
-            
-            needs_migration = (
-                (insemination_date_col and insemination_date_col[2] == 'TEXT') or
-                (mother_id_col and mother_id_col[2] == 'INTEGER') or
-                fk_exists
-            )
-            
-            if needs_migration:
-                print("Migrating inseminations table to fix data types and remove foreign key...")
-                # Create a new table with correct types
-                conn.execute("""
-                CREATE TABLE inseminations_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    insemination_identifier TEXT NOT NULL,
-                    insemination_round_id TEXT NOT NULL,
-                    mother_id TEXT NOT NULL,
-                    mother_visual_id TEXT NOT NULL,
-                    bull_id TEXT,
-                    insemination_date DATE NOT NULL,
-                    registration_date TEXT NOT NULL DEFAULT (datetime('now')),
-                    animal_type TEXT,
-                    notes TEXT,
-                    created_by TEXT NOT NULL,
-                    updated_at TEXT DEFAULT (datetime('now'))
-                )
-                """)
-                
-                # Copy data from old table to new table
-                conn.execute("""
-                INSERT INTO inseminations_new 
-                SELECT id, insemination_identifier, 
-                       strftime('%Y%m', insemination_date) as insemination_round_id,
-                       CAST(mother_id AS TEXT) as mother_id, mother_visual_id, bull_id,
-                       date(insemination_date), registration_date, animal_type, notes, 
-                       created_by, updated_at
-                FROM inseminations
-                """)
-                
-                # Drop old table and rename new table
-                conn.execute("DROP TABLE inseminations")
-                conn.execute("ALTER TABLE inseminations_new RENAME TO inseminations")
-                
-                # Recreate indexes with updated constraints
-                conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uniq_mother_insemination_date ON inseminations(mother_id, insemination_date)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_id ON inseminations(mother_id)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_visual_id ON inseminations(mother_visual_id)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_id ON inseminations(insemination_round_id)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_insemination_date ON inseminations(insemination_date)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_bull_id ON inseminations(bull_id)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_created_by ON inseminations(created_by)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_registration_date ON inseminations(registration_date)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_mother_date ON inseminations(mother_id, insemination_date DESC)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_round_date ON inseminations(insemination_round_id, insemination_date DESC)")
-                
-                conn.commit()
-                print("Migration completed successfully - Data types fixed, foreign key removed")
-        except sqlite3.Error as e:
-            print(f"Migration error (non-critical): {e}")
-            # Continue execution even if migration fails
-        
-    except sqlite3.Error as e:
-        print(f"Error creating inseminations table: {e}")
-
-create_inseminations_table()
-
-# Multi-tenant migration
-def migrate_to_multi_tenant():
-    """Migrate from single-user to multi-tenant architecture"""
-    try:
-        # Create companies table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS companies (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                description TEXT,
-                created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now')),
-                is_active BOOLEAN DEFAULT 1
-            )
-        """)
-        
-        # Create users table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                firebase_uid TEXT NOT NULL UNIQUE,
-                email TEXT NOT NULL UNIQUE,
-                display_name TEXT,
-                company_id INTEGER,
-                role TEXT DEFAULT 'admin',
-                is_active BOOLEAN DEFAULT 1,
-                created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now')),
-                FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE SET NULL
-            )
-        """)
-        
-        # Create roles table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS roles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                description TEXT,
-                permissions TEXT,
-                created_at TEXT DEFAULT (datetime('now'))
-            )
-        """)
-        
-        # Insert default roles
-        conn.execute("""
-            INSERT OR IGNORE INTO roles (id, name, description) VALUES 
-            (1, 'admin', 'Full access to company data'),
-            (2, 'manager', 'Manage data but limited admin functions'),
-            (3, 'viewer', 'Read-only access to company data')
-        """)
-        
-        # Add company_id columns to existing tables if they don't exist
-        _add_column_safely("registrations", "company_id", "INTEGER")
-        _add_column_safely("events_state", "company_id", "INTEGER")
-        _add_column_safely("inseminations", "company_id", "INTEGER")
-        
-        # Create indexes
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_registrations_company_id ON registrations(company_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_inseminations_company_id ON inseminations(company_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_events_state_company_id ON events_state(company_id)")
-        
-        conn.commit()
-        print("Multi-tenant migration completed successfully")
-        
-    except sqlite3.Error as e:
-        print(f"Multi-tenant migration error: {e}")
+    
+    @property
+    def total_changes(self):
+        """Return number of rows modified in last transaction"""
+        return 0
 
 
-def migrate_add_email_unique_constraint():
-    """Add unique constraint to email column in users table"""
-    try:
-        # Check if email unique constraint already exists
-        cursor = conn.execute("PRAGMA index_list(users)")
-        indexes = cursor.fetchall()
-        email_unique_exists = any('email' in str(index) for index in indexes)
-        
-        if not email_unique_exists:
-            # First, remove any duplicate emails (keep the first one)
-            conn.execute("""
-                DELETE FROM users 
-                WHERE id NOT IN (
-                    SELECT MIN(id) 
-                    FROM users 
-                    GROUP BY email
-                )
-            """)
-            
-            # Add unique constraint to email
-            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email)")
-            conn.commit()
-            print("Email unique constraint added successfully")
-        else:
-            print("Email unique constraint already exists")
-            
-    except sqlite3.Error as e:
-        print(f"Email unique constraint migration error: {e}")
+# =============================================================================
+# GLOBAL CONNECTION INSTANCE
+# =============================================================================
+
+class LazyConnection:
+    """Lazy wrapper that initializes connection on first access"""
+    def __init__(self):
+        self._conn = None
+    
+    def _ensure_conn(self):
+        """Ensure connection is initialized"""
+        if self._conn is None:
+            try:
+                pool = get_pool()
+            except RuntimeError:
+                if DATABASE_URL:
+                    init_pool()
+                    pool = get_pool()
+                else:
+                    raise RuntimeError("DATABASE_URL not set and pool not initialized")
+            self._conn = PooledPostgresConnection(pool)
+        return self._conn
+    
+    def __getattr__(self, name):
+        """Delegate all attribute access to the actual connection"""
+        return getattr(self._ensure_conn(), name)
+    
+    def __enter__(self):
+        """Context manager entry - enter underlying connection context and return self"""
+        self._ensure_conn().__enter__()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - exit underlying connection context"""
+        if self._conn is not None:
+            return self._conn.__exit__(exc_type, exc_val, exc_tb)
+        return False
 
 
-def migrate_add_registration_fields():
-    """Add new fields to registrations table"""
-    try:
-        # Add new columns to registrations table
-        _add_column_safely("registrations", "rp_animal", "TEXT")
-        _add_column_safely("registrations", "rp_mother", "TEXT")
-        _add_column_safely("registrations", "mother_weight", "REAL")
-        _add_column_safely("registrations", "current_weight", "REAL")
-        # Death date for animals (used when status = DEAD)
-        _add_column_safely("registrations", "death_date", "TEXT")
-        # Sold date for animals (used when status = SOLD)
-        _add_column_safely("registrations", "sold_date", "TEXT")
-        # Sold date for animal snapshots
-        _add_column_safely("animal_snapshots", "sold_date", "TEXT")
-        
-        # Add triggers for tracking changes to new fields
-        conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS track_rp_animal_changes
-            AFTER UPDATE ON registrations
-            WHEN OLD.rp_animal != NEW.rp_animal
-            BEGIN
-                INSERT INTO events_state (animal_id, animal_number, event_type, modified_field, old_value, new_value, user_id, event_date, notes)
-                SELECT NEW.id, NEW.animal_number, 'correccion', 'rp_animal', 
-                       COALESCE(OLD.rp_animal, 'NULL'), 
-                       COALESCE(NEW.rp_animal, 'NULL'), 
-                       COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                       datetime('now'), NEW.notes
-                WHERE OLD.rp_animal != NEW.rp_animal;
-            END
-        """)
-        
-        conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS track_rp_mother_changes
-            AFTER UPDATE ON registrations
-            WHEN OLD.rp_mother != NEW.rp_mother
-            BEGIN
-                INSERT INTO events_state (animal_id, animal_number, event_type, modified_field, old_value, new_value, user_id, event_date, notes)
-                SELECT NEW.id, NEW.animal_number, 'correccion', 'rp_mother', 
-                       COALESCE(OLD.rp_mother, 'NULL'), 
-                       COALESCE(NEW.rp_mother, 'NULL'), 
-                       COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                       datetime('now'), NEW.notes
-                WHERE OLD.rp_mother != NEW.rp_mother;
-            END
-        """)
-        
-        conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS track_mother_weight_changes
-            AFTER UPDATE ON registrations
-            WHEN OLD.mother_weight != NEW.mother_weight
-            BEGIN
-                INSERT INTO events_state (animal_id, animal_number, event_type, modified_field, old_value, new_value, user_id, event_date, notes)
-                SELECT NEW.id, NEW.animal_number, 'correccion', 'mother_weight', 
-                       COALESCE(CAST(OLD.mother_weight AS TEXT), 'NULL'), 
-                       COALESCE(CAST(NEW.mother_weight AS TEXT), 'NULL'), 
-                       COALESCE(NEW.created_by, NEW.user_key, 'system'), 
-                       datetime('now'), NEW.notes
-                WHERE OLD.mother_weight != NEW.mother_weight;
-            END
-        """)
-        
-        conn.commit()
-        print("Registration fields migration completed successfully")
-    except sqlite3.Error as e:
-        print(f"Registration fields migration error: {e}")
+conn = LazyConnection()
 
 
-# Multi-tenant migration for existing production databases
-migrate_to_multi_tenant()
-migrate_add_email_unique_constraint()
-
-# Add company_id to inseminations_ids migration
-def migrate_add_company_id_to_inseminations_ids():
-    """Add company_id column to inseminations_ids table"""
-    try:
-        _add_column_safely("inseminations_ids", "company_id", "INTEGER")
-        
-        # Remove old unique constraint and add company-aware constraint
-        try:
-            conn.execute("DROP INDEX IF EXISTS sqlite_autoindex_inseminations_ids_1")
-        except:
-            pass
-        
-        # Create composite unique constraint
-        try:
-            conn.execute("""
-                CREATE UNIQUE INDEX IF NOT EXISTS unique_insemination_round_company 
-                ON inseminations_ids(insemination_round_id, company_id)
-            """)
-        except:
-            pass
-        
-        conn.commit()
-    except sqlite3.Error as e:
-        print(f"Inseminations IDs migration error: {e}")
-
-# Run the migrations
-migrate_add_registration_fields()
-migrate_add_company_id_to_inseminations_ids()
-
-# Add animal_idv column to registrations and animal_snapshots tables
-def migrate_add_animal_idv():
-    """Add animal_idv (Visual ID) column to registrations and animal_snapshots tables"""
-    try:
-        # Add animal_idv to registrations table
-        _add_column_safely("registrations", "animal_idv", "TEXT")
-        
-        # Add animal_idv to animal_snapshots table
-        _add_column_safely("animal_snapshots", "animal_idv", "TEXT")
-        
-        # Create index for faster lookups by animal_idv
-        try:
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_registrations_animal_idv ON registrations(animal_idv)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_animal_idv ON animal_snapshots(animal_idv)")
-            conn.commit()
-        except sqlite3.Error as e:
-            print(f"Error creating animal_idv indexes: {e}")
-        
-        print("Animal IDV migration completed successfully")
-    except sqlite3.Error as e:
-        print(f"Animal IDV migration error: {e}")
-
-migrate_add_animal_idv()
-
-
+def get_conn():
+    """Get the global connection instance (for explicit access)"""
+    return conn._ensure_conn()

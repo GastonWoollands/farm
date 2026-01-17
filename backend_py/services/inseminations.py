@@ -1,7 +1,7 @@
-import sqlite3
 import datetime as _dt
 import logging
 from fastapi import HTTPException
+from psycopg2 import Error as PostgresError, IntegrityError
 from ..db import conn
 from ..models import InseminationBody, UpdateInseminationBody
 from .auth_service import get_data_filter_clause
@@ -203,11 +203,11 @@ def insert_insemination(created_by: str, body: InseminationBody, company_id: int
                 logging.warning(f"Failed to trigger background father assignment for {mother_id}: {e}")
             
             return insemination_db_id
-    except sqlite3.IntegrityError as e:
+    except IntegrityError as e:
         if "UNIQUE constraint failed" in str(e):
             raise HTTPException(status_code=409, detail="Duplicate insemination for this mother on the same date")
         raise HTTPException(status_code=500, detail=f"Database integrity error: {e}")
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 def update_insemination(created_by: str, insemination_id: int, body: UpdateInseminationBody, company_id: int = None) -> None:
@@ -260,7 +260,7 @@ def update_insemination(created_by: str, insemination_id: int, body: UpdateInsem
                 """
                 UPDATE inseminations SET
                     insemination_identifier = ?, insemination_round_id = ?, mother_id = ?, mother_visual_id = ?, 
-                    bull_id = ?, insemination_date = ?, animal_type = ?, notes = ?, updated_at = datetime('now')
+                    bull_id = ?, insemination_date = ?, animal_type = ?, notes = ?, updated_at = NOW()
                 WHERE id = ?
                 """,
                 (
@@ -320,11 +320,11 @@ def update_insemination(created_by: str, insemination_id: int, body: UpdateInsem
                 except Exception as e:
                     logging.warning(f"Failed to emit insemination update events: {e}")
                     
-    except sqlite3.IntegrityError as e:
+    except IntegrityError as e:
         if "UNIQUE constraint failed" in str(e):
             raise HTTPException(status_code=409, detail="Duplicate insemination for this mother on the same date")
         raise HTTPException(status_code=500, detail=f"Database integrity error: {e}")
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 def delete_insemination(created_by: str, insemination_id: int, company_id: int = None) -> None:
@@ -381,7 +381,7 @@ def delete_insemination(created_by: str, insemination_id: int, company_id: int =
             )
             if cursor.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Insemination record not found or access denied")
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 def get_inseminations_by_cow(created_by: str, mother_id: int) -> list[dict]:
@@ -416,7 +416,7 @@ def get_inseminations_by_cow(created_by: str, mother_id: int) -> list[dict]:
             }
             for row in rows
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 def get_inseminations_by_user(created_by: str, limit: int = 100) -> list[dict]:
@@ -453,7 +453,7 @@ def get_inseminations_by_user(created_by: str, limit: int = 100) -> list[dict]:
             }
             for row in rows
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 def get_insemination_statistics(created_by: str) -> dict:
@@ -496,7 +496,7 @@ def get_insemination_statistics(created_by: str) -> dict:
             "uniqueBulls": unique_bulls,
             "recentInseminations": recent_inseminations
         }
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 def export_inseminations(created_by: str, start_date: str = None, end_date: str = None) -> list[dict]:
@@ -544,5 +544,5 @@ def export_inseminations(created_by: str, start_date: str = None, end_date: str 
             }
             for row in rows
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")

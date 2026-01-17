@@ -3,9 +3,9 @@ Company management service for multi-tenant architecture
 Handles company CRUD operations and data access control
 """
 
-import sqlite3
 from typing import Optional, Dict, List
 from fastapi import HTTPException
+from psycopg2 import Error as PostgresError, IntegrityError
 from ..db import conn
 
 
@@ -42,12 +42,12 @@ def create_company(name: str, description: str = None) -> Dict:
         }
     except HTTPException:
         raise
-    except sqlite3.IntegrityError as e:
+    except IntegrityError as e:
         if "UNIQUE constraint failed: companies.name" in str(e):
             raise HTTPException(status_code=409, detail="Company with this name already exists")
         else:
             raise HTTPException(status_code=500, detail=f"Database constraint error: {e}")
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -70,7 +70,7 @@ def get_company(company_id: int) -> Optional[Dict]:
             "created_at": company[3],
             "is_active": bool(company[4])
         }
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -100,7 +100,7 @@ def get_all_companies() -> List[Dict]:
             }
             for company in companies
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -121,7 +121,7 @@ def update_company(company_id: int, name: str = None, description: str = None) -
         if not updates:
             return True
             
-        updates.append("updated_at = datetime('now')")
+        updates.append("updated_at = NOW()")
         params.append(company_id)
         
         conn.execute(
@@ -130,7 +130,7 @@ def update_company(company_id: int, name: str = None, description: str = None) -
         )
         conn.commit()
         return True
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -138,12 +138,12 @@ def deactivate_company(company_id: int) -> bool:
     """Deactivate a company (soft delete)"""
     try:
         conn.execute(
-            "UPDATE companies SET is_active = 0, updated_at = datetime('now') WHERE id = ?",
+            "UPDATE companies SET is_active = 0, updated_at = NOW() WHERE id = ?",
             (company_id,)
         )
         conn.commit()
         return True
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -177,7 +177,7 @@ def get_company_data_access(company_id: int) -> Dict:
             "inseminations": insemination_count,
             "users": user_count
         }
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -207,5 +207,5 @@ def migrate_user_data_to_company(firebase_uid: str, company_id: int) -> bool:
         
         conn.commit()
         return True
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")

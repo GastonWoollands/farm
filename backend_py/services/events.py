@@ -1,5 +1,6 @@
-import sqlite3
 from typing import List, Dict, Optional
+from fastapi import HTTPException
+from psycopg2 import Error as PostgresError
 from ..db import conn
 from ..models import EventState
 
@@ -31,7 +32,7 @@ def get_events_by_animal(animal_id: int, user_id: str) -> List[Dict]:
             }
             for row in rows
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         print(f"Error getting events: {e}")
         return []
 
@@ -66,7 +67,7 @@ def get_events_by_user(user_id: str, limit: int = 100) -> List[Dict]:
             }
             for row in rows
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         print(f"Error getting user events: {e}")
         return []
 
@@ -101,7 +102,7 @@ def get_events_by_type(event_type: str, user_id: str, limit: int = 100) -> List[
             }
             for row in rows
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         print(f"Error getting events by type: {e}")
         return []
 

@@ -1,5 +1,5 @@
-import sqlite3
 from fastapi import HTTPException
+from psycopg2 import Error as PostgresError
 from ..db import conn
 
 def delete_all(user_identifier: str | None = None) -> None:
@@ -10,7 +10,7 @@ def delete_all(user_identifier: str | None = None) -> None:
                 conn.execute("DELETE FROM registrations WHERE created_by = ? OR user_key = ?", (user_identifier, user_identifier))
             else:
                 conn.execute("DELETE FROM registrations")
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
 def exec_sql(sql: str, params: tuple) -> dict:
@@ -24,7 +24,7 @@ def exec_sql(sql: str, params: tuple) -> dict:
             changed = conn.total_changes
             conn.commit()
             return {"ok": True, "changes": changed}
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=400, detail=f"SQL error: {e}")
 
 def migrate_legacy_data(company_id: int) -> dict:
@@ -54,7 +54,7 @@ def migrate_legacy_data(company_id: int) -> dict:
                     "inseminations": inseminations_updated
                 }
             }
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Migration error: {e}")
 
 

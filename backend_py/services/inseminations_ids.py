@@ -3,8 +3,8 @@ Inseminations IDs Service
 Handles CRUD operations for insemination IDs lookup table
 """
 
-import sqlite3
 from fastapi import HTTPException
+from psycopg2 import Error as PostgresError, IntegrityError
 from ..db import conn
 from ..models import InseminationIdBody, UpdateInseminationIdBody
 
@@ -28,7 +28,7 @@ def get_inseminations_ids(company_id: int | None = None) -> list[dict]:
         
         columns = [description[0] for description in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -55,7 +55,7 @@ def get_insemination_id_by_round_id(insemination_round_id: str, company_id: int 
             raise HTTPException(status_code=404, detail="Insemination round ID not found")
         
         return dict(zip(columns, result))
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -77,11 +77,11 @@ def create_insemination_id(body: InseminationIdBody) -> int:
             ))
             
             return cursor.lastrowid
-    except sqlite3.IntegrityError as e:
+    except IntegrityError as e:
         if "UNIQUE constraint failed" in str(e):
             raise HTTPException(status_code=409, detail="Insemination round ID already exists for this company")
         raise HTTPException(status_code=500, detail=f"Database integrity error: {e}")
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -111,7 +111,7 @@ def update_insemination_id(insemination_round_id: str, body: UpdateInseminationI
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
         
-        update_fields.append("updated_at = datetime('now')")
+        update_fields.append("updated_at = NOW()")
         params.append(insemination_round_id)
         
         # Add company_id filter if provided
@@ -130,11 +130,11 @@ def update_insemination_id(insemination_round_id: str, body: UpdateInseminationI
             
             if cursor.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Insemination round ID not found")
-    except sqlite3.IntegrityError as e:
+    except IntegrityError as e:
         if "UNIQUE constraint failed" in str(e):
             raise HTTPException(status_code=409, detail="Insemination round ID already exists")
         raise HTTPException(status_code=500, detail=f"Database integrity error: {e}")
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -156,5 +156,5 @@ def delete_insemination_id(insemination_round_id: str, company_id: int | None = 
             
             if cursor.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Insemination round ID not found")
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")

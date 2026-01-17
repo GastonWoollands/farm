@@ -2,8 +2,8 @@
 Multi-tenant insemination functions
 """
 
-import sqlite3
 from fastapi import HTTPException
+from psycopg2 import Error as PostgresError
 from ..db import conn
 from .auth_service import get_data_filter_clause
 
@@ -45,7 +45,7 @@ def get_inseminations_multi_tenant(user: dict, limit: int = 100) -> list[dict]:
             }
             for row in rows
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -95,7 +95,7 @@ def get_insemination_statistics_multi_tenant(user: dict) -> dict:
             "company_id": company_id,
             "is_company_data": company_id is not None
         }
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -132,5 +132,5 @@ def export_inseminations_multi_tenant(user: dict, insemination_round_id: str = N
             }
             for row in rows
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")

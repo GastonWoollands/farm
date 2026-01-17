@@ -3,9 +3,9 @@ Father Assignment Service
 Handles automatic assignment of father IDs to registrations based on insemination data
 """
 
-import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
+from psycopg2 import Error as PostgresError
 from ..db import conn
 
 
@@ -30,7 +30,7 @@ class FatherAssignmentService:
             
             columns = [description[0] for description in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
-        except sqlite3.Error as e:
+        except PostgresError as e:
             raise Exception(f"Database error fetching registrations: {e}")
     
     def get_inseminations_by_mother(self, mother_id: str) -> List[Dict]:
@@ -45,7 +45,7 @@ class FatherAssignmentService:
             
             columns = [description[0] for description in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
-        except sqlite3.Error as e:
+        except PostgresError as e:
             raise Exception(f"Database error fetching inseminations: {e}")
     
     def calculate_gestation_period(self, insemination_date: str, born_date: str) -> int:
@@ -108,18 +108,18 @@ class FatherAssignmentService:
                         UPDATE registrations 
                         SET father_id = ?, insemination_identifier = ?, 
                             insemination_round_id = COALESCE(NULLIF(insemination_round_id, ''), ?), 
-                            updated_at = datetime('now')
+                            updated_at = NOW()
                         WHERE id = ?
                     """, (father_id, insemination_identifier, insemination_round_id, registration_id))
                 else:
                     cursor = conn.execute("""
                         UPDATE registrations 
-                        SET father_id = ?, insemination_identifier = ?, updated_at = datetime('now')
+                        SET father_id = ?, insemination_identifier = ?, updated_at = NOW()
                         WHERE id = ?
                     """, (father_id, insemination_identifier, registration_id))
                 
                 return cursor.rowcount > 0
-        except sqlite3.Error as e:
+        except PostgresError as e:
             raise Exception(f"Database error updating registration: {e}")
     
     def process_single_registration(self, registration: Dict) -> Dict:
@@ -250,7 +250,7 @@ class FatherAssignmentService:
             
             columns = [description[0] for description in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
-        except sqlite3.Error as e:
+        except PostgresError as e:
             raise Exception(f"Database error fetching registrations for mother: {e}")
     
     def process_registrations_for_mother(self, mother_id: str) -> Dict:
@@ -321,7 +321,7 @@ class FatherAssignmentService:
                 'repaso_count': row[3],
                 'assignment_rate': round((row[1] / row[0]) * 100, 2) if row[0] > 0 else 0
             }
-        except sqlite3.Error as e:
+        except PostgresError as e:
             raise Exception(f"Database error fetching stats: {e}")
 
 

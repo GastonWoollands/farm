@@ -113,37 +113,16 @@ def get_animal_snapshot_by_number(
     
     # If snapshot doesn't exist, check if events exist and auto-project
     if not snapshot:
-        from ..config import USE_POSTGRES
-        if USE_POSTGRES:
-            from ..db_postgres import DatabaseConnection
-            import asyncio
-            async def check_events():
-                async with DatabaseConnection(company_id) as conn:
-                    count = await conn.fetchval(
-                        """
-                        SELECT COUNT(*) FROM domain_events
-                        WHERE animal_number = $1 AND company_id = $2
-                        """,
-                        animal_number_upper,
-                        company_id
-                    )
-                    return count
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            event_count = loop.run_until_complete(check_events())
-        else:
-            from ..db import conn
-            cursor = conn.execute(
-                """
-                SELECT COUNT(*) FROM domain_events
-                WHERE animal_number = ? AND company_id = ?
-                """,
-                (animal_number_upper, company_id)
-            )
-            event_count = cursor.fetchone()[0]
+        from ..db import conn
+        # Check if events exist for this animal_number
+        cursor = conn.execute(
+            """
+            SELECT COUNT(*) FROM domain_events
+            WHERE animal_number = ? AND company_id = ?
+            """,
+            (animal_number_upper, company_id)
+        )
+        event_count = cursor.fetchone()[0]
         
         if event_count > 0:
             # Events exist but no snapshot - auto-project it
@@ -180,143 +159,56 @@ def get_snapshot_stats(
     if not company_id:
         raise HTTPException(status_code=400, detail="Company assignment required")
     
-    from ..config import USE_POSTGRES
+    from ..db import conn
     
-    if USE_POSTGRES:
-        from ..db_postgres import DatabaseConnection
-        import asyncio
-        
-        async def get_stats():
-            async with DatabaseConnection(company_id) as conn:
-                # Get counts by status (excluding DELETED)
-                status_rows = await conn.fetch(
-                    """
-                    SELECT current_status, COUNT(*) as count
-                    FROM animal_snapshots
-                    WHERE company_id = $1 AND (current_status IS NULL OR current_status != 'DELETED')
-                    GROUP BY current_status
-                    """,
-                    company_id
-                )
-                status_counts = {row['current_status']: row['count'] for row in status_rows}
-                
-                # Get counts by gender (excluding DELETED)
-                gender_rows = await conn.fetch(
-                    """
-                    SELECT gender, COUNT(*) as count
-                    FROM animal_snapshots
-                    WHERE company_id = $1 AND (current_status IS NULL OR current_status != 'DELETED')
-                    GROUP BY gender
-                    """,
-                    company_id
-                )
-                gender_counts = {row['gender']: row['count'] for row in gender_rows}
-                
-                # Get weight statistics (excluding DELETED)
-                weight_row = await conn.fetchrow(
-                    """
-                    SELECT 
-                        AVG(current_weight) as avg_weight,
-                        MIN(current_weight) as min_weight,
-                        MAX(current_weight) as max_weight,
-                        COUNT(current_weight) as count_with_weight
-                    FROM animal_snapshots
-                    WHERE company_id = $1 AND current_weight IS NOT NULL 
-                    AND (current_status IS NULL OR current_status != 'DELETED')
-                    """,
-                    company_id
-                )
-                weight_stats = (
-                    weight_row['avg_weight'],
-                    weight_row['min_weight'],
-                    weight_row['max_weight'],
-                    weight_row['count_with_weight']
-                ) if weight_row else (None, None, None, 0)
-                
-                # Get total count (excluding DELETED)
-                total_count = await conn.fetchval(
-                    """
-                    SELECT COUNT(*) FROM animal_snapshots 
-                    WHERE company_id = $1 AND (current_status IS NULL OR current_status != 'DELETED')
-                    """,
-                    company_id
-                )
-                
-                # Get insemination stats (excluding DELETED)
-                insem_row = await conn.fetchrow(
-                    """
-                    SELECT 
-                        SUM(insemination_count) as total_inseminations,
-                        COUNT(CASE WHEN insemination_count > 0 THEN 1 END) as animals_with_inseminations
-                    FROM animal_snapshots
-                    WHERE company_id = $1 AND (current_status IS NULL OR current_status != 'DELETED')
-                    """,
-                    company_id
-                )
-                insem_stats = (
-                    insem_row['total_inseminations'] or 0,
-                    insem_row['animals_with_inseminations'] or 0
-                ) if insem_row else (0, 0)
-                
-                return status_counts, gender_counts, weight_stats, total_count, insem_stats
-        
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        status_counts, gender_counts, weight_stats, total_count, insem_stats = loop.run_until_complete(get_stats())
-    else:
-        from ..db import conn
-        
-        # Exclude DELETED animals from all stats
-        deleted_filter = "AND (current_status IS NULL OR current_status != 'DELETED')"
-        
-        # Get counts by status (excluding DELETED)
-        cursor = conn.execute(f"""
-            SELECT current_status, COUNT(*) as count
-            FROM animal_snapshots
-            WHERE company_id = ? {deleted_filter}
-            GROUP BY current_status
-        """, (company_id,))
-        status_counts = dict(cursor.fetchall())
-        
-        # Get counts by gender (excluding DELETED)
-        cursor = conn.execute(f"""
-            SELECT gender, COUNT(*) as count
-            FROM animal_snapshots
-            WHERE company_id = ? {deleted_filter}
-            GROUP BY gender
-        """, (company_id,))
-        gender_counts = dict(cursor.fetchall())
-        
-        # Get weight statistics (excluding DELETED)
-        cursor = conn.execute(f"""
-            SELECT 
-                AVG(current_weight) as avg_weight,
-                MIN(current_weight) as min_weight,
-                MAX(current_weight) as max_weight,
-                COUNT(current_weight) as count_with_weight
-            FROM animal_snapshots
-            WHERE company_id = ? AND current_weight IS NOT NULL {deleted_filter}
-        """, (company_id,))
-        weight_stats = cursor.fetchone()
-        
-        # Get total count (excluding DELETED)
-        cursor = conn.execute(f"""
-            SELECT COUNT(*) FROM animal_snapshots WHERE company_id = ? {deleted_filter}
-        """, (company_id,))
-        total_count = cursor.fetchone()[0]
-        
-        # Get insemination stats (excluding DELETED)
-        cursor = conn.execute(f"""
-            SELECT 
-                SUM(insemination_count) as total_inseminations,
-                COUNT(CASE WHEN insemination_count > 0 THEN 1 END) as animals_with_inseminations
-            FROM animal_snapshots
-            WHERE company_id = ? {deleted_filter}
-        """, (company_id,))
-        insem_stats = cursor.fetchone()
+    # Exclude DELETED animals from all stats
+    deleted_filter = "AND (current_status IS NULL OR current_status != 'DELETED')"
+    
+    # Get counts by status (excluding DELETED)
+    cursor = conn.execute(f"""
+        SELECT current_status, COUNT(*) as count
+        FROM animal_snapshots
+        WHERE company_id = ? {deleted_filter}
+        GROUP BY current_status
+    """, (company_id,))
+    status_counts = dict(cursor.fetchall())
+    
+    # Get counts by gender (excluding DELETED)
+    cursor = conn.execute(f"""
+        SELECT gender, COUNT(*) as count
+        FROM animal_snapshots
+        WHERE company_id = ? {deleted_filter}
+        GROUP BY gender
+    """, (company_id,))
+    gender_counts = dict(cursor.fetchall())
+    
+    # Get weight statistics (excluding DELETED)
+    cursor = conn.execute(f"""
+        SELECT 
+            AVG(current_weight) as avg_weight,
+            MIN(current_weight) as min_weight,
+            MAX(current_weight) as max_weight,
+            COUNT(current_weight) as count_with_weight
+        FROM animal_snapshots
+        WHERE company_id = ? AND current_weight IS NOT NULL {deleted_filter}
+    """, (company_id,))
+    weight_stats = cursor.fetchone()
+    
+    # Get total count (excluding DELETED)
+    cursor = conn.execute(f"""
+        SELECT COUNT(*) FROM animal_snapshots WHERE company_id = ? {deleted_filter}
+    """, (company_id,))
+    total_count = cursor.fetchone()[0]
+    
+    # Get insemination stats (excluding DELETED)
+    cursor = conn.execute(f"""
+        SELECT 
+            SUM(insemination_count) as total_inseminations,
+            COUNT(CASE WHEN insemination_count > 0 THEN 1 END) as animals_with_inseminations
+        FROM animal_snapshots
+        WHERE company_id = ? {deleted_filter}
+    """, (company_id,))
+    insem_stats = cursor.fetchone()
     
     return {
         "total_animals": total_count,

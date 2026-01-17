@@ -1,4 +1,3 @@
-import sqlite3
 from ..db import conn
 
 def get_animal_types():

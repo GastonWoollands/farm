@@ -3,9 +3,9 @@ User management service for multi-tenant architecture
 Handles user creation, company assignment, and role management
 """
 
-import sqlite3
 from typing import Optional, Dict, List
 from fastapi import HTTPException
+from psycopg2 import Error as PostgresError, IntegrityError
 from ..db import conn
 
 
@@ -34,7 +34,7 @@ def get_or_create_user(firebase_uid: str, email: str, display_name: str = None) 
                 conn.execute(
                     """
                     UPDATE users 
-                    SET email = ?, display_name = ?, updated_at = datetime('now')
+                    SET email = ?, display_name = ?, updated_at = NOW()
                     WHERE firebase_uid = ?
                     """,
                     (email, display_name, firebase_uid)
@@ -68,7 +68,7 @@ def get_or_create_user(firebase_uid: str, email: str, display_name: str = None) 
             conn.execute(
                 """
                 UPDATE users 
-                SET firebase_uid = ?, display_name = ?, updated_at = datetime('now')
+                SET firebase_uid = ?, display_name = ?, updated_at = NOW()
                 WHERE email = ?
                 """,
                 (firebase_uid, display_name, email)
@@ -106,14 +106,14 @@ def get_or_create_user(firebase_uid: str, email: str, display_name: str = None) 
             "company_name": None
         }
         
-    except sqlite3.IntegrityError as e:
+    except IntegrityError as e:
         if "UNIQUE constraint failed: users.email" in str(e):
             raise HTTPException(status_code=409, detail="Email already exists. Please use a different email address.")
         elif "UNIQUE constraint failed: users.firebase_uid" in str(e):
             raise HTTPException(status_code=409, detail="User already exists with this Firebase UID.")
         else:
             raise HTTPException(status_code=500, detail=f"Database constraint error: {e}")
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -121,12 +121,12 @@ def assign_user_to_company(user_id: int, company_id: int) -> bool:
     """Assign a user to a company"""
     try:
         conn.execute(
-            "UPDATE users SET company_id = ?, updated_at = datetime('now') WHERE id = ?",
+            "UPDATE users SET company_id = ?, updated_at = NOW() WHERE id = ?",
             (company_id, user_id)
         )
         conn.commit()
         return True
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -140,7 +140,7 @@ def create_company(name: str, description: str = None) -> int:
         company_id = cursor.lastrowid
         conn.commit()
         return company_id
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -153,7 +153,7 @@ def get_user_company_id(firebase_uid: str) -> Optional[int]:
         )
         result = cursor.fetchone()
         return result[0] if result else None
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -181,7 +181,7 @@ def get_company_users(company_id: int) -> List[Dict]:
             }
             for user in users
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -189,12 +189,12 @@ def update_user_role(user_id: int, role: str) -> bool:
     """Update user role (admin, manager, viewer)"""
     try:
         conn.execute(
-            "UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?",
+            "UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?",
             (role, user_id)
         )
         conn.commit()
         return True
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -224,7 +224,7 @@ def get_user_by_firebase_uid(firebase_uid: str) -> Optional[Dict]:
             "role": user[5],
             "company_name": user[6]
         }
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -256,7 +256,7 @@ def get_all_users() -> List[Dict]:
             }
             for user in users
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 
@@ -285,5 +285,5 @@ def get_companies() -> List[Dict]:
             }
             for company in companies
         ]
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")

@@ -3,11 +3,11 @@ Insemination file upload service
 Handles CSV/XLSX file parsing, validation, and bulk insertion with strict company_id enforcement
 """
 
-import sqlite3
 import pandas as pd
 import io
 from typing import List, Dict, Tuple, Optional
 from fastapi import HTTPException, UploadFile
+from psycopg2 import Error as PostgresError, IntegrityError
 from ..db import conn
 from ..models import InseminationBody
 from .inseminations import _normalize_text, _validate_date
@@ -217,7 +217,7 @@ async def upload_inseminations_from_file(
                     conn.execute(
                         f"""
                         UPDATE inseminations_ids 
-                        SET {', '.join(update_fields)}, updated_at = datetime('now')
+                        SET {', '.join(update_fields)}, updated_at = NOW()
                         WHERE insemination_round_id = ? AND company_id = ?
                         """,
                         params
@@ -225,7 +225,7 @@ async def upload_inseminations_from_file(
                 
     except HTTPException:
         raise  # Re-raise HTTP exceptions
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"Database error validating round: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error validating round: {str(e)}")
@@ -342,7 +342,7 @@ async def upload_inseminations_from_file(
                     if mother_id:
                         processed_mother_ids.append(mother_id)
                     
-                except sqlite3.IntegrityError as e:
+                except IntegrityError as e:
                     if "UNIQUE constraint failed" in str(e):
                         skipped_count += 1
                         errors.append(f"Row {index + 1}: Duplicate insemination (database constraint)")

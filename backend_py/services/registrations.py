@@ -1,9 +1,9 @@
-import sqlite3
 import json
 import datetime as _dt
 from datetime import timedelta
 from typing import Optional
 from fastapi import HTTPException
+from psycopg2 import Error as PostgresError, IntegrityError
 from ..db import conn
 from .auth_service import get_data_filter_clause
 from .event_emitter import (
@@ -484,7 +484,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                                         update_values.append(mother_reg_id)
                                         conn.execute(
                                             f"""
-                                            UPDATE registrations SET {', '.join(update_fields)}, updated_at = datetime('now')
+                                            UPDATE registrations SET {', '.join(update_fields)}
                                             WHERE id = ?
                                             """,
                                             tuple(update_values)
@@ -520,7 +520,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                                         update_values.append(mother_animal_id)
                                         conn.execute(
                                             f"""
-                                            UPDATE registrations SET {', '.join(update_fields)}, updated_at = datetime('now')
+                                            UPDATE registrations SET {', '.join(update_fields)}
                                             WHERE id = ?
                                             """,
                                             tuple(update_values)
@@ -589,7 +589,7 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                         gender = ?, animal_type = ?, status = ?, color = ?, notes = ?, notes_mother = ?,
                         insemination_round_id = ?, insemination_identifier = ?, scrotal_circumference = ?,
                         rp_animal = ?, rp_mother = ?, mother_weight = ?, weaning_weight = ?,
-                        death_date = ?, sold_date = ?, animal_idv = ?, updated_at = datetime('now')
+                        death_date = ?, sold_date = ?, animal_idv = ?, updated_at = NOW()
                     WHERE id = ?
                     """,
                     (
@@ -602,9 +602,9 @@ def insert_registration(created_by_or_key: str, body, company_id: int = None) ->
                 )
             
             return animal_id
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         raise HTTPException(status_code=409, detail="Duplicate registration for this animal and mother")
-    except sqlite3.Error as e:
+    except PostgresError as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
 def delete_registration(user_id: str, animal_number: str, created_at: str | None, company_id: int) -> None:

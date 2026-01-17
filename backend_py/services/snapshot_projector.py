@@ -13,10 +13,9 @@ Key principles:
 
 import json
 import logging
-import sqlite3
 from datetime import datetime
 from typing import Dict, Optional, Any, List, Callable
-from ..config import USE_POSTGRES
+from psycopg2 import Error as PostgresError
 from ..db import conn
 from ..events.event_types import EventType
 
@@ -301,22 +300,6 @@ EVENT_HANDLERS: Dict[str, Callable[[Dict[str, Any], Dict[str, Any]], Dict[str, A
     EventType.ANIMAL_DELETED.value: _handle_animal_deleted,
 }
 
-# Import Postgres async implementations if using Postgres (after EVENT_HANDLERS is defined)
-_USE_POSTGRES = USE_POSTGRES
-if _USE_POSTGRES:
-    try:
-        from .snapshot_projector_postgres import (
-            upsert_snapshot as upsert_snapshot_postgres,
-            project_animal_snapshot as project_animal_snapshot_postgres,
-            project_animal_snapshot_by_number as project_animal_snapshot_by_number_postgres,
-            get_snapshot as get_snapshot_postgres,
-            get_snapshot_by_number as get_snapshot_by_number_postgres,
-            get_snapshots_for_company as get_snapshots_for_company_postgres,
-        )
-    except ImportError as e:
-        logger.warning(f"Postgres snapshot projector not available, falling back to SQLite: {e}")
-        _USE_POSTGRES = False
-
 
 # =============================================================================
 # SNAPSHOT PROJECTION FUNCTIONS
@@ -394,17 +377,6 @@ def upsert_snapshot(animal_id: int, snapshot: Dict[str, Any]) -> None:
         animal_id: The animal ID
         snapshot: The snapshot data to save
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            upsert_snapshot_postgres(animal_id, snapshot)
-        )
-    
     now = datetime.utcnow().isoformat()
     
     conn.execute(
@@ -487,10 +459,10 @@ def _upsert_snapshot_direct(animal_id: int, snapshot: Dict[str, Any]) -> None:
     """
     now = datetime.utcnow().isoformat()
     
-    # Use INSERT OR REPLACE to handle conflicts
+    # Use INSERT ... ON CONFLICT DO UPDATE to handle conflicts
     conn.execute(
         """
-        INSERT OR REPLACE INTO animal_snapshots (
+        INSERT INTO animal_snapshots (
             animal_id, animal_number, company_id, birth_date, mother_id, father_id,
             current_status, current_weight, weaning_weight, gender, color, death_date, sold_date,
             last_insemination_date, insemination_count, notes, notes_mother,
@@ -499,6 +471,33 @@ def _upsert_snapshot_direct(animal_id: int, snapshot: Dict[str, Any]) -> None:
             last_event_id, last_event_time, snapshot_version, updated_at
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(animal_id) DO UPDATE SET
+            animal_number = EXCLUDED.animal_number,
+            birth_date = EXCLUDED.birth_date,
+            mother_id = EXCLUDED.mother_id,
+            father_id = EXCLUDED.father_id,
+            current_status = EXCLUDED.current_status,
+            current_weight = EXCLUDED.current_weight,
+            weaning_weight = EXCLUDED.weaning_weight,
+            gender = EXCLUDED.gender,
+            color = EXCLUDED.color,
+            death_date = EXCLUDED.death_date,
+            sold_date = EXCLUDED.sold_date,
+            last_insemination_date = EXCLUDED.last_insemination_date,
+            insemination_count = EXCLUDED.insemination_count,
+            notes = EXCLUDED.notes,
+            notes_mother = EXCLUDED.notes_mother,
+            rp_animal = EXCLUDED.rp_animal,
+            rp_mother = EXCLUDED.rp_mother,
+            mother_weight = EXCLUDED.mother_weight,
+            scrotal_circumference = EXCLUDED.scrotal_circumference,
+            insemination_round_id = EXCLUDED.insemination_round_id,
+            insemination_identifier = EXCLUDED.insemination_identifier,
+            animal_idv = EXCLUDED.animal_idv,
+            last_event_id = EXCLUDED.last_event_id,
+            last_event_time = EXCLUDED.last_event_time,
+            snapshot_version = EXCLUDED.snapshot_version,
+            updated_at = EXCLUDED.updated_at
         """,
         (
             animal_id,
@@ -585,8 +584,8 @@ def project_animal_snapshot_incremental(animal_id: int, company_id: int) -> Dict
             "animal_number": row[3],
             "event_type": row[4],
             "event_version": row[5],
-            "payload": json.loads(row[6]) if row[6] else {},
-            "metadata": json.loads(row[7]) if row[7] else {},
+            "payload": row[6] if isinstance(row[6], dict) else (json.loads(row[6]) if row[6] else {}),
+            "metadata": row[7] if isinstance(row[7], dict) else (json.loads(row[7]) if row[7] else {}),
             "company_id": row[8],
             "user_id": row[9],
             "event_time": row[10],
@@ -637,17 +636,6 @@ def project_animal_snapshot(animal_id: int, company_id: int) -> Dict[str, Any]:
     Returns:
         The computed and saved snapshot
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            project_animal_snapshot_postgres(animal_id, company_id)
-        )
-    
     # Use incremental projection for efficiency
     return project_animal_snapshot_incremental(animal_id, company_id)
 
@@ -773,17 +761,6 @@ def get_snapshot_by_number(animal_number: str, company_id: int) -> Optional[Dict
     Returns:
         The snapshot dictionary or None if not found
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            get_snapshot_by_number_postgres(animal_number, company_id)
-        )
-    
     cursor = conn.execute(
         """
         SELECT animal_id, animal_number, company_id, birth_date, mother_id, father_id,
@@ -885,8 +862,8 @@ def project_animal_snapshot_by_number_incremental(animal_number: str, company_id
             "animal_number": row[3],
             "event_type": row[4],
             "event_version": row[5],
-            "payload": json.loads(row[6]) if row[6] else {},
-            "metadata": json.loads(row[7]) if row[7] else {},
+            "payload": row[6] if isinstance(row[6], dict) else (json.loads(row[6]) if row[6] else {}),
+            "metadata": row[7] if isinstance(row[7], dict) else (json.loads(row[7]) if row[7] else {}),
             "company_id": row[8],
             "user_id": row[9],
             "event_time": row[10],
@@ -949,17 +926,6 @@ def project_animal_snapshot_by_number(animal_number: str, company_id: int) -> Di
     Returns:
         The computed and saved snapshot
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            project_animal_snapshot_by_number_postgres(animal_number, company_id)
-        )
-    
     # Use incremental projection for efficiency
     return project_animal_snapshot_by_number_incremental(animal_number, company_id)
 
@@ -975,17 +941,6 @@ def get_snapshot(animal_id: int, company_id: int) -> Optional[Dict[str, Any]]:
     Returns:
         The snapshot dictionary or None if not found
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            get_snapshot_postgres(animal_id, company_id)
-        )
-    
     cursor = conn.execute(
         """
         SELECT animal_id, animal_number, company_id, birth_date, mother_id, father_id,
@@ -1054,17 +1009,6 @@ def get_snapshots_for_company(
     Returns:
         List of snapshot dictionaries
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            get_snapshots_for_company_postgres(company_id, status, limit, offset)
-        )
-    
     if status:
         cursor = conn.execute(
             """

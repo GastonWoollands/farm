@@ -12,25 +12,13 @@ Key principles:
 """
 
 import logging
-import sqlite3
 from datetime import datetime
 from typing import Dict, Optional, Any
-from ..config import USE_POSTGRES
+from psycopg2 import Error as PostgresError
+
 from ..db import conn
 
 logger = logging.getLogger(__name__)
-
-# Import Postgres async implementations if using Postgres
-_USE_POSTGRES = USE_POSTGRES
-if _USE_POSTGRES:
-    try:
-        from .registration_projector_postgres import (
-            project_registration_from_snapshot as project_registration_from_snapshot_postgres,
-            project_registration_from_snapshot_data as project_registration_from_snapshot_data_postgres,
-        )
-    except ImportError:
-        logger.warning("Postgres registration projector not available, falling back to SQLite")
-        _USE_POSTGRES = False
 
 
 def generate_short_id() -> str:
@@ -62,17 +50,6 @@ def project_registration_from_snapshot(
     Returns:
         The registration ID
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            project_registration_from_snapshot_postgres(animal_id, snapshot, created_by, created_at)
-        )
-    
     if not snapshot:
         logger.warning(f"Cannot project registration for animal_id={animal_id}: no snapshot")
         return animal_id
@@ -149,8 +126,7 @@ def project_registration_from_snapshot(
                     weaning_weight = ?,
                     death_date = ?,
                     sold_date = ?,
-                    animal_idv = ?,
-                    updated_at = datetime('now')
+                    animal_idv = ?
                 WHERE id = ?
                 """,
                 (
@@ -232,7 +208,7 @@ def project_registration_from_snapshot(
         
         return animal_id
         
-    except sqlite3.Error as e:
+    except PostgresError as e:
         logger.error(f"Error projecting registration for animal_id={animal_id}: {e}")
         raise
 
@@ -272,24 +248,6 @@ def project_registration_from_snapshot_data(
     Returns:
         The registration ID
     """
-    if _USE_POSTGRES:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
-            project_registration_from_snapshot_data_postgres(
-                animal_id, animal_number, company_id, created_by, created_at,
-                born_date, weight, current_weight, gender, status, color,
-                mother_id, father_id, notes, notes_mother, rp_animal, rp_mother,
-                mother_weight, weaning_weight, scrotal_circumference,
-                insemination_round_id, insemination_identifier, death_date,
-                sold_date, animal_idv
-            )
-        )
-    
     snapshot = {
         'animal_number': animal_number,
         'company_id': company_id,

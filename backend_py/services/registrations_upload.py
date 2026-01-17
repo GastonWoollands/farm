@@ -3,13 +3,13 @@ Registration (birth) file upload service
 Handles CSV/XLSX file parsing, validation, and bulk insertion with company_id from file
 """
 
-import sqlite3
 import pandas as pd
 import io
 import re
 import datetime as _dt
 from typing import Dict, Optional
 from fastapi import HTTPException, UploadFile
+from psycopg2 import IntegrityError
 from ..db import conn
 from .registrations import _normalize_text, VALID_GENDERS, VALID_STATUSES, VALID_COLORS, _auto_assign_insemination_round_id
 from .inseminations import _validate_date
@@ -426,7 +426,7 @@ async def upload_registrations_from_file(
                     )
                     uploaded_count += 1
                     
-                except sqlite3.IntegrityError as e:
+                except IntegrityError as e:
                     if "UNIQUE constraint failed" in str(e):
                         skipped_count += 1
                         errors.append(f"Row {index + 2}: Duplicate registration (database constraint)")
